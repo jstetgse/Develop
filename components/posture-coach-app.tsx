@@ -152,7 +152,6 @@ const GUIDE_CONNECTIONS: Array<[GuideJoint, GuideJoint]> = [
   ["rightKnee", "rightAnkle"],
 ];
 
-const SCORE_TREND_INTERVAL_MS = 1_000;
 const SNAPSHOT_INTERVAL_MS = 60_000;
 const STRETCH_FEEDBACK_INTERVAL_MS = 800;
 const STRETCH_HOLD_TARGET_MS = 5_000;
@@ -175,6 +174,7 @@ const DEFAULT_SETTINGS: Settings = {
   stretchReminderIntervalMinutes: 30,
   landmarkOverlayEnabled: true,
   smoothingEnabled: true,
+  realtimeScoreIntervalSeconds: 1,
   preferredSideMode: "auto",
   notificationPermissionStatus: "default",
 };
@@ -219,6 +219,10 @@ function createDefaultSettings(): Settings {
     ...DEFAULT_SETTINGS,
     notificationPermissionStatus: getNotificationPermissionStatus(),
   };
+}
+
+function getRealtimeScoreIntervalMs(settings: Settings) {
+  return Math.min(Math.max(Math.round(settings.realtimeScoreIntervalSeconds), 1), 5) * 1000;
 }
 
 function formatDateKey(dateKey: string) {
@@ -528,8 +532,8 @@ function getGuideBodyFrame(landmarks?: Landmark[] | null) {
 
 function createBaseGuidePose(): GuidePose {
   return {
-    head: { x: 0, y: -0.62 },
-    neck: { x: 0, y: -0.16 },
+    head: { x: 0, y: -0.48 },
+    neck: { x: 0, y: -0.1 },
     leftShoulder: { x: -0.5, y: 0 },
     rightShoulder: { x: 0.5, y: 0 },
     leftElbow: { x: -0.72, y: 0.55 },
@@ -549,24 +553,24 @@ function getGuidePoseTemplate(checkType: StretchStep["checkType"]): GuidePose {
   const pose = createBaseGuidePose();
   switch (checkType) {
     case "neck-side-pull":
-      pose.head = { x: -0.32, y: -0.54 };
+      pose.head = { x: -0.28, y: -0.42 };
       pose.leftElbow = { x: -0.48, y: -0.48 };
-      pose.leftWrist = { x: -0.18, y: -0.78 };
+      pose.leftWrist = { x: -0.18, y: -0.66 };
       break;
     case "neck-forward-pull":
-      pose.head = { x: 0, y: -0.34 };
+      pose.head = { x: 0, y: -0.26 };
       pose.leftElbow = { x: -0.52, y: -0.34 };
       pose.rightElbow = { x: 0.52, y: -0.34 };
-      pose.leftWrist = { x: -0.14, y: -0.58 };
-      pose.rightWrist = { x: 0.14, y: -0.58 };
+      pose.leftWrist = { x: -0.14, y: -0.46 };
+      pose.rightWrist = { x: 0.14, y: -0.46 };
       break;
     case "neck-back-tilt":
-      pose.head = { x: 0, y: -0.86 };
-      pose.leftWrist = { x: -0.08, y: -0.42 };
-      pose.rightWrist = { x: 0.08, y: -0.42 };
+      pose.head = { x: 0, y: -0.68 };
+      pose.leftWrist = { x: -0.08, y: -0.34 };
+      pose.rightWrist = { x: 0.08, y: -0.34 };
       break;
     case "neck-circle":
-      pose.head = { x: 0.24, y: -0.7 };
+      pose.head = { x: 0.2, y: -0.54 };
       break;
     case "shoulder-roll":
       pose.leftElbow = { x: -0.72, y: -0.06 };
@@ -1454,7 +1458,10 @@ export function PostureCoachApp() {
     };
 
     if (!settingsRef.current.smoothingEnabled) {
-      setLatestPosture(averagePosture);
+      if (now - lastRealtimeScoreUpdateAtRef.current >= getRealtimeScoreIntervalMs(settingsRef.current)) {
+        setLatestPosture(averagePosture);
+        lastRealtimeScoreUpdateAtRef.current = now;
+      }
       return averagePosture;
     }
 
@@ -1464,7 +1471,7 @@ export function PostureCoachApp() {
     }
 
     if (
-      now - lastRealtimeScoreUpdateAtRef.current >= SCORE_TREND_INTERVAL_MS &&
+      now - lastRealtimeScoreUpdateAtRef.current >= getRealtimeScoreIntervalMs(settingsRef.current) &&
       realtimeScoreWindowRef.current.length
     ) {
       const realtimeScore = Math.round(
@@ -1480,7 +1487,7 @@ export function PostureCoachApp() {
       lastRealtimeScoreUpdateAtRef.current = now;
     }
 
-    if (now - lastScoreTrendUpdateAtRef.current >= SCORE_TREND_INTERVAL_MS) {
+    if (now - lastScoreTrendUpdateAtRef.current >= getRealtimeScoreIntervalMs(settingsRef.current)) {
       scoreSamplesRef.current = [...scoreSamplesRef.current.slice(-119), cumulativeAverage];
       setScoreTrend((previous) => [
         ...previous.slice(-23),
@@ -2904,6 +2911,22 @@ export function PostureCoachApp() {
               }
               className="mt-2 w-full rounded-lg border border-gray-300 px-3 py-2"
             />
+          </label>
+          <label className="block">
+            <span className="text-sm font-medium text-gray-700">
+              실시간 자세 점수 갱신: {settings.realtimeScoreIntervalSeconds}초마다
+            </span>
+            <select
+              value={settings.realtimeScoreIntervalSeconds}
+              onChange={(event) => updateSettings({ realtimeScoreIntervalSeconds: Number(event.target.value) })}
+              className="mt-2 w-full rounded-lg border border-gray-300 px-3 py-2"
+            >
+              {[1, 2, 3, 4, 5].map((seconds) => (
+                <option key={seconds} value={seconds}>
+                  {seconds}초
+                </option>
+              ))}
+            </select>
           </label>
         </div>
       </section>

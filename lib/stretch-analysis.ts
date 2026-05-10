@@ -315,7 +315,10 @@ function scorePart(part: StretchBodyPart, userPose: GuidePose, guidePose: GuideP
   const angleAverage = angleScores.length
     ? angleScores.reduce((sum, score) => sum + score, 0) / angleScores.length
     : coordinateAverage;
-  const score = coordinateAverage * 0.62 + angleAverage * 0.38;
+  const score =
+    part === "neck"
+      ? coordinateAverage * 0.48 + angleAverage * 0.52
+      : coordinateAverage * 0.62 + angleAverage * 0.38;
 
   return {
     part,

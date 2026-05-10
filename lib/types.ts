@@ -16,6 +16,7 @@ export interface Settings {
   stretchReminderIntervalMinutes: number;
   landmarkOverlayEnabled: boolean;
   smoothingEnabled: boolean;
+  realtimeScoreIntervalSeconds: number;
   preferredSideMode: SideMode;
   notificationPermissionStatus: NotificationPermissionStatus;
 }

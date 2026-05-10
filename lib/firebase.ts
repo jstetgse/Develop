@@ -173,6 +173,7 @@ type FirestoreSettings = Pick<
   | "stretchReminderIntervalMinutes"
   | "landmarkOverlayEnabled"
   | "smoothingEnabled"
+  | "realtimeScoreIntervalSeconds"
 >;
 
 function settingsDoc(uid: string) {
@@ -204,6 +205,10 @@ function normalizeSettings(raw: Partial<Settings>, defaults: Settings): Settings
         ? raw.landmarkOverlayEnabled
         : defaults.landmarkOverlayEnabled,
     smoothingEnabled: typeof raw.smoothingEnabled === "boolean" ? raw.smoothingEnabled : defaults.smoothingEnabled,
+    realtimeScoreIntervalSeconds:
+      typeof raw.realtimeScoreIntervalSeconds === "number"
+        ? Math.min(Math.max(Math.round(raw.realtimeScoreIntervalSeconds), 1), 5)
+        : defaults.realtimeScoreIntervalSeconds,
   };
 }
 
@@ -216,6 +221,7 @@ function toFirestoreSettings(settings: Settings): FirestoreSettings {
     stretchReminderIntervalMinutes: settings.stretchReminderIntervalMinutes,
     landmarkOverlayEnabled: settings.landmarkOverlayEnabled,
     smoothingEnabled: settings.smoothingEnabled,
+    realtimeScoreIntervalSeconds: settings.realtimeScoreIntervalSeconds,
   };
 }
 

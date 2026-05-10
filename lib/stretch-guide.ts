@@ -135,8 +135,8 @@ export function getGuideBodyFrame(landmarks?: Landmark[] | null) {
 
 export function createBaseGuidePose(): GuidePose {
   return {
-    head: { x: 0, y: -0.62 },
-    neck: { x: 0, y: -0.16 },
+    head: { x: 0, y: -0.48 },
+    neck: { x: 0, y: -0.1 },
     leftShoulder: { x: -0.5, y: 0 },
     rightShoulder: { x: 0.5, y: 0 },
     leftElbow: { x: -0.72, y: 0.55 },
@@ -156,24 +156,24 @@ export function getGuidePoseTemplate(checkType: StretchStep["checkType"]): Guide
   const pose = createBaseGuidePose();
   switch (checkType) {
     case "neck-side-pull":
-      pose.head = { x: -0.32, y: -0.54 };
+      pose.head = { x: -0.28, y: -0.42 };
       pose.leftElbow = { x: -0.48, y: -0.48 };
-      pose.leftWrist = { x: -0.18, y: -0.78 };
+      pose.leftWrist = { x: -0.18, y: -0.66 };
       break;
     case "neck-forward-pull":
-      pose.head = { x: 0, y: -0.34 };
+      pose.head = { x: 0, y: -0.26 };
       pose.leftElbow = { x: -0.52, y: -0.34 };
       pose.rightElbow = { x: 0.52, y: -0.34 };
-      pose.leftWrist = { x: -0.14, y: -0.58 };
-      pose.rightWrist = { x: 0.14, y: -0.58 };
+      pose.leftWrist = { x: -0.14, y: -0.46 };
+      pose.rightWrist = { x: 0.14, y: -0.46 };
       break;
     case "neck-back-tilt":
-      pose.head = { x: 0, y: -0.86 };
-      pose.leftWrist = { x: -0.08, y: -0.42 };
-      pose.rightWrist = { x: 0.08, y: -0.42 };
+      pose.head = { x: 0, y: -0.68 };
+      pose.leftWrist = { x: -0.08, y: -0.34 };
+      pose.rightWrist = { x: 0.08, y: -0.34 };
       break;
     case "neck-circle":
-      pose.head = { x: 0.24, y: -0.7 };
+      pose.head = { x: 0.2, y: -0.54 };
       break;
     case "shoulder-roll":
       pose.leftElbow = { x: -0.72, y: -0.06 };
@@ -313,7 +313,7 @@ export function normalizeLandmarksToGuideSpace(landmarks: Landmark[]): GuidePose
 
   return {
     head,
-    neck: { x: 0, y: -0.16 },
+    neck: { x: 0, y: -0.1 },
     leftShoulder: toGuidePoint(landmarks[11]),
     rightShoulder: toGuidePoint(landmarks[12]),
     leftElbow: toGuidePoint(landmarks[13]),
