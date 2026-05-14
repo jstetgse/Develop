@@ -26,6 +26,21 @@ export type GuideJoint =
 export type GuidePoint = { x: number; y: number };
 export type GuidePose = Partial<Record<GuideJoint, GuidePoint>>;
 
+export type StretchCalibration = {
+  shoulderWidth: number;
+  torsoLength: number;
+  hipWidth: number;
+  leftArmLength: number;
+  rightArmLength: number;
+  shoulderCenter: GuidePoint;
+  hipCenter: GuidePoint;
+};
+
+export type StretchCalibrationSample = {
+  calibration: StretchCalibration;
+  bodyCenter: GuidePoint;
+};
+
 export const GUIDE_CONNECTIONS: Array<[GuideJoint, GuideJoint]> = [
   ["head", "neck"],
   ["neck", "leftShoulder"],
@@ -95,7 +110,7 @@ export function midpoint(a: Landmark, b: Landmark): GuidePoint {
   return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
 }
 
-export function getGuideBodyFrame(landmarks?: Landmark[] | null) {
+export function getGuideBodyFrame(landmarks?: Landmark[] | null, calibration?: StretchCalibration | null) {
   const leftShoulder = landmarks?.[11];
   const rightShoulder = landmarks?.[12];
   const leftHip = landmarks?.[23];
@@ -119,17 +134,112 @@ export function getGuideBodyFrame(landmarks?: Landmark[] | null) {
       isDetected: true,
       shoulderCenter,
       hipCenter,
-      shoulderWidth,
-      torsoLength,
+      shoulderWidth: calibration?.shoulderWidth ?? shoulderWidth,
+      torsoLength: calibration?.torsoLength ?? torsoLength,
     };
   }
 
   return {
     isDetected: false,
-    shoulderCenter: { x: 0.5, y: 0.36 },
-    hipCenter: { x: 0.5, y: 0.64 },
-    shoulderWidth: 0.22,
-    torsoLength: 0.28,
+    shoulderCenter: calibration?.shoulderCenter ?? { x: 0.5, y: 0.36 },
+    hipCenter: calibration?.hipCenter ?? { x: 0.5, y: 0.64 },
+    shoulderWidth: calibration?.shoulderWidth ?? 0.22,
+    torsoLength: calibration?.torsoLength ?? 0.28,
+  };
+}
+
+function landmarkDistance(a: Landmark, b: Landmark) {
+  return Math.hypot(a.x - b.x, a.y - b.y);
+}
+
+export function createStretchCalibrationSample(landmarks?: Landmark[] | null): StretchCalibrationSample | null {
+  const leftShoulder = landmarks?.[11];
+  const rightShoulder = landmarks?.[12];
+  const leftElbow = landmarks?.[13];
+  const rightElbow = landmarks?.[14];
+  const leftWrist = landmarks?.[15];
+  const rightWrist = landmarks?.[16];
+  const leftHip = landmarks?.[23];
+  const rightHip = landmarks?.[24];
+  const required = [
+    leftShoulder,
+    rightShoulder,
+    leftHip,
+    rightHip,
+  ];
+
+  if (required.some((point) => !isVisible(point)) || !leftShoulder || !rightShoulder || !leftHip || !rightHip) {
+    return null;
+  }
+
+  const shoulderCenter = midpoint(leftShoulder, rightShoulder);
+  const hipCenter = midpoint(leftHip, rightHip);
+  const shoulderWidth = Math.max(landmarkDistance(leftShoulder, rightShoulder), 0.12);
+  const torsoLength = Math.max(landmarkDistance(shoulderCenter, hipCenter), 0.18);
+  const hipWidth = Math.max(landmarkDistance(leftHip, rightHip), shoulderWidth * 0.45);
+  const defaultArmLength = torsoLength * 2.12;
+  const leftArmLength =
+    isVisible(leftElbow) && isVisible(leftWrist) && leftElbow && leftWrist
+      ? landmarkDistance(leftShoulder, leftElbow) + landmarkDistance(leftElbow, leftWrist)
+      : defaultArmLength;
+  const rightArmLength =
+    isVisible(rightElbow) && isVisible(rightWrist) && rightElbow && rightWrist
+      ? landmarkDistance(rightShoulder, rightElbow) + landmarkDistance(rightElbow, rightWrist)
+      : defaultArmLength;
+
+  return {
+    calibration: {
+      shoulderWidth,
+      torsoLength,
+      hipWidth,
+      leftArmLength,
+      rightArmLength,
+      shoulderCenter,
+      hipCenter,
+    },
+    bodyCenter: {
+      x: (shoulderCenter.x + hipCenter.x) / 2,
+      y: (shoulderCenter.y + hipCenter.y) / 2,
+    },
+  };
+}
+
+export function averageStretchCalibration(samples: StretchCalibrationSample[]): StretchCalibration | null {
+  if (!samples.length) {
+    return null;
+  }
+  const total = samples.reduce(
+    (sum, sample) => {
+      sum.shoulderWidth += sample.calibration.shoulderWidth;
+      sum.torsoLength += sample.calibration.torsoLength;
+      sum.hipWidth += sample.calibration.hipWidth;
+      sum.leftArmLength += sample.calibration.leftArmLength;
+      sum.rightArmLength += sample.calibration.rightArmLength;
+      sum.shoulderCenter.x += sample.calibration.shoulderCenter.x;
+      sum.shoulderCenter.y += sample.calibration.shoulderCenter.y;
+      sum.hipCenter.x += sample.calibration.hipCenter.x;
+      sum.hipCenter.y += sample.calibration.hipCenter.y;
+      return sum;
+    },
+    {
+      shoulderWidth: 0,
+      torsoLength: 0,
+      hipWidth: 0,
+      leftArmLength: 0,
+      rightArmLength: 0,
+      shoulderCenter: { x: 0, y: 0 },
+      hipCenter: { x: 0, y: 0 },
+    }
+  );
+  const count = samples.length;
+  return {
+    shoulderWidth: total.shoulderWidth / count,
+    torsoLength: total.torsoLength / count,
+    hipWidth: total.hipWidth / count,
+    leftArmLength: total.leftArmLength / count,
+    rightArmLength: total.rightArmLength / count,
+    shoulderCenter: { x: total.shoulderCenter.x / count, y: total.shoulderCenter.y / count },
+    hipCenter: { x: total.hipCenter.x / count, y: total.hipCenter.y / count },
   };
 }
 
@@ -290,8 +400,55 @@ export function getGuidePoseVariants(checkType: StretchStep["checkType"]) {
   return [pose, mirrorGuidePose(pose)];
 }
 
-export function normalizeLandmarksToGuideSpace(landmarks: Landmark[]): GuidePose | null {
-  const frame = getGuideBodyFrame(landmarks);
+function scaleLimb(pose: GuidePose, shoulder: GuideJoint, elbow: GuideJoint, wrist: GuideJoint, scale: number) {
+  const shoulderPoint = pose[shoulder];
+  const elbowPoint = pose[elbow];
+  const wristPoint = pose[wrist];
+  if (!shoulderPoint || !elbowPoint || !wristPoint) {
+    return;
+  }
+  pose[elbow] = {
+    x: shoulderPoint.x + (elbowPoint.x - shoulderPoint.x) * scale,
+    y: shoulderPoint.y + (elbowPoint.y - shoulderPoint.y) * scale,
+  };
+  pose[wrist] = {
+    x: shoulderPoint.x + (wristPoint.x - shoulderPoint.x) * scale,
+    y: shoulderPoint.y + (wristPoint.y - shoulderPoint.y) * scale,
+  };
+}
+
+export function personalizeGuidePose(pose: GuidePose, calibration?: StretchCalibration | null): GuidePose {
+  if (!calibration) {
+    return pose;
+  }
+
+  const personalized: GuidePose = Object.fromEntries(
+    Object.entries(pose).map(([joint, point]) => [joint, point ? { ...point } : point])
+  ) as GuidePose;
+  const armBaseRatio = 2.12;
+  const leftScale = Math.min(Math.max((calibration.leftArmLength / calibration.torsoLength) / armBaseRatio, 0.82), 1.22);
+  const rightScale = Math.min(Math.max((calibration.rightArmLength / calibration.torsoLength) / armBaseRatio, 0.82), 1.22);
+  const hipHalfWidth = Math.min(Math.max((calibration.hipWidth / calibration.shoulderWidth) / 2, 0.28), 0.46);
+
+  if (personalized.leftHip) {
+    personalized.leftHip = { ...personalized.leftHip, x: -hipHalfWidth };
+  }
+  if (personalized.rightHip) {
+    personalized.rightHip = { ...personalized.rightHip, x: hipHalfWidth };
+  }
+  scaleLimb(personalized, "leftShoulder", "leftElbow", "leftWrist", leftScale);
+  scaleLimb(personalized, "rightShoulder", "rightElbow", "rightWrist", rightScale);
+
+  return personalized;
+}
+
+export function getPersonalizedGuidePoseVariants(checkType: StretchStep["checkType"], calibration?: StretchCalibration | null) {
+  const pose = personalizeGuidePose(getGuidePoseTemplate(checkType), calibration);
+  return [pose, mirrorGuidePose(pose)];
+}
+
+export function normalizeLandmarksToGuideSpace(landmarks: Landmark[], calibration?: StretchCalibration | null): GuidePose | null {
+  const frame = getGuideBodyFrame(landmarks, calibration);
   if (!frame.isDetected) {
     return null;
   }
@@ -356,10 +513,11 @@ export function drawStretchGuidePose(
   canvas: HTMLCanvasElement,
   checkType: StretchStep["checkType"],
   landmarks?: Landmark[] | null,
-  incorrectParts: StretchBodyPart[] = []
+  incorrectParts: StretchBodyPart[] = [],
+  calibration?: StretchCalibration | null
 ) {
-  const frame = getGuideBodyFrame(landmarks);
-  const template = getGuidePoseTemplate(checkType);
+  const frame = getGuideBodyFrame(landmarks, calibration);
+  const template = personalizeGuidePose(getGuidePoseTemplate(checkType), calibration);
   const incorrectSet = new Set(incorrectParts);
   const toCanvasPoint = (point: GuidePoint) => pointToCanvas(canvas, point, frame);
 

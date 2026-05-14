@@ -1,9 +1,12 @@
 import {
   getGuidePoseVariants,
+  getPersonalizedGuidePoseVariants,
   normalizeLandmarksToGuideSpace,
   type GuideJoint,
+  type GuidePoint,
   type GuidePose,
   type Landmark,
+  type StretchCalibration,
 } from "@/lib/stretch-guide";
 import type { PostureResult, StretchBodyPart, StretchCoachingResult, StretchDefinition, StretchStep } from "@/lib/types";
 
@@ -273,6 +276,135 @@ function angleScore(userAngle: number, guideAngle: number, tolerance = 42) {
   return clamp(100 - (diff / tolerance) * 100, 0, 100);
 }
 
+function relationScore(value: number, target: number, tolerance: number) {
+  return clamp(100 - (Math.abs(value - target) / tolerance) * 100, 0, 100);
+}
+
+function closeScore(value: number, maxGood: number, maxBad: number) {
+  if (value <= maxGood) {
+    return 100;
+  }
+  return clamp(100 - ((value - maxGood) / Math.max(maxBad - maxGood, 0.001)) * 100, 0, 100);
+}
+
+function distance(a: GuidePoint | undefined, b: GuidePoint | undefined) {
+  return a && b ? Math.hypot(a.x - b.x, a.y - b.y) : Number.POSITIVE_INFINITY;
+}
+
+function averageScores(scores: number[]) {
+  return scores.length ? scores.reduce((sum, score) => sum + score, 0) / scores.length : 0;
+}
+
+function capGoodScore(score: number) {
+  return Math.round(clamp(score, 0, 95));
+}
+
+function isPersonalizedStretch(stretchId: string) {
+  return stretchId === "neck-stretch" || stretchId === "shoulder-stretch" || stretchId === "back-stretch";
+}
+
+function evaluatePersonalizedMovement(
+  checkType: StretchStep["checkType"],
+  userPose: GuidePose,
+  guidePose: GuidePose
+): PoseMatchEvaluation {
+  const partScores: PartScore[] = [];
+  const pushPart = (part: StretchBodyPart, score: number) => {
+    partScores.push({ part, score, message: MESSAGE_BY_PART[part] });
+  };
+
+  const shoulderLevel =
+    userPose.leftShoulder && userPose.rightShoulder
+      ? closeScore(Math.abs(userPose.leftShoulder.y - userPose.rightShoulder.y), 0.08, 0.34)
+      : 55;
+  const torsoAngle =
+    userPose.leftShoulder && userPose.rightShoulder && userPose.leftHip && userPose.rightHip
+      ? lineAngleDegrees(
+          { x: (userPose.leftShoulder.x + userPose.rightShoulder.x) / 2, y: (userPose.leftShoulder.y + userPose.rightShoulder.y) / 2 },
+          { x: (userPose.leftHip.x + userPose.rightHip.x) / 2, y: (userPose.leftHip.y + userPose.rightHip.y) / 2 }
+        )
+      : 0;
+  const guideTorsoAngle =
+    guidePose.leftShoulder && guidePose.rightShoulder && guidePose.leftHip && guidePose.rightHip
+      ? lineAngleDegrees(
+          { x: (guidePose.leftShoulder.x + guidePose.rightShoulder.x) / 2, y: (guidePose.leftShoulder.y + guidePose.rightShoulder.y) / 2 },
+          { x: (guidePose.leftHip.x + guidePose.rightHip.x) / 2, y: (guidePose.leftHip.y + guidePose.rightHip.y) / 2 }
+        )
+      : 0;
+  const torsoDirection = angleScore(torsoAngle, guideTorsoAngle, 42);
+  const hipStability =
+    userPose.leftHip && userPose.rightHip ? closeScore(Math.abs(userPose.leftHip.y - userPose.rightHip.y), 0.08, 0.32) : 60;
+
+  if (checkType.startsWith("neck")) {
+    const neckDirection =
+      userPose.head && userPose.neck && guidePose.head && guidePose.neck
+        ? angleScore(lineAngleDegrees(userPose.head, userPose.neck), lineAngleDegrees(guidePose.head, guidePose.neck), 34)
+        : 45;
+    const handTargets =
+      checkType === "neck-side-pull"
+        ? [distance(userPose.leftWrist, userPose.head), distance(userPose.rightWrist, userPose.head)]
+        : checkType === "neck-forward-pull"
+          ? [distance(userPose.leftWrist, userPose.head), distance(userPose.rightWrist, userPose.head)]
+          : checkType === "neck-back-tilt"
+            ? [distance(userPose.leftWrist, userPose.leftShoulder), distance(userPose.rightWrist, userPose.rightShoulder)]
+            : [];
+    const handScore = handTargets.length ? closeScore(Math.min(...handTargets), 0.58, 1.35) : 88;
+    pushPart("neck", neckDirection * 0.5 + shoulderLevel * 0.3 + handScore * 0.2);
+    if (handScore < 72) {
+      pushPart("leftArm", handScore);
+    }
+  } else if (checkType.startsWith("shoulder")) {
+    const leftDirection =
+      userPose.leftShoulder && userPose.leftWrist && guidePose.leftShoulder && guidePose.leftWrist
+        ? angleScore(lineAngleDegrees(userPose.leftWrist, userPose.leftShoulder), lineAngleDegrees(guidePose.leftWrist, guidePose.leftShoulder), 48)
+        : 50;
+    const rightDirection =
+      userPose.rightShoulder && userPose.rightWrist && guidePose.rightShoulder && guidePose.rightWrist
+        ? angleScore(lineAngleDegrees(userPose.rightWrist, userPose.rightShoulder), lineAngleDegrees(guidePose.rightWrist, guidePose.rightShoulder), 48)
+        : leftDirection;
+    const leftElbow =
+      userPose.leftShoulder && userPose.leftElbow && userPose.leftWrist && guidePose.leftShoulder && guidePose.leftElbow && guidePose.leftWrist
+        ? angleScore(angleDegrees(userPose.leftShoulder, userPose.leftElbow, userPose.leftWrist), angleDegrees(guidePose.leftShoulder, guidePose.leftElbow, guidePose.leftWrist), 58)
+        : leftDirection;
+    const rightElbow =
+      userPose.rightShoulder && userPose.rightElbow && userPose.rightWrist && guidePose.rightShoulder && guidePose.rightElbow && guidePose.rightWrist
+        ? angleScore(angleDegrees(userPose.rightShoulder, userPose.rightElbow, userPose.rightWrist), angleDegrees(guidePose.rightShoulder, guidePose.rightElbow, guidePose.rightWrist), 58)
+        : rightDirection;
+    pushPart("leftArm", leftDirection * 0.45 + leftElbow * 0.35 + torsoDirection * 0.2);
+    pushPart("rightArm", rightDirection * 0.45 + rightElbow * 0.35 + torsoDirection * 0.2);
+  } else if (checkType.startsWith("back")) {
+    const armAssist = averageScores([
+      userPose.leftShoulder && userPose.leftWrist && guidePose.leftShoulder && guidePose.leftWrist
+        ? angleScore(lineAngleDegrees(userPose.leftWrist, userPose.leftShoulder), lineAngleDegrees(guidePose.leftWrist, guidePose.leftShoulder), 55)
+        : 65,
+      userPose.rightShoulder && userPose.rightWrist && guidePose.rightShoulder && guidePose.rightWrist
+        ? angleScore(lineAngleDegrees(userPose.rightWrist, userPose.rightShoulder), lineAngleDegrees(guidePose.rightWrist, guidePose.rightShoulder), 55)
+        : 65,
+    ]);
+    pushPart("torso", torsoDirection * 0.5 + hipStability * 0.3 + armAssist * 0.2);
+    if (armAssist < 72) {
+      pushPart("leftArm", armAssist);
+      pushPart("rightArm", armAssist);
+    }
+  }
+
+  if (!partScores.length) {
+    return evaluateAgainstGuide(checkType, userPose, guidePose);
+  }
+
+  const average = capGoodScore(averageScores(partScores.map((part) => part.score)));
+  const incorrectParts = partScores.filter((part) => part.score < 70).map((part) => part.part);
+  const correctionMessages = Array.from(
+    new Set(partScores.filter((part) => part.score < 78).map((part) => part.message))
+  );
+
+  return {
+    matchPercentage: average,
+    incorrectParts,
+    correctionMessages,
+  };
+}
+
 function scorePart(part: StretchBodyPart, userPose: GuidePose, guidePose: GuidePose): PartScore | null {
   const joints = JOINTS_BY_PART[part];
   const jointScores = joints
@@ -354,8 +486,14 @@ function evaluateAgainstGuide(checkType: StretchStep["checkType"], userPose: Gui
   };
 }
 
-function evaluatePoseMatch(checkType: StretchStep["checkType"], landmarks: Landmark[]): PoseMatchEvaluation {
-  const userPose = normalizeLandmarksToGuideSpace(landmarks);
+function evaluatePoseMatch(
+  stretchId: string,
+  checkType: StretchStep["checkType"],
+  landmarks: Landmark[],
+  calibration?: StretchCalibration | null
+): PoseMatchEvaluation {
+  const usePersonalized = isPersonalizedStretch(stretchId) && Boolean(calibration);
+  const userPose = normalizeLandmarksToGuideSpace(landmarks, usePersonalized ? calibration : null);
   if (!userPose) {
     return {
       matchPercentage: null,
@@ -364,8 +502,13 @@ function evaluatePoseMatch(checkType: StretchStep["checkType"], landmarks: Landm
     };
   }
 
-  const variants = getGuidePoseVariants(checkType).map((guidePose) =>
-    evaluateAgainstGuide(checkType, userPose, guidePose)
+  const variants = (usePersonalized
+    ? getPersonalizedGuidePoseVariants(checkType, calibration)
+    : getGuidePoseVariants(checkType)
+  ).map((guidePose) =>
+    usePersonalized
+      ? evaluatePersonalizedMovement(checkType, userPose, guidePose)
+      : evaluateAgainstGuide(checkType, userPose, guidePose)
   );
   const scored = variants.filter((variant) => typeof variant.matchPercentage === "number");
   if (!scored.length) {
@@ -442,7 +585,8 @@ export function getStretchById(stretchId: string | null) {
 export function analyzeStretchStep(
   stretchId: string | null,
   stepIndex: number,
-  landmarks?: Landmark[] | null
+  landmarks?: Landmark[] | null,
+  calibration?: StretchCalibration | null
 ): StretchCoachingResult {
   if (!stretchId) {
     return missing(null, stepIndex, "스트레칭을 선택한 뒤 분석을 시작하세요.");
@@ -458,7 +602,7 @@ export function analyzeStretchStep(
     return missing(stretchId, stepIndex);
   }
 
-  return result(stretch.id, stepIndex, evaluatePoseMatch(step.checkType, landmarks));
+  return result(stretch.id, stepIndex, evaluatePoseMatch(stretch.id, step.checkType, landmarks, calibration));
 }
 
 export function analyzeStretchPose(

@@ -47,7 +47,13 @@ import {
   upsertUserProfile,
 } from "@/lib/firebase";
 import { PostureAnalyzer } from "@/lib/posture-analysis";
-import { drawStretchGuidePose } from "@/lib/stretch-guide";
+import {
+  averageStretchCalibration,
+  createStretchCalibrationSample,
+  drawStretchGuidePose,
+  type StretchCalibration,
+  type StretchCalibrationSample,
+} from "@/lib/stretch-guide";
 import { analyzeStretchStep, getRecommendedStretches, getStretchById } from "@/lib/stretch-analysis";
 import type {
   HistoryGroup,
@@ -116,6 +122,7 @@ type SnapshotExtrema = {
 } | null;
 
 type AppMode = "posture" | "stretching" | "paused";
+type StretchCalibrationStatus = "idle" | "calibrating" | "ready" | "failed";
 
 type GuideJoint =
   | "head"
@@ -155,6 +162,9 @@ const GUIDE_CONNECTIONS: Array<[GuideJoint, GuideJoint]> = [
 const SNAPSHOT_INTERVAL_MS = 60_000;
 const STRETCH_FEEDBACK_INTERVAL_MS = 800;
 const STRETCH_HOLD_TARGET_MS = 5_000;
+const STRETCH_CALIBRATION_TARGET_MS = 2_000;
+const STRETCH_CALIBRATION_MIN_SAMPLES = 12;
+const STRETCH_CALIBRATION_MAX_MOVEMENT = 0.045;
 const POSE_CONNECTIONS_FALLBACK: Array<[number, number]> = [
   [11, 12],
   [11, 13],
@@ -223,6 +233,10 @@ function createDefaultSettings(): Settings {
 
 function getRealtimeScoreIntervalMs(settings: Settings) {
   return Math.min(Math.max(Math.round(settings.realtimeScoreIntervalSeconds), 1), 5) * 1000;
+}
+
+function usesPersonalizedStretchAnalysis(stretchId: string | null) {
+  return stretchId === "neck-stretch" || stretchId === "shoulder-stretch" || stretchId === "back-stretch";
 }
 
 function formatDateKey(dateKey: string) {
@@ -956,6 +970,8 @@ export function PostureCoachApp() {
   const [activeStretchId, setActiveStretchId] = useState<string | null>(null);
   const [activeStretchStepIndex, setActiveStretchStepIndex] = useState(0);
   const [completedStretchSteps, setCompletedStretchSteps] = useState<number[]>([]);
+  const [stretchCalibrationStatus, setStretchCalibrationStatus] = useState<StretchCalibrationStatus>("idle");
+  const [stretchCalibrationMessage, setStretchCalibrationMessage] = useState("스트레칭 분석을 시작하면 기준 자세를 측정합니다.");
   const [latestPosture, setLatestPosture] = useState<PostureResult>(createInitialPosture);
   const [stretchCoaching, setStretchCoaching] = useState<StretchCoachingResult>(createInitialStretchState);
   const [recentSummary, setRecentSummary] = useState<RecentSummary | null>(null);
@@ -1005,6 +1021,10 @@ export function PostureCoachApp() {
   const stretchHoldStartedAtRef = useRef<number | null>(null);
   const smoothedStretchMatchRef = useRef<number | null>(null);
   const stretchCompletionMatchSamplesRef = useRef<number[]>([]);
+  const stretchCalibrationRef = useRef<StretchCalibration | null>(null);
+  const stretchCalibrationStatusRef = useRef<StretchCalibrationStatus>("idle");
+  const stretchCalibrationStartedAtRef = useRef<number | null>(null);
+  const stretchCalibrationSamplesRef = useRef<StretchCalibrationSample[]>([]);
   const latestStretchCoachingRef = useRef<StretchCoachingResult>(createInitialStretchState());
   const lastSnapshotAtRef = useRef(0);
   const snapshotSavingRef = useRef(false);
@@ -1125,7 +1145,8 @@ export function PostureCoachApp() {
         canvas,
         guideStep.checkType,
         results.poseLandmarks ?? null,
-        latestStretchCoachingRef.current.incorrectParts ?? []
+        latestStretchCoachingRef.current.incorrectParts ?? [],
+        stretchCalibrationRef.current
       );
       context.restore();
     }
@@ -1288,6 +1309,129 @@ export function PostureCoachApp() {
         });
       }
     }
+  }, []);
+
+  const resetStretchCalibration = useCallback((message = "스트레칭 분석을 시작하면 기준 자세를 측정합니다.") => {
+    stretchCalibrationRef.current = null;
+    stretchCalibrationStatusRef.current = "idle";
+    stretchCalibrationStartedAtRef.current = null;
+    stretchCalibrationSamplesRef.current = [];
+    setStretchCalibrationStatus("idle");
+    setStretchCalibrationMessage(message);
+  }, []);
+
+  const beginStretchCalibration = useCallback(() => {
+    if (!usesPersonalizedStretchAnalysis(activeStretchIdRef.current)) {
+      stretchCalibrationRef.current = null;
+      stretchCalibrationStatusRef.current = "ready";
+      stretchCalibrationStartedAtRef.current = null;
+      stretchCalibrationSamplesRef.current = [];
+      setStretchCalibrationStatus("ready");
+      setStretchCalibrationMessage("기존 기준으로 동작 정확도를 분석합니다.");
+      return;
+    }
+
+    stretchCalibrationRef.current = null;
+    stretchCalibrationStatusRef.current = "calibrating";
+    stretchCalibrationStartedAtRef.current = Date.now();
+    stretchCalibrationSamplesRef.current = [];
+    stretchHoldStartedAtRef.current = null;
+    smoothedStretchMatchRef.current = null;
+    setStretchCalibrationStatus("calibrating");
+    setStretchCalibrationMessage("기준 자세 측정 중...");
+    latestStretchCoachingRef.current = {
+      stretchId: activeStretchIdRef.current,
+      stepIndex: activeStretchStepIndexRef.current,
+      isPoseValid: false,
+      poseScore: null,
+      matchPercentage: null,
+      incorrectParts: [],
+      correctionMessages: [],
+      coachingMessage: "기준 자세 측정 중...",
+      holdSeconds: 0,
+    };
+    setStretchCoaching(latestStretchCoachingRef.current);
+  }, []);
+
+  const processStretchCalibration = useCallback((landmarks?: Landmark[] | null) => {
+    if (stretchCalibrationStatusRef.current !== "calibrating") {
+      return false;
+    }
+
+    const sample = createStretchCalibrationSample(landmarks);
+    if (!sample) {
+      stretchHoldStartedAtRef.current = null;
+      latestStretchCoachingRef.current = {
+        stretchId: activeStretchIdRef.current,
+        stepIndex: activeStretchStepIndexRef.current,
+        isPoseValid: false,
+        poseScore: null,
+        matchPercentage: null,
+        incorrectParts: [],
+        correctionMessages: ["몸이 잘 보이도록 카메라 위치를 조정해주세요."],
+        coachingMessage: "몸이 잘 보이도록 카메라 위치를 조정해주세요.",
+        holdSeconds: 0,
+      };
+      setStretchCoaching(latestStretchCoachingRef.current);
+      setStretchCalibrationMessage("몸이 잘 보이도록 카메라 위치를 조정해주세요.");
+      return true;
+    }
+
+    stretchCalibrationSamplesRef.current.push(sample);
+    const samples = stretchCalibrationSamplesRef.current;
+    const first = samples[0]?.bodyCenter;
+    const maxMovement = first
+      ? samples.reduce((max, current) => Math.max(max, Math.hypot(current.bodyCenter.x - first.x, current.bodyCenter.y - first.y)), 0)
+      : 0;
+
+    if (maxMovement > STRETCH_CALIBRATION_MAX_MOVEMENT) {
+      stretchCalibrationRef.current = null;
+      stretchCalibrationStatusRef.current = "failed";
+      stretchCalibrationStartedAtRef.current = null;
+      stretchCalibrationSamplesRef.current = [];
+      stretchHoldStartedAtRef.current = null;
+      setStretchCalibrationStatus("failed");
+      setStretchCalibrationMessage("기준 자세를 유지해주세요.");
+      latestStretchCoachingRef.current = {
+        stretchId: activeStretchIdRef.current,
+        stepIndex: activeStretchStepIndexRef.current,
+        isPoseValid: false,
+        poseScore: null,
+        matchPercentage: null,
+        incorrectParts: [],
+        correctionMessages: ["기준 자세를 유지해주세요."],
+        coachingMessage: "기준 자세를 유지해주세요.",
+        holdSeconds: 0,
+      };
+      setStretchCoaching(latestStretchCoachingRef.current);
+      return true;
+    }
+
+    const elapsed = Date.now() - (stretchCalibrationStartedAtRef.current ?? Date.now());
+    if (elapsed >= STRETCH_CALIBRATION_TARGET_MS && samples.length >= STRETCH_CALIBRATION_MIN_SAMPLES) {
+      const calibration = averageStretchCalibration(samples);
+      if (calibration) {
+        stretchCalibrationRef.current = calibration;
+        stretchCalibrationStatusRef.current = "ready";
+        stretchCalibrationStartedAtRef.current = null;
+        setStretchCalibrationStatus("ready");
+        setStretchCalibrationMessage("개인 맞춤 가이드가 준비되었습니다.");
+        latestStretchCoachingRef.current = {
+          stretchId: activeStretchIdRef.current,
+          stepIndex: activeStretchStepIndexRef.current,
+          isPoseValid: false,
+          poseScore: null,
+          matchPercentage: null,
+          incorrectParts: [],
+          correctionMessages: [],
+          coachingMessage: "개인 맞춤 가이드가 준비되었습니다.",
+          holdSeconds: 0,
+        };
+        setStretchCoaching(latestStretchCoachingRef.current);
+      }
+    }
+
+    return true;
   }, []);
 
   const updateStretchCoaching = useCallback((nextResult: StretchCoachingResult, force = false) => {
@@ -1515,12 +1659,20 @@ export function PostureCoachApp() {
       if (appModeRef.current === "stretching") {
         setCameraText("스트레칭 분석 중");
         setCameraTone("good");
+        if (processStretchCalibration(results.poseLandmarks ?? null)) {
+          return;
+        }
+        if (stretchCalibrationStatusRef.current !== "ready") {
+          stretchHoldStartedAtRef.current = null;
+          return;
+        }
         if (activeStretchIdRef.current) {
           updateStretchCoaching(
             analyzeStretchStep(
               activeStretchIdRef.current,
               activeStretchStepIndexRef.current,
-              results.poseLandmarks ?? null
+              results.poseLandmarks ?? null,
+              stretchCalibrationRef.current
             )
           );
         }
@@ -1552,6 +1704,7 @@ export function PostureCoachApp() {
       drawPoseOverlay,
       isRunning,
       persistSnapshotIfNeeded,
+      processStretchCalibration,
       recordPostureScore,
       updateAlerts,
       updateStretchCoaching,
@@ -1675,6 +1828,7 @@ export function PostureCoachApp() {
     setIsRunning(false);
     setPendingCameraStart(false);
     setIsStretchingMode(false);
+    resetStretchCalibration();
     appModeRef.current = "paused";
     setAppMode("paused");
     setModeMessage(null);
@@ -1685,7 +1839,7 @@ export function PostureCoachApp() {
     setAlertMessage(null);
 
     await refreshHistory(uid);
-  }, [refreshHistory]);
+  }, [refreshHistory, resetStretchCalibration]);
 
   const startApp = useCallback(async () => {
     if (isRunning) {
@@ -1857,6 +2011,7 @@ export function PostureCoachApp() {
     smoothedStretchMatchRef.current = null;
     stretchCompletionMatchSamplesRef.current = [];
     lastStretchFeedbackUpdateAtRef.current = 0;
+    resetStretchCalibration();
     latestStretchCoachingRef.current = {
       stretchId,
       stepIndex: 0,
@@ -1866,7 +2021,7 @@ export function PostureCoachApp() {
       holdSeconds: 0,
     };
     setStretchCoaching(latestStretchCoachingRef.current);
-  }, []);
+  }, [resetStretchCalibration]);
 
   const handleStartStretchingMode = useCallback(async () => {
     if (!activeStretchIdRef.current) {
@@ -1882,10 +2037,7 @@ export function PostureCoachApp() {
     setActiveTab("stretching");
     setModeMessage("스트레칭 모드로 전환합니다. 자세 분석이 일시중지됩니다.");
     setIsStretchingMode(true);
-    updateStretchCoaching(
-      analyzeStretchStep(activeStretchIdRef.current, activeStretchStepIndexRef.current, latestLandmarksRef.current),
-      true
-    );
+    beginStretchCalibration();
 
     if (!isRunning) {
       await startApp();
@@ -1902,13 +2054,14 @@ export function PostureCoachApp() {
       };
       void saveStretchLog(uid, sessionId, payload);
     }
-  }, [isRunning, startApp, updateStretchCoaching]);
+  }, [beginStretchCalibration, isRunning, startApp]);
 
   const handleStopStretchingMode = useCallback(async () => {
     setIsStretchingMode(false);
     stretchHoldStartedAtRef.current = null;
     smoothedStretchMatchRef.current = null;
     lastStretchFeedbackUpdateAtRef.current = 0;
+    resetStretchCalibration();
     const uid = uidRef.current;
     const sessionId = sessionIdRef.current;
     if (uid && sessionId && activeStretchIdRef.current) {
@@ -1932,7 +2085,7 @@ export function PostureCoachApp() {
         }
       : createInitialStretchState();
     setStretchCoaching(latestStretchCoachingRef.current);
-  }, []);
+  }, [resetStretchCalibration]);
 
   const handleNextStretchStep = useCallback(() => {
     const stretch = getStretchById(activeStretchIdRef.current);
@@ -1998,8 +2151,9 @@ export function PostureCoachApp() {
 
     if (isComplete) {
       setIsStretchingMode(false);
+      resetStretchCalibration();
     }
-  }, []);
+  }, [resetStretchCalibration]);
 
   const handleClearStretchSelection = useCallback(() => {
     if (isStretchingMode) {
@@ -2015,9 +2169,10 @@ export function PostureCoachApp() {
     smoothedStretchMatchRef.current = null;
     stretchCompletionMatchSamplesRef.current = [];
     lastStretchFeedbackUpdateAtRef.current = 0;
+    resetStretchCalibration();
     latestStretchCoachingRef.current = createInitialStretchState();
     setStretchCoaching(latestStretchCoachingRef.current);
-  }, [handleStopStretchingMode, isStretchingMode]);
+  }, [handleStopStretchingMode, isStretchingMode, resetStretchCalibration]);
 
   const persistSettings = useCallback(async (nextSettings: Settings) => {
     const uid = uidRef.current;
@@ -2464,6 +2619,9 @@ export function PostureCoachApp() {
           <span className="rounded-full bg-blue-100 px-3 py-1 text-sm font-bold text-blue-700">{modeLabel}</span>
           {modeMessage && <span className="rounded-full bg-yellow-100 px-3 py-1 text-sm font-bold text-yellow-800">{modeMessage}</span>}
         </div>
+        <p className="mb-3 rounded-lg bg-white px-3 py-2 text-sm font-bold text-blue-900">
+          {stretchCalibrationMessage}
+        </p>
         <div className="flex flex-wrap items-center gap-3">
           <AlertTriangle className="h-4 w-4 text-orange-600" />
           <span className="text-sm text-gray-900">
@@ -2500,7 +2658,7 @@ export function PostureCoachApp() {
             {selectedStretch && activeStretchStep && (
               <div className="absolute right-4 top-4 flex flex-col items-end gap-2">
                 <span className="rounded-lg bg-white/90 px-3 py-1.5 text-sm font-bold text-blue-950 backdrop-blur">
-                  자세 일치도: {stretchCoaching.matchPercentage ?? stretchCoaching.poseScore ?? "--"}%
+                  동작 정확도: {stretchCoaching.matchPercentage ?? stretchCoaching.poseScore ?? "--"}%
                 </span>
                 <span className="rounded-lg bg-blue-700/85 px-3 py-1.5 text-sm font-bold text-white backdrop-blur">
                   {activeStretchStepIndex + 1} / {selectedStretch.steps.length} 단계
@@ -2536,7 +2694,7 @@ export function PostureCoachApp() {
                     <p className="text-sm font-bold text-blue-50">실시간 피드백</p>
                     <p className="mt-1 text-lg font-bold leading-7">{stretchCoaching.coachingMessage}</p>
                     <p className="mt-3 text-2xl font-black text-white">
-                      자세 일치도: {stretchCoaching.matchPercentage ?? stretchCoaching.poseScore ?? "--"}%
+                      동작 정확도: {stretchCoaching.matchPercentage ?? stretchCoaching.poseScore ?? "--"}%
                     </p>
                     {stretchCoaching.correctionMessages?.length ? (
                       <div className="mt-3 flex flex-wrap gap-2">
