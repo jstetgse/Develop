@@ -1,4 +1,4 @@
-import type { PostureMetrics, PostureResult, SelectedSide, SideMode } from "@/lib/types";
+﻿import type { PostureMetrics, PostureResult, SelectedSide, SideMode } from "@/lib/types";
 
 type Landmark = {
   x: number;
