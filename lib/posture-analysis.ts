@@ -1,4 +1,11 @@
-﻿import type { PostureMetrics, PostureResult, SelectedSide, SideMode } from "@/lib/types";
+import type {
+  PostureFeedbackItem,
+  PostureFeedbackSeverity,
+  PostureMetrics,
+  PostureResult,
+  SelectedSide,
+  SideMode,
+} from "@/lib/types";
 
 type Landmark = {
   x: number;
@@ -18,10 +25,6 @@ const LANDMARKS = {
 const SMOOTHING_WINDOW = 12;
 const STABILITY_WINDOW = 30;
 const SIDE_UNAVAILABLE_MESSAGE = "옆모습이 잘 보이지 않습니다. 카메라 위치를 조정해주세요.";
-
-function clamp(value: number, min: number, max: number) {
-  return Math.min(Math.max(value, min), max);
-}
 
 function toDegrees(radians: number) {
   return (radians * 180) / Math.PI;
@@ -165,9 +168,40 @@ function trunkFeedback(angle: number) {
     return "상체가 조금 앞으로 기울어져 있습니다.";
   }
   if (angle <= 20) {
-    return "상체가 앞으로 기울어져 있습니다.";
+    return "상체가 앞으로 기울어져 있습니다. 허리와 상체를 세워주세요.";
   }
-  return "허리 부담이 큰 자세입니다.";
+  return "허리 부담이 큰 자세입니다. 골반 위로 상체를 다시 세워주세요.";
+}
+
+function stabilityFeedback(score: number) {
+  if (score >= 75) {
+    return "자세가 안정적으로 유지되고 있습니다.";
+  }
+  return "자세가 자주 흔들리고 있습니다. 화면 중앙에 편안하게 앉아주세요.";
+}
+
+function neckSeverity(score: number): PostureFeedbackSeverity {
+  if (score >= 85) {
+    return "good";
+  }
+  if (score >= 70) {
+    return "caution";
+  }
+  return "warning";
+}
+
+function torsoSeverity(score: number): PostureFeedbackSeverity {
+  if (score >= 80) {
+    return "good";
+  }
+  if (score >= 60) {
+    return "caution";
+  }
+  return "warning";
+}
+
+function stabilitySeverity(score: number): PostureFeedbackSeverity {
+  return score >= 75 ? "good" : "warning";
 }
 
 export class PostureAnalyzer {
@@ -175,6 +209,7 @@ export class PostureAnalyzer {
   private motionHistory: number[] = [];
   private previousCenter: { x: number; y: number } | null = null;
   private preferredSideMode: SideMode = "auto";
+  private lastSelectedSide: SelectedSide | null = null;
 
   setPreferredSideMode(mode: SideMode) {
     this.preferredSideMode = mode;
@@ -184,6 +219,7 @@ export class PostureAnalyzer {
     this.metricHistory = [];
     this.motionHistory = [];
     this.previousCenter = null;
+    this.lastSelectedSide = null;
   }
 
   analyze(landmarks?: Landmark[] | null, preferredSideMode = this.preferredSideMode): PostureResult {
@@ -197,6 +233,13 @@ export class PostureAnalyzer {
     if (!side) {
       return this.createUnavailableResult(SIDE_UNAVAILABLE_MESSAGE);
     }
+
+    if (this.lastSelectedSide && this.lastSelectedSide !== side) {
+      this.metricHistory = [];
+      this.motionHistory = [];
+      this.previousCenter = null;
+    }
+    this.lastSelectedSide = side;
 
     const ear = landmarks[side === "left" ? LANDMARKS.LEFT_EAR : LANDMARKS.RIGHT_EAR];
     const shoulder = landmarks[side === "left" ? LANDMARKS.LEFT_SHOULDER : LANDMARKS.RIGHT_SHOULDER];
@@ -243,17 +286,20 @@ export class PostureAnalyzer {
       metrics.neckScore * 0.55 + metrics.trunkScore * 0.3 + metrics.stabilityScore * 0.15
     );
     const mainIssue = this.pickMainIssue(metrics);
+    const feedbackItems = this.composeFeedbackItems(metrics);
 
     return {
       score,
       neckStatus: describeNeck(metrics.neckAngleDegrees),
       torsoStatus: describeTrunk(metrics.trunkLeanDegrees),
       stabilityStatus: describeStability(metrics.stabilityScore),
-      feedbackMessage: this.composeFeedback(metrics, mainIssue),
+      feedbackMessage: this.composeFeedback(metrics, mainIssue, feedbackItems),
+      feedbackItems,
       isBadPosture: score <= 60,
       isTracking: true,
       mainIssue,
       metrics,
+      analysisSide: metrics.selectedSide,
     };
   }
 
@@ -288,10 +334,12 @@ export class PostureAnalyzer {
       torsoStatus: "미측정",
       stabilityStatus: "미측정",
       feedbackMessage: message,
+      feedbackItems: [],
       isBadPosture: false,
       isTracking: false,
       mainIssue: "tracking",
       metrics: null,
+      analysisSide: null,
     };
   }
 
@@ -353,21 +401,76 @@ export class PostureAnalyzer {
   }
 
   private pickMainIssue(metrics: PostureMetrics): PostureResult["mainIssue"] {
-    if (metrics.neckScore >= 85 && metrics.trunkScore >= 80) {
+    if (metrics.neckScore >= 85 && metrics.trunkScore >= 80 && metrics.stabilityScore >= 75) {
       return "balanced";
     }
-    if (metrics.neckScore <= metrics.trunkScore) {
+
+    if (
+      metrics.stabilityScore < 75 &&
+      metrics.stabilityScore <= metrics.neckScore &&
+      metrics.stabilityScore <= metrics.trunkScore
+    ) {
+      return "stability";
+    }
+
+    if (metrics.trunkScore < 80 && (metrics.trunkScore <= metrics.neckScore - 5 || metrics.trunkScore <= 60)) {
+      return "torso";
+    }
+
+    if (metrics.neckScore < 85) {
       return "neck";
     }
-    return "torso";
+
+    if (metrics.trunkScore < 80) {
+      return "torso";
+    }
+
+    return "stability";
   }
 
-  private composeFeedback(metrics: PostureMetrics, mainIssue: PostureResult["mainIssue"]) {
+  private composeFeedbackItems(metrics: PostureMetrics): PostureFeedbackItem[] {
+    return [
+      {
+        part: "neck",
+        label: "목",
+        severity: neckSeverity(metrics.neckScore),
+        score: Math.round(metrics.neckScore),
+        message: neckFeedback(metrics.neckAngleDegrees),
+      },
+      {
+        part: "torso",
+        label: "허리/상체",
+        severity: torsoSeverity(metrics.trunkScore),
+        score: Math.round(metrics.trunkScore),
+        message: trunkFeedback(metrics.trunkLeanDegrees),
+      },
+      {
+        part: "stability",
+        label: "안정성",
+        severity: stabilitySeverity(metrics.stabilityScore),
+        score: Math.round(metrics.stabilityScore),
+        message: stabilityFeedback(metrics.stabilityScore),
+      },
+    ];
+  }
+
+  private composeFeedback(
+    metrics: PostureMetrics,
+    mainIssue: PostureResult["mainIssue"],
+    feedbackItems: PostureFeedbackItem[]
+  ) {
+    const mainFeedback = feedbackItems.find((item) => item.part === mainIssue);
+    if (mainFeedback) {
+      return mainFeedback.message;
+    }
     if (mainIssue === "neck") {
       return neckFeedback(metrics.neckAngleDegrees);
     }
     if (mainIssue === "torso") {
       return trunkFeedback(metrics.trunkLeanDegrees);
+    }
+    if (mainIssue === "stability") {
+      return stabilityFeedback(metrics.stabilityScore);
     }
     return "자세가 안정적으로 유지되고 있습니다.";
   }

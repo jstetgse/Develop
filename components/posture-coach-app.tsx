@@ -61,6 +61,7 @@ import type {
   PostureResult,
   RecentSummary,
   Settings,
+  SideMode,
   StretchCoachingResult,
   StretchDefinition,
   StretchStep,
@@ -203,10 +204,12 @@ function createInitialPosture(): PostureResult {
     torsoStatus: "대기",
     stabilityStatus: "대기",
     feedbackMessage: "카메라를 시작하면 자세 분석이 시작됩니다.",
+    feedbackItems: [],
     isBadPosture: false,
     isTracking: false,
     mainIssue: "tracking",
     metrics: null,
+    analysisSide: null,
   };
 }
 
@@ -326,6 +329,13 @@ function getIssueText(posture: PostureResult) {
   if (!posture.metrics) {
     return posture.feedbackMessage;
   }
+  const activeFeedback = posture.feedbackItems.filter((item) => item.severity !== "good");
+  if (activeFeedback.length > 1) {
+    return activeFeedback.map((item) => item.message).join(" ");
+  }
+  if (activeFeedback.length === 1) {
+    return activeFeedback[0].message;
+  }
   if (posture.mainIssue === "neck") {
     return "목이 앞으로 기울어져 있어요. 턱을 살짝 당겨주세요.";
   }
@@ -350,6 +360,48 @@ function getWeightMessage(posture: PostureResult) {
     return "목 부담이 조금 커졌어요. 어깨를 편하게 내려주세요.";
   }
   return "목에 큰 부담이 걸리고 있어요. 자세를 바로 세워주세요.";
+}
+
+function getSideModeLabel(mode: SideMode) {
+  if (mode === "left") {
+    return "왼쪽 옆모습 고정";
+  }
+  if (mode === "right") {
+    return "오른쪽 옆모습 고정";
+  }
+  return "자동";
+}
+
+function getAnalysisSideLabel(posture: PostureResult, preferredSideMode: SideMode) {
+  if (!posture.analysisSide) {
+    return `현재 분석 기준: ${getSideModeLabel(preferredSideMode)}`;
+  }
+
+  const sideLabel = posture.analysisSide === "left" ? "왼쪽 옆모습" : "오른쪽 옆모습";
+  if (preferredSideMode === "auto") {
+    return `현재 분석 기준: 자동 · ${sideLabel}`;
+  }
+  return `현재 분석 기준: ${sideLabel} 고정`;
+}
+
+function getFeedbackSeverityLabel(severity: PostureResult["feedbackItems"][number]["severity"]) {
+  if (severity === "good") {
+    return "좋음";
+  }
+  if (severity === "caution") {
+    return "주의";
+  }
+  return "경고";
+}
+
+function getFeedbackSeverityClass(severity: PostureResult["feedbackItems"][number]["severity"]) {
+  if (severity === "good") {
+    return "border-green-100 bg-green-50 text-green-800";
+  }
+  if (severity === "caution") {
+    return "border-yellow-100 bg-yellow-50 text-yellow-800";
+  }
+  return "border-red-100 bg-red-50 text-red-800";
 }
 
 function resolvePoseExports(moduleValue: unknown): {
@@ -2465,6 +2517,9 @@ export function PostureCoachApp() {
           <span className="rounded-full bg-blue-100 px-3 py-1 text-sm font-bold text-blue-700">
             {modeLabel}
           </span>
+          <span className="rounded-full bg-gray-100 px-3 py-1 text-sm font-bold text-gray-700">
+            {getAnalysisSideLabel(latestPosture, settings.preferredSideMode)}
+          </span>
           {modeMessage && (
             <span className="rounded-full bg-yellow-100 px-3 py-1 text-sm font-bold text-yellow-800">
               {modeMessage}
@@ -2560,6 +2615,25 @@ export function PostureCoachApp() {
             현재 분석 평균 점수: {sessionAverageScore ?? "--"}점
           </p>
           <p className="mt-4 text-sm leading-6 text-gray-700">{getWeightMessage(latestPosture)}</p>
+          {latestPosture.feedbackItems.length > 0 && (
+            <div className="mt-4 space-y-2">
+              <p className="text-sm font-bold text-gray-900">부위별 피드백</p>
+              {latestPosture.feedbackItems.map((item) => (
+                <div
+                  key={item.part}
+                  className={`rounded-2xl border p-3 text-sm leading-6 ${getFeedbackSeverityClass(item.severity)}`}
+                >
+                  <div className="mb-1 flex flex-wrap items-center justify-between gap-2 font-bold">
+                    <span>
+                      {item.label} · {getFeedbackSeverityLabel(item.severity)}
+                    </span>
+                    <span>{item.score}점</span>
+                  </div>
+                  <p>{item.message}</p>
+                </div>
+              ))}
+            </div>
+          )}
           <p className="mt-3 text-xs leading-5 text-gray-500">
             분석 시작 후 감지된 유효 자세 점수만 누적해 평균을 계산합니다.
           </p>
@@ -3135,6 +3209,21 @@ export function PostureCoachApp() {
             onChange={(checked) => updateSettings({ smoothingEnabled: checked })}
             label="점수 부드럽게 처리 켜기/끄기"
           />
+          <label className="block">
+            <span className="text-sm font-medium text-gray-700">측면 분석 기준</span>
+            <select
+              value={settings.preferredSideMode}
+              onChange={(event) => updateSettings({ preferredSideMode: event.target.value as SideMode })}
+              className="mt-2 w-full rounded-lg border border-gray-300 px-3 py-2"
+            >
+              <option value="auto">자동</option>
+              <option value="left">왼쪽 옆모습</option>
+              <option value="right">오른쪽 옆모습</option>
+            </select>
+            <p className="mt-2 text-xs leading-5 text-gray-500">
+              자동은 MediaPipe visibility가 더 높은 쪽을 사용하고, 고정 모드는 선택한 쪽 landmark만 사용합니다.
+            </p>
+          </label>
         </div>
       </section>
 

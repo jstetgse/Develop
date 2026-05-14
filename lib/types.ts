@@ -6,6 +6,10 @@ export type SideMode = "auto" | "left" | "right";
 
 export type SelectedSide = "left" | "right";
 
+export type PostureFeedbackPart = "neck" | "torso" | "stability";
+
+export type PostureFeedbackSeverity = "good" | "caution" | "warning";
+
 export type NotificationPermissionStatus = "unsupported" | "default" | "granted" | "denied";
 
 export interface Settings {
@@ -40,10 +44,20 @@ export interface PostureResult {
   torsoStatus: string;
   stabilityStatus: string;
   feedbackMessage: string;
+  feedbackItems: PostureFeedbackItem[];
   isBadPosture: boolean;
   isTracking: boolean;
   mainIssue: "neck" | "torso" | "stability" | "balanced" | "tracking";
   metrics: PostureMetrics | null;
+  analysisSide: SelectedSide | null;
+}
+
+export interface PostureFeedbackItem {
+  part: PostureFeedbackPart;
+  label: string;
+  severity: PostureFeedbackSeverity;
+  score: number;
+  message: string;
 }
 
 export interface StretchDefinition {

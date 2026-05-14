@@ -174,6 +174,7 @@ type FirestoreSettings = Pick<
   | "landmarkOverlayEnabled"
   | "smoothingEnabled"
   | "realtimeScoreIntervalSeconds"
+  | "preferredSideMode"
 >;
 
 function settingsDoc(uid: string) {
@@ -209,6 +210,10 @@ function normalizeSettings(raw: Partial<Settings>, defaults: Settings): Settings
       typeof raw.realtimeScoreIntervalSeconds === "number"
         ? Math.min(Math.max(Math.round(raw.realtimeScoreIntervalSeconds), 1), 5)
         : defaults.realtimeScoreIntervalSeconds,
+    preferredSideMode:
+      raw.preferredSideMode === "left" || raw.preferredSideMode === "right" || raw.preferredSideMode === "auto"
+        ? raw.preferredSideMode
+        : defaults.preferredSideMode,
   };
 }
 
@@ -222,6 +227,7 @@ function toFirestoreSettings(settings: Settings): FirestoreSettings {
     landmarkOverlayEnabled: settings.landmarkOverlayEnabled,
     smoothingEnabled: settings.smoothingEnabled,
     realtimeScoreIntervalSeconds: settings.realtimeScoreIntervalSeconds,
+    preferredSideMode: settings.preferredSideMode,
   };
 }
 
