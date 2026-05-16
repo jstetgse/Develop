@@ -320,16 +320,16 @@ function evaluatePersonalizedMovement(
   const torsoAngle =
     userPose.leftShoulder && userPose.rightShoulder && userPose.leftHip && userPose.rightHip
       ? lineAngleDegrees(
-          { x: (userPose.leftShoulder.x + userPose.rightShoulder.x) / 2, y: (userPose.leftShoulder.y + userPose.rightShoulder.y) / 2 },
-          { x: (userPose.leftHip.x + userPose.rightHip.x) / 2, y: (userPose.leftHip.y + userPose.rightHip.y) / 2 }
-        )
+        { x: (userPose.leftShoulder.x + userPose.rightShoulder.x) / 2, y: (userPose.leftShoulder.y + userPose.rightShoulder.y) / 2 },
+        { x: (userPose.leftHip.x + userPose.rightHip.x) / 2, y: (userPose.leftHip.y + userPose.rightHip.y) / 2 }
+      )
       : 0;
   const guideTorsoAngle =
     guidePose.leftShoulder && guidePose.rightShoulder && guidePose.leftHip && guidePose.rightHip
       ? lineAngleDegrees(
-          { x: (guidePose.leftShoulder.x + guidePose.rightShoulder.x) / 2, y: (guidePose.leftShoulder.y + guidePose.rightShoulder.y) / 2 },
-          { x: (guidePose.leftHip.x + guidePose.rightHip.x) / 2, y: (guidePose.leftHip.y + guidePose.rightHip.y) / 2 }
-        )
+        { x: (guidePose.leftShoulder.x + guidePose.rightShoulder.x) / 2, y: (guidePose.leftShoulder.y + guidePose.rightShoulder.y) / 2 },
+        { x: (guidePose.leftHip.x + guidePose.rightHip.x) / 2, y: (guidePose.leftHip.y + guidePose.rightHip.y) / 2 }
+      )
       : 0;
   const torsoDirection = angleScore(torsoAngle, guideTorsoAngle, 42);
   const hipStability =
