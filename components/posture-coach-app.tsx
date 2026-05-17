@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
 import type { User as FirebaseUser } from "firebase/auth";
 import {
-  Accessibility,
   Activity,
   AlertTriangle,
   Bell,
@@ -120,6 +119,7 @@ type MediaPipeWindow = Window & {
 type ScorePoint = {
   id: string;
   time: string;
+  timestamp: number;
   score: number;
 };
 
@@ -345,6 +345,40 @@ function formatTime(timestamp: string) {
     minute: "2-digit",
     timeZone: "Asia/Seoul",
   }).format(new Date(timestamp));
+}
+
+function getKoreaDateKey(date = new Date()) {
+  const parts = new Intl.DateTimeFormat("ko-KR", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    timeZone: "Asia/Seoul",
+  }).formatToParts(date);
+  const year = parts.find((part) => part.type === "year")?.value ?? "0000";
+  const month = parts.find((part) => part.type === "month")?.value ?? "00";
+  const day = parts.find((part) => part.type === "day")?.value ?? "00";
+  return `${year}-${month}-${day}`;
+}
+
+function createTodaySavedScorePoints(historyGroups: HistoryGroup[]): ScorePoint[] {
+  const today = getKoreaDateKey();
+  const todayGroup = historyGroups.find((group) => group.dateKey === today);
+  if (!todayGroup) {
+    return [];
+  }
+
+  return todayGroup.sessions
+    .filter((session) => typeof session.averageScore === "number")
+    .map((session) => {
+      const timestamp = new Date(session.startedAt).getTime();
+      return {
+        id: `saved-${session.sessionId}`,
+        time: formatTime(session.startedAt),
+        timestamp,
+        score: session.averageScore ?? 0,
+      };
+    })
+    .sort((left, right) => left.timestamp - right.timestamp);
 }
 
 function formatMinutes(value: number) {
@@ -1123,7 +1157,8 @@ export function PostureCoachApp() {
   const [cameraText, setCameraText] = useState("카메라 대기");
   const [cameraTone, setCameraTone] = useState<"good" | "warn" | "danger" | "neutral">("neutral");
   const [alertMessage, setAlertMessage] = useState<string | null>(null);
-  const [scoreTrend, setScoreTrend] = useState<ScorePoint[]>([]);
+  const [todaySavedScorePoints, setTodaySavedScorePoints] = useState<ScorePoint[]>([]);
+  const [liveScorePoints, setLiveScorePoints] = useState<ScorePoint[]>([]);
   const [sessionAverageScore, setSessionAverageScore] = useState<number | null>(null);
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -1187,6 +1222,13 @@ export function PostureCoachApp() {
     () => historyGroups.flatMap((group) => group.sessions).slice(0, 30),
     [historyGroups]
   );
+  const combinedScorePoints = useMemo(
+    () =>
+      [...todaySavedScorePoints, ...liveScorePoints]
+        .filter((point) => Number.isFinite(point.timestamp))
+        .sort((left, right) => left.timestamp - right.timestamp),
+    [todaySavedScorePoints, liveScorePoints]
+  );
   const recommendationHistorySessions = useMemo(
     () => (hasCurrentSessionPostureData ? recentHistorySessions : []),
     [hasCurrentSessionPostureData, recentHistorySessions]
@@ -1249,14 +1291,18 @@ export function PostureCoachApp() {
     if (!uid) {
       setRecentSummary(null);
       setHistoryGroups([]);
+      setTodaySavedScorePoints([]);
+      setLiveScorePoints([]);
       return;
     }
 
     setIsLoadingHistory(true);
     try {
       const [summary, history] = await Promise.all([getRecent24hSummary(uid), getHistoryByDate(uid)]);
+      const historyItems = history ?? [];
       setRecentSummary(summary);
-      setHistoryGroups(history ?? []);
+      setHistoryGroups(historyItems);
+      setTodaySavedScorePoints(createTodaySavedScorePoints(historyItems));
     } finally {
       setIsLoadingHistory(false);
     }
@@ -1821,15 +1867,16 @@ export function PostureCoachApp() {
 
     if (now - lastScoreTrendUpdateAtRef.current >= getRealtimeScoreIntervalMs(settingsRef.current)) {
       scoreSamplesRef.current = [...scoreSamplesRef.current.slice(-119), trendScore];
-      setScoreTrend((previous) => [
+      setLiveScorePoints((previous) => [
         ...previous.slice(-23),
         {
-          id: `${now}`,
+          id: `live-${now}`,
           time: new Intl.DateTimeFormat("ko-KR", {
             hour: "2-digit",
             minute: "2-digit",
             timeZone: "Asia/Seoul",
           }).format(new Date(now)),
+          timestamp: now,
           score: trendScore,
         },
       ]);
@@ -2037,6 +2084,7 @@ export function PostureCoachApp() {
     setAlertMessage(null);
 
     await refreshHistory(uid);
+    setLiveScorePoints([]);
   }, [refreshHistory, resetStretchCalibration]);
 
   const startApp = useCallback(async () => {
@@ -2067,7 +2115,7 @@ export function PostureCoachApp() {
     latestSessionAverageRef.current = null;
     postureAreaStatsRef.current = createEmptyPostureAreaStats();
     lastScoreTrendUpdateAtRef.current = 0;
-    setScoreTrend([]);
+    setLiveScorePoints([]);
     alertCountRef.current = 0;
     badPostureStartedAtRef.current = null;
     alertVisibleUntilRef.current = 0;
@@ -2441,7 +2489,8 @@ export function PostureCoachApp() {
     try {
       const cleared = await clearUserMeasurementHistory(uid);
       if (cleared) {
-        setScoreTrend([]);
+        setTodaySavedScorePoints([]);
+        setLiveScorePoints([]);
         setRecentSummary(null);
         setHistoryGroups([]);
         await refreshHistory(uid);
@@ -2618,15 +2667,21 @@ export function PostureCoachApp() {
 
       <div className="rounded-xl border border-gray-100 bg-white p-6 shadow-sm">
         <h2 className="mb-4 text-lg font-bold text-gray-900">오늘의 자세 점수 변화</h2>
-        <ResponsiveContainer width="100%" height={200}>
-          <LineChart data={scoreTrend}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-            <XAxis dataKey="time" stroke="#9ca3af" fontSize={12} />
-            <YAxis domain={[0, 100]} stroke="#9ca3af" fontSize={12} />
-            <Tooltip />
-            <Line type="linear" dataKey="score" stroke="#3b82f6" strokeWidth={2} dot={{ r: 4 }} />
-          </LineChart>
-        </ResponsiveContainer>
+        {combinedScorePoints.length > 0 ? (
+          <ResponsiveContainer width="100%" height={200}>
+            <LineChart data={combinedScorePoints}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+              <XAxis dataKey="time" stroke="#9ca3af" fontSize={12} />
+              <YAxis domain={[0, 100]} stroke="#9ca3af" fontSize={12} />
+              <Tooltip />
+              <Line type="linear" dataKey="score" stroke="#3b82f6" strokeWidth={2} dot={{ r: 4 }} />
+            </LineChart>
+          </ResponsiveContainer>
+        ) : (
+          <div className="flex h-[200px] items-center justify-center rounded-xl border border-dashed border-gray-200 bg-gray-50 px-4 text-center text-sm font-medium text-gray-500">
+            오늘 분석 기록이 아직 없습니다
+          </div>
+        )}
       </div>
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -2719,19 +2774,6 @@ export function PostureCoachApp() {
           >
             {isRunning ? "분석 중지" : "분석 시작"}
           </button>
-          <button
-            type="button"
-            onClick={() => {
-              setActiveTab("stretching");
-              setPendingCameraStart(!isRunning);
-            }}
-            className="min-h-12 rounded-xl border border-gray-300 bg-white px-6 py-3 font-bold text-gray-700 transition-colors hover:bg-gray-50"
-          >
-            <div className="flex items-center justify-center gap-2">
-              <Accessibility className="h-5 w-5" />
-              스트레칭 분석 모드
-            </div>
-          </button>
         </div>
       </section>
 
@@ -2793,6 +2835,51 @@ export function PostureCoachApp() {
           <p className="mt-3 text-xs leading-5 text-gray-500">
             분석 시작 후 감지된 유효 자세 점수만 누적해 평균을 계산합니다.
           </p>
+        </section>
+
+        <section className="rounded-3xl border border-gray-200 bg-white p-6 shadow-sm">
+          <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <SlidersHorizontal className="h-5 w-5 text-blue-600" />
+              <h3 className="text-lg font-bold text-gray-900">분석 옵션</h3>
+            </div>
+            {settingsStatusText && (
+              <span
+                className={`rounded-full px-3 py-1 text-xs font-medium ${
+                  settingsSaveStatus === "error" ? "bg-red-100 text-red-700" : "bg-blue-50 text-blue-700"
+                }`}
+              >
+                {settingsStatusText}
+              </span>
+            )}
+          </div>
+          <div className="space-y-4">
+            <ToggleControl
+              checked={settings.landmarkOverlayEnabled}
+              onChange={(checked) => updateSettings({ landmarkOverlayEnabled: checked })}
+              label="자세 랜드마크 표시 켜기/끄기"
+            />
+            <ToggleControl
+              checked={settings.smoothingEnabled}
+              onChange={(checked) => updateSettings({ smoothingEnabled: checked })}
+              label="점수 부드럽게 처리 켜기/끄기"
+            />
+            <label className="block">
+              <span className="text-sm font-medium text-gray-700">측면 분석 기준</span>
+              <select
+                value={settings.preferredSideMode}
+                onChange={(event) => updateSettings({ preferredSideMode: event.target.value as SideMode })}
+                className="mt-2 w-full rounded-lg border border-gray-300 px-3 py-2"
+              >
+                <option value="auto">자동</option>
+                <option value="left">왼쪽 옆모습 고정</option>
+                <option value="right">오른쪽 옆모습 고정</option>
+              </select>
+              <p className="mt-2 text-xs leading-5 text-gray-500">
+                자동은 더 잘 보이는 옆모습을 사용하고, 고정 모드는 선택한 방향만 분석합니다.
+              </p>
+            </label>
+          </div>
         </section>
 
         <section className="rounded-3xl border border-gray-200 bg-white p-6 shadow-sm">
@@ -3502,40 +3589,6 @@ export function PostureCoachApp() {
                 </option>
               ))}
             </select>
-          </label>
-        </div>
-      </section>
-
-      <section className="rounded-xl border border-gray-100 bg-white p-6 shadow-sm">
-        <div className="mb-5 flex items-center gap-3">
-          <SlidersHorizontal className="h-5 w-5 text-blue-600" />
-          <h2 className="text-xl font-bold text-gray-900">분석 설정</h2>
-        </div>
-        <div className="space-y-4">
-          <ToggleControl
-            checked={settings.landmarkOverlayEnabled}
-            onChange={(checked) => updateSettings({ landmarkOverlayEnabled: checked })}
-            label="자세 랜드마크 표시 켜기/끄기"
-          />
-          <ToggleControl
-            checked={settings.smoothingEnabled}
-            onChange={(checked) => updateSettings({ smoothingEnabled: checked })}
-            label="점수 부드럽게 처리 켜기/끄기"
-          />
-          <label className="block">
-            <span className="text-sm font-medium text-gray-700">측면 분석 기준</span>
-            <select
-              value={settings.preferredSideMode}
-              onChange={(event) => updateSettings({ preferredSideMode: event.target.value as SideMode })}
-              className="mt-2 w-full rounded-lg border border-gray-300 px-3 py-2"
-            >
-              <option value="auto">자동</option>
-              <option value="left">왼쪽 옆모습</option>
-              <option value="right">오른쪽 옆모습</option>
-            </select>
-            <p className="mt-2 text-xs leading-5 text-gray-500">
-              자동은 MediaPipe visibility가 더 높은 쪽을 사용하고, 고정 모드는 선택한 쪽 landmark만 사용합니다.
-            </p>
           </label>
         </div>
       </section>
