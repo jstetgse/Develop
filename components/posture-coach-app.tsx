@@ -1151,6 +1151,8 @@ export function PostureCoachApp() {
   const nextStretchReminderAtRef = useRef(0);
   const latestLandmarksRef = useRef<Landmark[] | null>(null);
   const alertVisibleUntilRef = useRef(0);
+  const postureAlertVisibleUntilRef = useRef(0);
+  const stretchAlertVisibleUntilRef = useRef(0);
   const alertCountRef = useRef(0);
   const badPostureStartedAtRef = useRef<number | null>(null);
   const wasPostureRunningBeforeStretchRef = useRef(false);
@@ -1438,11 +1440,12 @@ export function PostureCoachApp() {
         : activeSettings.badPostureDurationMinutes * 60 * 1000;
       const isSustainedBadPosture = now - badPostureStartedAtRef.current >= badPostureDurationMs;
 
-      if (isSustainedBadPosture && now > alertVisibleUntilRef.current) {
+      if (isSustainedBadPosture && now > postureAlertVisibleUntilRef.current) {
         const message = getIssueText(posture);
         setAlertMessage(message);
         showDesktopNotification("자세 주의", message);
-        alertVisibleUntilRef.current = now + 30_000;
+        postureAlertVisibleUntilRef.current = now + 30_000;
+        alertVisibleUntilRef.current = Math.max(alertVisibleUntilRef.current, postureAlertVisibleUntilRef.current);
         badPostureStartedAtRef.current = now;
         alertCountRef.current += 1;
         if (uid && sessionId) {
@@ -1455,7 +1458,7 @@ export function PostureCoachApp() {
       }
     } else {
       badPostureStartedAtRef.current = null;
-      if (now > alertVisibleUntilRef.current) {
+      if (now > postureAlertVisibleUntilRef.current && now > stretchAlertVisibleUntilRef.current) {
         setAlertMessage(null);
       }
     }
@@ -1473,7 +1476,8 @@ export function PostureCoachApp() {
         tag: "stretch-reminder",
         onClick: () => setActiveTab("stretching"),
       });
-      alertVisibleUntilRef.current = now + 30_000;
+      stretchAlertVisibleUntilRef.current = now + 30_000;
+      alertVisibleUntilRef.current = Math.max(alertVisibleUntilRef.current, stretchAlertVisibleUntilRef.current);
       nextStretchReminderAtRef.current = now + stretchReminderMs;
       alertCountRef.current += 1;
       if (uid && sessionId) {
@@ -1994,6 +1998,8 @@ export function PostureCoachApp() {
     nextStretchReminderAtRef.current = 0;
     latestLandmarksRef.current = null;
     alertVisibleUntilRef.current = 0;
+    postureAlertVisibleUntilRef.current = 0;
+    stretchAlertVisibleUntilRef.current = 0;
     alertCountRef.current = 0;
     badPostureStartedAtRef.current = null;
     wasPostureRunningBeforeStretchRef.current = false;
@@ -2064,6 +2070,9 @@ export function PostureCoachApp() {
     setScoreTrend([]);
     alertCountRef.current = 0;
     badPostureStartedAtRef.current = null;
+    alertVisibleUntilRef.current = 0;
+    postureAlertVisibleUntilRef.current = 0;
+    stretchAlertVisibleUntilRef.current = 0;
     setHasCurrentSessionPostureData(false);
     if (appModeRef.current !== "stretching") {
       wasPostureRunningBeforeStretchRef.current = false;
@@ -2228,6 +2237,7 @@ export function PostureCoachApp() {
     posturePausedStartedAtRef.current = wasPostureRunning ? Date.now() : null;
     badPostureStartedAtRef.current = null;
     alertVisibleUntilRef.current = 0;
+    postureAlertVisibleUntilRef.current = 0;
     setAlertMessage(null);
     setActiveTab("stretching");
     setModeMessage("스트레칭 모드로 전환합니다. 자세 분석이 일시중지됩니다.");
