@@ -172,8 +172,10 @@ type FirestoreSettings = Pick<
   | "warningAlertEnabled"
   | "warningScoreThreshold"
   | "badPostureDurationMinutes"
+  | "badPostureTestAlertEnabled"
   | "stretchReminderEnabled"
   | "stretchReminderIntervalMinutes"
+  | "stretchReminderTestAlertEnabled"
   | "landmarkOverlayEnabled"
   | "smoothingEnabled"
   | "realtimeScoreIntervalSeconds"
@@ -196,6 +198,10 @@ function normalizeSettings(raw: Partial<Settings>, defaults: Settings): Settings
       typeof raw.badPostureDurationMinutes === "number"
         ? raw.badPostureDurationMinutes
         : defaults.badPostureDurationMinutes,
+    badPostureTestAlertEnabled:
+      typeof raw.badPostureTestAlertEnabled === "boolean"
+        ? raw.badPostureTestAlertEnabled
+        : defaults.badPostureTestAlertEnabled,
     stretchReminderEnabled:
       typeof raw.stretchReminderEnabled === "boolean"
         ? raw.stretchReminderEnabled
@@ -204,6 +210,10 @@ function normalizeSettings(raw: Partial<Settings>, defaults: Settings): Settings
       typeof raw.stretchReminderIntervalMinutes === "number"
         ? raw.stretchReminderIntervalMinutes
         : defaults.stretchReminderIntervalMinutes,
+    stretchReminderTestAlertEnabled:
+      typeof raw.stretchReminderTestAlertEnabled === "boolean"
+        ? raw.stretchReminderTestAlertEnabled
+        : defaults.stretchReminderTestAlertEnabled,
     landmarkOverlayEnabled:
       typeof raw.landmarkOverlayEnabled === "boolean"
         ? raw.landmarkOverlayEnabled
@@ -225,8 +235,10 @@ function toFirestoreSettings(settings: Settings): FirestoreSettings {
     warningAlertEnabled: settings.warningAlertEnabled,
     warningScoreThreshold: settings.warningScoreThreshold,
     badPostureDurationMinutes: settings.badPostureDurationMinutes,
+    badPostureTestAlertEnabled: settings.badPostureTestAlertEnabled,
     stretchReminderEnabled: settings.stretchReminderEnabled,
     stretchReminderIntervalMinutes: settings.stretchReminderIntervalMinutes,
+    stretchReminderTestAlertEnabled: settings.stretchReminderTestAlertEnabled,
     landmarkOverlayEnabled: settings.landmarkOverlayEnabled,
     smoothingEnabled: settings.smoothingEnabled,
     realtimeScoreIntervalSeconds: settings.realtimeScoreIntervalSeconds,

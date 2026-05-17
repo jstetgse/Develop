@@ -171,7 +171,7 @@ const STRETCH_FEEDBACK_INTERVAL_MS = 800;
 const STRETCH_HOLD_TARGET_MS = 5_000;
 const STRETCH_CALIBRATION_TARGET_MS = 2_000;
 const STRETCH_CALIBRATION_MIN_SAMPLES = 12;
-const STRETCH_CALIBRATION_MAX_MOVEMENT = 0.045;
+const STRETCH_CALIBRATION_MAX_MOVEMENT = 0.09;
 const POSE_CONNECTIONS_FALLBACK: Array<[number, number]> = [
   [11, 12],
   [11, 13],
@@ -187,8 +187,10 @@ const DEFAULT_SETTINGS: Settings = {
   warningAlertEnabled: true,
   warningScoreThreshold: 60,
   badPostureDurationMinutes: 5,
+  badPostureTestAlertEnabled: false,
   stretchReminderEnabled: true,
   stretchReminderIntervalMinutes: 30,
+  stretchReminderTestAlertEnabled: false,
   landmarkOverlayEnabled: true,
   smoothingEnabled: true,
   realtimeScoreIntervalSeconds: 1,
@@ -201,6 +203,27 @@ function getNotificationPermissionStatus(): NotificationPermissionStatus {
     return "unsupported";
   }
   return Notification.permission;
+}
+
+function showDesktopNotification(title: string, body: string, options: { tag?: string; onClick?: () => void } = {}) {
+  if (typeof window === "undefined" || !("Notification" in window) || Notification.permission !== "granted") {
+    return;
+  }
+
+  try {
+    const notification = new Notification(title, {
+      body,
+      icon: "/favicon.ico",
+      tag: options.tag,
+    });
+    notification.onclick = () => {
+      window.focus();
+      options.onClick?.();
+      notification.close();
+    };
+  } catch (error) {
+    console.warn("Failed to show desktop notification:", error);
+  }
 }
 
 function createInitialPosture(): PostureResult {
@@ -242,6 +265,10 @@ function createDefaultSettings(): Settings {
 
 function getRealtimeScoreIntervalMs(settings: Settings) {
   return Math.min(Math.max(Math.round(settings.realtimeScoreIntervalSeconds), 1), 5) * 1000;
+}
+
+function getStretchReminderMs(settings: Settings) {
+  return settings.stretchReminderTestAlertEnabled ? 20_000 : settings.stretchReminderIntervalMinutes * 60 * 1000;
 }
 
 function usesPersonalizedStretchAnalysis(stretchId: string | null) {
@@ -1080,11 +1107,13 @@ export function PostureCoachApp() {
   const [appMode, setAppMode] = useState<AppMode>("paused");
   const [modeMessage, setModeMessage] = useState<string | null>(null);
   const [activeStretchId, setActiveStretchId] = useState<string | null>(null);
+  const [showAllStretchOptions, setShowAllStretchOptions] = useState(false);
   const [activeStretchStepIndex, setActiveStretchStepIndex] = useState(0);
   const [completedStretchSteps, setCompletedStretchSteps] = useState<number[]>([]);
   const [stretchCalibrationStatus, setStretchCalibrationStatus] = useState<StretchCalibrationStatus>("idle");
   const [stretchCalibrationMessage, setStretchCalibrationMessage] = useState("스트레칭 분석을 시작하면 기준 자세를 측정합니다.");
   const [latestPosture, setLatestPosture] = useState<PostureResult>(createInitialPosture);
+  const [hasCurrentSessionPostureData, setHasCurrentSessionPostureData] = useState(false);
   const [stretchCoaching, setStretchCoaching] = useState<StretchCoachingResult>(createInitialStretchState);
   const [recentSummary, setRecentSummary] = useState<RecentSummary | null>(null);
   const [historyGroups, setHistoryGroups] = useState<HistoryGroup[]>([]);
@@ -1148,17 +1177,25 @@ export function PostureCoachApp() {
     () => getRecommendedStretches(latestPosture.mainIssue),
     [latestPosture.mainIssue]
   );
+  const allStretchOptions = useMemo<StretchDefinition[]>(
+    () => getRecommendedStretches("balanced"),
+    []
+  );
   const recentHistorySessions = useMemo(
     () => historyGroups.flatMap((group) => group.sessions).slice(0, 30),
     [historyGroups]
+  );
+  const recommendationHistorySessions = useMemo(
+    () => (hasCurrentSessionPostureData ? recentHistorySessions : []),
+    [hasCurrentSessionPostureData, recentHistorySessions]
   );
   const personalizedStretchRecommendations = useMemo(
     () =>
       calculateStretchRecommendations({
         currentPosture: latestPosture,
-        recentSessions: recentHistorySessions,
+        recentSessions: recommendationHistorySessions,
       }),
-    [latestPosture, recentHistorySessions]
+    [latestPosture, recommendationHistorySessions]
   );
   const displayedRecommendedStretches = useMemo<StretchDefinition[]>(() => {
     const personalized = personalizedStretchRecommendations.recommendations
@@ -1396,12 +1433,15 @@ export function PostureCoachApp() {
 
     if (activeSettings.warningAlertEnabled && posture.score <= activeSettings.warningScoreThreshold) {
       badPostureStartedAtRef.current ??= now;
-      const badPostureDurationMs = activeSettings.badPostureDurationMinutes * 60 * 1000;
+      const badPostureDurationMs = activeSettings.badPostureTestAlertEnabled
+        ? 1000
+        : activeSettings.badPostureDurationMinutes * 60 * 1000;
       const isSustainedBadPosture = now - badPostureStartedAtRef.current >= badPostureDurationMs;
 
       if (isSustainedBadPosture && now > alertVisibleUntilRef.current) {
         const message = getIssueText(posture);
         setAlertMessage(message);
+        showDesktopNotification("자세 주의", message);
         alertVisibleUntilRef.current = now + 30_000;
         badPostureStartedAtRef.current = now;
         alertCountRef.current += 1;
@@ -1420,7 +1460,7 @@ export function PostureCoachApp() {
       }
     }
 
-    const stretchReminderMs = activeSettings.stretchReminderIntervalMinutes * 60 * 1000;
+    const stretchReminderMs = getStretchReminderMs(activeSettings);
     if (
       activeSettings.stretchReminderEnabled &&
       stretchReminderMs > 0 &&
@@ -1429,6 +1469,10 @@ export function PostureCoachApp() {
     ) {
       const message = "잠깐 몸을 풀 시간입니다. 스트레칭 탭에서 추천 동작을 확인해보세요.";
       setAlertMessage(message);
+      showDesktopNotification("스트레칭 알림", "20초 이상 자세를 측정했습니다. 스트레칭 분석으로 이동해 몸을 풀어보세요.", {
+        tag: "stretch-reminder",
+        onClick: () => setActiveTab("stretching"),
+      });
       alertVisibleUntilRef.current = now + 30_000;
       nextStretchReminderAtRef.current = now + stretchReminderMs;
       alertCountRef.current += 1;
@@ -1492,6 +1536,7 @@ export function PostureCoachApp() {
     const sample = createStretchCalibrationSample(landmarks);
     if (!sample) {
       stretchHoldStartedAtRef.current = null;
+      setStretchCalibrationMessage("기준 자세를 다시 측정 중입니다. 잠시만 자세를 유지해주세요.");
       latestStretchCoachingRef.current = {
         stretchId: activeStretchIdRef.current,
         stepIndex: activeStretchStepIndexRef.current,
@@ -1517,12 +1562,13 @@ export function PostureCoachApp() {
 
     if (maxMovement > STRETCH_CALIBRATION_MAX_MOVEMENT) {
       stretchCalibrationRef.current = null;
-      stretchCalibrationStatusRef.current = "failed";
-      stretchCalibrationStartedAtRef.current = null;
+      stretchCalibrationStatusRef.current = "calibrating";
+      stretchCalibrationStartedAtRef.current = Date.now();
       stretchCalibrationSamplesRef.current = [];
       stretchHoldStartedAtRef.current = null;
-      setStretchCalibrationStatus("failed");
-      setStretchCalibrationMessage("기준 자세를 유지해주세요.");
+      smoothedStretchMatchRef.current = null;
+      setStretchCalibrationStatus("calibrating");
+      setStretchCalibrationMessage("기준 자세를 다시 측정 중입니다. 잠시만 자세를 유지해주세요.");
       latestStretchCoachingRef.current = {
         stretchId: activeStretchIdRef.current,
         stepIndex: activeStretchStepIndexRef.current,
@@ -1539,7 +1585,10 @@ export function PostureCoachApp() {
     }
 
     const elapsed = Date.now() - (stretchCalibrationStartedAtRef.current ?? Date.now());
-    if (elapsed >= STRETCH_CALIBRATION_TARGET_MS && samples.length >= STRETCH_CALIBRATION_MIN_SAMPLES) {
+    const hasEnoughSamples =
+      samples.length >= STRETCH_CALIBRATION_MIN_SAMPLES ||
+      (elapsed >= STRETCH_CALIBRATION_TARGET_MS * 2 && samples.length >= 4);
+    if (elapsed >= STRETCH_CALIBRATION_TARGET_MS && hasEnoughSamples) {
       const calibration = averageStretchCalibration(samples);
       if (calibration) {
         stretchCalibrationRef.current = calibration;
@@ -1712,6 +1761,8 @@ export function PostureCoachApp() {
     }
 
     const now = Date.now();
+    let trendScore = posture.score;
+    setHasCurrentSessionPostureData(true);
     scoreTotalRef.current += posture.score;
     scoreCountRef.current += 1;
     recordPostureAreaStats(postureAreaStatsRef.current, posture);
@@ -1754,6 +1805,7 @@ export function PostureCoachApp() {
         realtimeScoreWindowRef.current.reduce((sum, score) => sum + score, 0) /
           realtimeScoreWindowRef.current.length
       );
+      trendScore = realtimeScore;
       setLatestPosture({
         ...posture,
         score: realtimeScore,
@@ -1764,7 +1816,7 @@ export function PostureCoachApp() {
     }
 
     if (now - lastScoreTrendUpdateAtRef.current >= getRealtimeScoreIntervalMs(settingsRef.current)) {
-      scoreSamplesRef.current = [...scoreSamplesRef.current.slice(-119), cumulativeAverage];
+      scoreSamplesRef.current = [...scoreSamplesRef.current.slice(-119), trendScore];
       setScoreTrend((previous) => [
         ...previous.slice(-23),
         {
@@ -1774,7 +1826,7 @@ export function PostureCoachApp() {
             minute: "2-digit",
             timeZone: "Asia/Seoul",
           }).format(new Date(now)),
-          score: cumulativeAverage,
+          score: trendScore,
         },
       ]);
       lastScoreTrendUpdateAtRef.current = now;
@@ -1828,7 +1880,10 @@ export function PostureCoachApp() {
 
       const averagePosture = recordPostureScore(posture);
       if (averagePosture) {
-        void updateAlerts(averagePosture);
+        void updateAlerts({
+          ...posture,
+          isBadPosture: posture.score !== null && posture.score <= settingsRef.current.warningScoreThreshold,
+        });
         void persistSnapshotIfNeeded(averagePosture);
       }
     },
@@ -2009,6 +2064,7 @@ export function PostureCoachApp() {
     setScoreTrend([]);
     alertCountRef.current = 0;
     badPostureStartedAtRef.current = null;
+    setHasCurrentSessionPostureData(false);
     if (appModeRef.current !== "stretching") {
       wasPostureRunningBeforeStretchRef.current = false;
       posturePausedStartedAtRef.current = null;
@@ -2073,7 +2129,7 @@ export function PostureCoachApp() {
       sessionIdRef.current = sessionId;
       startedAtRef.current = startedAt;
       nextStretchReminderAtRef.current = settingsRef.current.stretchReminderEnabled
-        ? Date.now() + settingsRef.current.stretchReminderIntervalMinutes * 60 * 1000
+        ? Date.now() + getStretchReminderMs(settingsRef.current)
         : 0;
       if (uid) {
         void createSession(uid, sessionId, startedAt, settingsRef.current.preferredSideMode);
@@ -2137,6 +2193,7 @@ export function PostureCoachApp() {
 
   const handleStretchSelection = useCallback((stretchId: string) => {
     setActiveStretchId(stretchId);
+    setShowAllStretchOptions(false);
     setActiveStretchStepIndex(0);
     setCompletedStretchSteps([]);
     activeStretchIdRef.current = stretchId;
@@ -2351,6 +2408,19 @@ export function PostureCoachApp() {
     void persistSettings(nextSettings);
   }, [persistSettings]);
 
+  const handleRequestNotificationPermission = useCallback(async () => {
+    if (typeof window === "undefined" || !("Notification" in window)) {
+      updateSettings({ notificationPermissionStatus: "unsupported" });
+      return;
+    }
+
+    const permission = await Notification.requestPermission();
+    updateSettings({ notificationPermissionStatus: permission });
+    if (permission === "granted") {
+      showDesktopNotification("알림 설정 완료", "나쁜 자세가 감지되면 Windows 알림으로 알려드릴게요.");
+    }
+  }, [updateSettings]);
+
   const handleClearHistory = useCallback(async () => {
     const uid = uidRef.current;
     if (!uid || isClearingHistory) {
@@ -2544,7 +2614,7 @@ export function PostureCoachApp() {
             <XAxis dataKey="time" stroke="#9ca3af" fontSize={12} />
             <YAxis domain={[0, 100]} stroke="#9ca3af" fontSize={12} />
             <Tooltip />
-            <Line type="monotone" dataKey="score" stroke="#3b82f6" strokeWidth={2} dot={{ r: 4 }} />
+            <Line type="linear" dataKey="score" stroke="#3b82f6" strokeWidth={2} dot={{ r: 4 }} />
           </LineChart>
         </ResponsiveContainer>
       </div>
@@ -2656,16 +2726,6 @@ export function PostureCoachApp() {
       </section>
 
       <div className="space-y-4">
-        {alertMessage && (
-          <section className="rounded-3xl border border-yellow-200 bg-yellow-50 p-5 shadow-sm">
-            <div className="mb-2 flex items-center justify-between gap-3">
-              <h3 className="font-bold text-yellow-950">자세 주의</h3>
-              <AlertTriangle className="h-5 w-5 text-yellow-600" />
-            </div>
-            <p className="text-sm leading-6 text-yellow-800">{alertMessage}</p>
-          </section>
-        )}
-
         <section className="rounded-3xl border border-gray-200 bg-white p-6 shadow-sm">
           <div className="mb-4 flex items-start justify-between gap-3">
             <div>
@@ -2865,6 +2925,50 @@ export function PostureCoachApp() {
             자세 분석을 먼저 진행하면 맞춤 스트레칭을 추천받을 수 있습니다.
           </div>
         )}
+
+        <div className="mt-4 border-t border-gray-100 pt-4">
+          <button
+            type="button"
+            onClick={() => setShowAllStretchOptions((current) => !current)}
+            className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-blue-200 bg-white px-4 py-2 text-sm font-bold text-blue-700 transition-colors hover:bg-blue-50"
+          >
+            {showAllStretchOptions ? "다른 스트레칭 목록 닫기" : "다른 스트레칭 선택하기"}
+            <ChevronRight
+              className={`h-4 w-4 transition-transform ${showAllStretchOptions ? "rotate-90" : ""}`}
+            />
+          </button>
+
+          {showAllStretchOptions && (
+            <div className="mt-3 grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+              {allStretchOptions.map((stretch) => (
+                <button
+                  key={stretch.id}
+                  type="button"
+                  onClick={() => handleStretchSelection(stretch.id)}
+                  className={`rounded-xl border p-4 text-left transition-all hover:border-blue-300 hover:shadow-md ${
+                    activeStretchId === stretch.id
+                      ? "border-blue-400 bg-blue-50 shadow-sm"
+                      : "border-gray-100 bg-gray-50"
+                  }`}
+                >
+                  <div className="mb-2 flex items-start justify-between gap-3">
+                    <div>
+                      <p className="mb-1 text-xs font-bold text-blue-600">{stretch.targetBodyPart}</p>
+                      <h3 className="font-bold text-gray-900">{stretch.name}</h3>
+                    </div>
+                    <ChevronRight className="h-5 w-5 shrink-0 text-gray-400" />
+                  </div>
+                  <p className="text-sm leading-6 text-gray-600">{stretch.shortDescription}</p>
+                  <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-gray-500">
+                    <Clock className="h-3 w-3" />
+                    <span>{stretch.durationSec}초</span>
+                    <span>{stretch.steps.length}단계</span>
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
       </section>
 
       <div className="stretch-analysis-layout">
@@ -3285,6 +3389,44 @@ export function PostureCoachApp() {
               className="mt-3 w-full"
             />
           </label>
+          <ToggleControl
+            checked={settings.badPostureTestAlertEnabled}
+            onChange={(checked) => updateSettings({ badPostureTestAlertEnabled: checked })}
+            label="테스트 모드: 나쁜 자세가 1초 이상 지속되면 알림"
+          />
+          <div className="rounded-lg border border-gray-100 bg-gray-50 p-4">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="font-medium text-gray-900">Windows 알림</p>
+                <p className="mt-1 text-sm text-gray-600">
+                  현재 상태:{" "}
+                  {settings.notificationPermissionStatus === "granted"
+                    ? "허용됨"
+                    : settings.notificationPermissionStatus === "denied"
+                      ? "차단됨"
+                      : settings.notificationPermissionStatus === "unsupported"
+                        ? "지원 안 됨"
+                        : "권한 필요"}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => void handleRequestNotificationPermission()}
+                disabled={
+                  settings.notificationPermissionStatus === "granted" ||
+                  settings.notificationPermissionStatus === "unsupported"
+                }
+                className="inline-flex min-h-10 items-center justify-center rounded-lg border border-blue-200 bg-white px-4 py-2 text-sm font-bold text-blue-700 transition-colors hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                Windows 알림 허용
+              </button>
+            </div>
+            {settings.notificationPermissionStatus === "denied" && (
+              <p className="mt-3 text-sm leading-6 text-red-600">
+                브라우저에서 알림이 차단되어 있습니다. 주소창 왼쪽 사이트 설정에서 알림 권한을 허용해주세요.
+              </p>
+            )}
+          </div>
           <label className="block">
             <span className="text-sm font-medium text-gray-700">
               나쁜 자세가 {settings.badPostureDurationMinutes}분 이상 지속되면 알림
@@ -3329,6 +3471,11 @@ export function PostureCoachApp() {
             checked={settings.stretchReminderEnabled}
             onChange={(checked) => updateSettings({ stretchReminderEnabled: checked })}
             label="스트레칭 알림 켜기/끄기"
+          />
+          <ToggleControl
+            checked={settings.stretchReminderTestAlertEnabled}
+            onChange={(checked) => updateSettings({ stretchReminderTestAlertEnabled: checked })}
+            label="테스트 모드: 20초 이상 측정하면 Windows 스트레칭 알림"
           />
           <label className="block">
             <span className="text-sm font-medium text-gray-700">
@@ -3511,6 +3658,15 @@ export function PostureCoachApp() {
       </nav>
 
       <main className="mx-auto max-w-[1100px] px-6 py-8">
+        {alertMessage && (
+          <section className="mb-6 rounded-3xl border border-yellow-200 bg-yellow-50 p-5 shadow-sm">
+            <div className="mb-2 flex items-center justify-between gap-3">
+              <h3 className="font-bold text-yellow-950">자세 주의</h3>
+              <AlertTriangle className="h-5 w-5 text-yellow-600" />
+            </div>
+            <p className="text-sm leading-6 text-yellow-800">{alertMessage}</p>
+          </section>
+        )}
         {activeTab === "home" && renderHome()}
         {activeTab === "analysis" && renderAnalysis()}
         {activeTab === "stretching" && renderStretching()}

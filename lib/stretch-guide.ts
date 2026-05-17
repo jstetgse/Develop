@@ -139,6 +139,24 @@ export function getGuideBodyFrame(landmarks?: Landmark[] | null, calibration?: S
     };
   }
 
+  if (isVisible(leftShoulder) && isVisible(rightShoulder) && leftShoulder && rightShoulder) {
+    const shoulderCenter = midpoint(leftShoulder, rightShoulder);
+    const shoulderWidth = Math.max(Math.abs(leftShoulder.x - rightShoulder.x), 0.12);
+    const torsoLength = calibration?.torsoLength ?? Math.max(shoulderWidth * 1.25, 0.18);
+    const hipCenter = calibration?.hipCenter ?? {
+      x: shoulderCenter.x,
+      y: Math.min(shoulderCenter.y + torsoLength, 0.95),
+    };
+
+    return {
+      isDetected: true,
+      shoulderCenter,
+      hipCenter,
+      shoulderWidth: calibration?.shoulderWidth ?? shoulderWidth,
+      torsoLength,
+    };
+  }
+
   return {
     isDetected: false,
     shoulderCenter: calibration?.shoulderCenter ?? { x: 0.5, y: 0.36 },
@@ -161,22 +179,23 @@ export function createStretchCalibrationSample(landmarks?: Landmark[] | null): S
   const rightWrist = landmarks?.[16];
   const leftHip = landmarks?.[23];
   const rightHip = landmarks?.[24];
-  const required = [
-    leftShoulder,
-    rightShoulder,
-    leftHip,
-    rightHip,
-  ];
+  const required = [leftShoulder, rightShoulder];
 
-  if (required.some((point) => !isVisible(point)) || !leftShoulder || !rightShoulder || !leftHip || !rightHip) {
+  if (required.some((point) => !isVisible(point)) || !leftShoulder || !rightShoulder) {
     return null;
   }
 
   const shoulderCenter = midpoint(leftShoulder, rightShoulder);
-  const hipCenter = midpoint(leftHip, rightHip);
   const shoulderWidth = Math.max(landmarkDistance(leftShoulder, rightShoulder), 0.12);
+  const hasHipFrame = isVisible(leftHip) && isVisible(rightHip) && leftHip && rightHip;
+  const hipCenter = hasHipFrame
+    ? midpoint(leftHip, rightHip)
+    : { x: shoulderCenter.x, y: Math.min(shoulderCenter.y + Math.max(shoulderWidth * 1.25, 0.18), 0.95) };
   const torsoLength = Math.max(landmarkDistance(shoulderCenter, hipCenter), 0.18);
-  const hipWidth = Math.max(landmarkDistance(leftHip, rightHip), shoulderWidth * 0.45);
+  const hipWidth =
+    hasHipFrame && leftHip && rightHip
+      ? Math.max(landmarkDistance(leftHip, rightHip), shoulderWidth * 0.45)
+      : shoulderWidth * 0.55;
   const defaultArmLength = torsoLength * 2.12;
   const leftArmLength =
     isVisible(leftElbow) && isVisible(leftWrist) && leftElbow && leftWrist

@@ -16,8 +16,10 @@ export interface Settings {
   warningAlertEnabled: boolean;
   warningScoreThreshold: number;
   badPostureDurationMinutes: number;
+  badPostureTestAlertEnabled: boolean;
   stretchReminderEnabled: boolean;
   stretchReminderIntervalMinutes: number;
+  stretchReminderTestAlertEnabled: boolean;
   landmarkOverlayEnabled: boolean;
   smoothingEnabled: boolean;
   realtimeScoreIntervalSeconds: number;
