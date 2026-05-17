@@ -55,9 +55,15 @@ import {
   type StretchCalibrationSample,
 } from "@/lib/stretch-guide";
 import { analyzeStretchStep, getRecommendedStretches, getStretchById } from "@/lib/stretch-analysis";
+import {
+  calculateStretchRecommendations,
+  type StretchRecommendation,
+} from "@/lib/stretch-recommendation";
 import type {
   HistoryGroup,
   NotificationPermissionStatus,
+  PostureAreaStats,
+  PostureRecommendationArea,
   PostureResult,
   RecentSummary,
   Settings,
@@ -240,6 +246,60 @@ function getRealtimeScoreIntervalMs(settings: Settings) {
 
 function usesPersonalizedStretchAnalysis(stretchId: string | null) {
   return stretchId === "neck-stretch" || stretchId === "shoulder-stretch" || stretchId === "back-stretch";
+}
+
+function createEmptyPostureAreaStats(): PostureAreaStats {
+  return {
+    neck: { lowCount: 0, totalCount: 0, averageScore: null },
+    torso: { lowCount: 0, totalCount: 0, averageScore: null },
+    stability: { lowCount: 0, totalCount: 0, averageScore: null },
+  };
+}
+
+function getPostureAreaThreshold(area: PostureRecommendationArea) {
+  if (area === "neck") {
+    return 85;
+  }
+  if (area === "torso") {
+    return 80;
+  }
+  return 75;
+}
+
+function recordPostureAreaStats(stats: PostureAreaStats, posture: PostureResult) {
+  if (!posture.isTracking || !posture.metrics) {
+    return;
+  }
+
+  const scores: Record<PostureRecommendationArea, number> = {
+    neck: posture.metrics.neckScore,
+    torso: posture.metrics.trunkScore,
+    stability: posture.metrics.stabilityScore,
+  };
+
+  for (const area of Object.keys(scores) as PostureRecommendationArea[]) {
+    const current = stats[area];
+    const nextTotalCount = current.totalCount + 1;
+    const previousTotalScore = (current.averageScore ?? 0) * current.totalCount;
+    const score = scores[area];
+    current.totalCount = nextTotalCount;
+    current.lowCount += score < getPostureAreaThreshold(area) ? 1 : 0;
+    current.averageScore = Math.round((previousTotalScore + score) / nextTotalCount);
+  }
+}
+
+function hasPostureAreaStats(stats: PostureAreaStats) {
+  return Object.values(stats).some((stat) => stat.totalCount > 0);
+}
+
+function getRecommendationPriorityClass(priorityLabel: StretchRecommendation["priorityLabel"]) {
+  if (priorityLabel === "높음") {
+    return "bg-red-100 text-red-700";
+  }
+  if (priorityLabel === "보통") {
+    return "bg-yellow-100 text-yellow-800";
+  }
+  return "bg-green-100 text-green-700";
 }
 
 function formatDateKey(dateKey: string) {
@@ -1057,6 +1117,7 @@ export function PostureCoachApp() {
   const scoreTotalRef = useRef(0);
   const scoreCountRef = useRef(0);
   const latestSessionAverageRef = useRef<number | null>(null);
+  const postureAreaStatsRef = useRef<PostureAreaStats>(createEmptyPostureAreaStats());
   const lastScoreTrendUpdateAtRef = useRef(0);
   const nextStretchReminderAtRef = useRef(0);
   const latestLandmarksRef = useRef<Landmark[] | null>(null);
@@ -1087,6 +1148,24 @@ export function PostureCoachApp() {
     () => getRecommendedStretches(latestPosture.mainIssue),
     [latestPosture.mainIssue]
   );
+  const recentHistorySessions = useMemo(
+    () => historyGroups.flatMap((group) => group.sessions).slice(0, 30),
+    [historyGroups]
+  );
+  const personalizedStretchRecommendations = useMemo(
+    () =>
+      calculateStretchRecommendations({
+        currentPosture: latestPosture,
+        recentSessions: recentHistorySessions,
+      }),
+    [latestPosture, recentHistorySessions]
+  );
+  const displayedRecommendedStretches = useMemo<StretchDefinition[]>(() => {
+    const personalized = personalizedStretchRecommendations.recommendations
+      .map((recommendation) => getStretchById(recommendation.stretchId))
+      .filter((stretch): stretch is StretchDefinition => Boolean(stretch));
+    return personalized.length > 0 ? personalized : recommendedStretches;
+  }, [personalizedStretchRecommendations, recommendedStretches]);
   const selectedStretch = useMemo(() => getStretchById(activeStretchId), [activeStretchId]);
   const activeStretchStep = selectedStretch?.steps[activeStretchStepIndex] ?? null;
   const isSelectedStretchComplete = Boolean(
@@ -1635,6 +1714,7 @@ export function PostureCoachApp() {
     const now = Date.now();
     scoreTotalRef.current += posture.score;
     scoreCountRef.current += 1;
+    recordPostureAreaStats(postureAreaStatsRef.current, posture);
     const cumulativeAverage = Math.round(scoreTotalRef.current / scoreCountRef.current);
     latestSessionAverageRef.current = cumulativeAverage;
     setSessionAverageScore(cumulativeAverage);
@@ -1819,6 +1899,9 @@ export function PostureCoachApp() {
     const sessionId = sessionIdRef.current;
     const startedAt = startedAtRef.current;
     const finalAverageScore = latestSessionAverageRef.current;
+    const postureAreaStats = hasPostureAreaStats(postureAreaStatsRef.current)
+      ? postureAreaStatsRef.current
+      : undefined;
     const activePausedMs =
       posturePausedStartedAtRef.current === null ? 0 : Date.now() - posturePausedStartedAtRef.current;
     if (uid && sessionId && startedAt) {
@@ -1839,6 +1922,7 @@ export function PostureCoachApp() {
         bestImageUrl: bestSnapshotRef.current?.imageUrl ?? null,
         worstImageUrl: worstSnapshotRef.current?.imageUrl ?? null,
         preferredSideMode: settingsRef.current.preferredSideMode,
+        postureAreaStats,
       });
     }
 
@@ -1850,6 +1934,7 @@ export function PostureCoachApp() {
     scoreTotalRef.current = 0;
     scoreCountRef.current = 0;
     latestSessionAverageRef.current = null;
+    postureAreaStatsRef.current = createEmptyPostureAreaStats();
     lastScoreTrendUpdateAtRef.current = 0;
     nextStretchReminderAtRef.current = 0;
     latestLandmarksRef.current = null;
@@ -1919,6 +2004,7 @@ export function PostureCoachApp() {
     scoreTotalRef.current = 0;
     scoreCountRef.current = 0;
     latestSessionAverageRef.current = null;
+    postureAreaStatsRef.current = createEmptyPostureAreaStats();
     lastScoreTrendUpdateAtRef.current = 0;
     setScoreTrend([]);
     alertCountRef.current = 0;
@@ -2711,6 +2797,76 @@ export function PostureCoachApp() {
         </div>
       </div>
 
+      <section className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 className="text-xl font-bold text-gray-900">맞춤 스트레칭 추천</h2>
+            {personalizedStretchRecommendations.message && (
+              <p className="mt-1 text-sm text-gray-600">{personalizedStretchRecommendations.message}</p>
+            )}
+          </div>
+          {isLoadingHistory && (
+            <span className="rounded-full bg-blue-100 px-3 py-1 text-xs font-bold text-blue-700">
+              추천 계산 중...
+            </span>
+          )}
+        </div>
+
+        {isLoadingHistory ? (
+          <div className="rounded-lg border border-blue-100 bg-blue-50 px-4 py-3 text-sm font-bold text-blue-900">
+            추천 계산 중...
+          </div>
+        ) : personalizedStretchRecommendations.recommendations.length > 0 ? (
+          <div className="grid gap-3 lg:grid-cols-3">
+            {personalizedStretchRecommendations.recommendations.slice(0, 3).map((recommendation) => {
+              const stretch = getStretchById(recommendation.stretchId);
+              if (!stretch) {
+                return null;
+              }
+
+              return (
+                <button
+                  key={recommendation.stretchId}
+                  type="button"
+                  onClick={() => handleStretchSelection(recommendation.stretchId)}
+                  className={`rounded-xl border p-4 text-left shadow-sm transition-all hover:border-blue-300 hover:shadow-md ${
+                    activeStretchId === recommendation.stretchId
+                      ? "border-blue-400 bg-blue-50"
+                      : "border-gray-100 bg-white"
+                  }`}
+                >
+                  <div className="mb-3 flex items-start justify-between gap-3">
+                    <div>
+                      <p className="mb-1 text-xs font-bold text-blue-600">{stretch.targetBodyPart}</p>
+                      <h3 className="font-bold text-gray-900">{stretch.name}</h3>
+                    </div>
+                    <span
+                      className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-bold ${getRecommendationPriorityClass(
+                        recommendation.priorityLabel
+                      )}`}
+                    >
+                      우선순위: {recommendation.priorityLabel}
+                    </span>
+                  </div>
+                  <div>
+                    <p className="text-sm font-bold text-gray-800">추천 이유:</p>
+                    <ul className="mt-1 space-y-1 text-sm leading-6 text-gray-600">
+                      {recommendation.reasons.slice(0, 2).map((reason) => (
+                        <li key={reason}>- {reason}</li>
+                      ))}
+                    </ul>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="rounded-lg border border-gray-100 bg-gray-50 px-4 py-3 text-sm font-bold text-gray-700">
+            자세 분석을 먼저 진행하면 맞춤 스트레칭을 추천받을 수 있습니다.
+          </div>
+        )}
+      </section>
+
       <div className="stretch-analysis-layout">
         <div className="space-y-4">
           <div className="relative flex aspect-video items-center justify-center overflow-hidden rounded-xl bg-gray-900">
@@ -2932,7 +3088,7 @@ export function PostureCoachApp() {
           ) : (
             <div className="space-y-3">
               <h3 className="font-bold text-gray-900">추천 스트레칭</h3>
-              {recommendedStretches.map((stretch) => (
+              {displayedRecommendedStretches.map((stretch) => (
                 <button
                   key={stretch.id}
                   type="button"

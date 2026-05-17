@@ -137,6 +137,7 @@ export interface SessionSummary {
   alertCount: number;
   detectedPostureIssues?: string[];
   recommendedStretchIds?: string[];
+  postureAreaStats?: PostureAreaStats;
   preferredSideMode?: SideMode;
   bestScore: number | null;
   worstScore: number | null;
@@ -144,6 +145,16 @@ export interface SessionSummary {
   worstImageUrl: string | null;
   createdAt?: string;
 }
+
+export type PostureRecommendationArea = "neck" | "torso" | "stability";
+
+export interface PostureAreaStat {
+  lowCount: number;
+  totalCount: number;
+  averageScore: number | null;
+}
+
+export type PostureAreaStats = Record<PostureRecommendationArea, PostureAreaStat>;
 
 export interface PostureSnapshot {
   snapshotId: string;

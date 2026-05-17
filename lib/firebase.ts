@@ -28,6 +28,9 @@ import type {
   FirebaseConfigShape,
   FirebaseStatus,
   HistoryGroup,
+  PostureAreaStat,
+  PostureAreaStats,
+  PostureRecommendationArea,
   PostureSnapshot,
   RecentSummary,
   Settings,
@@ -343,6 +346,7 @@ export async function finalizeSessionSummary(
     | "bestImageUrl"
     | "worstImageUrl"
     | "preferredSideMode"
+    | "postureAreaStats"
   >
 ) {
   const ref = sessionDoc(uid, sessionId);
@@ -361,6 +365,7 @@ export async function finalizeSessionSummary(
       bestImageUrl: summary.bestImageUrl,
       worstImageUrl: summary.worstImageUrl,
       preferredSideMode: summary.preferredSideMode ?? "auto",
+      ...(summary.postureAreaStats ? { postureAreaStats: summary.postureAreaStats } : {}),
     });
     return true;
   } catch (error) {
@@ -446,6 +451,37 @@ function getDateKey(timestamp: string) {
   return `${year}-${month}-${day}`;
 }
 
+function normalizePostureAreaStat(raw: unknown): PostureAreaStat | null {
+  if (!raw || typeof raw !== "object") {
+    return null;
+  }
+  const value = raw as Partial<PostureAreaStat>;
+  const totalCount = typeof value.totalCount === "number" ? value.totalCount : 0;
+  return {
+    lowCount: typeof value.lowCount === "number" ? value.lowCount : 0,
+    totalCount,
+    averageScore: typeof value.averageScore === "number" ? value.averageScore : null,
+  };
+}
+
+function normalizePostureAreaStats(raw: unknown): PostureAreaStats | undefined {
+  if (!raw || typeof raw !== "object") {
+    return undefined;
+  }
+  const value = raw as Partial<Record<PostureRecommendationArea, unknown>>;
+  const stats = {
+    neck: normalizePostureAreaStat(value.neck),
+    torso: normalizePostureAreaStat(value.torso),
+    stability: normalizePostureAreaStat(value.stability),
+  };
+
+  if (!stats.neck || !stats.torso || !stats.stability) {
+    return undefined;
+  }
+
+  return stats as PostureAreaStats;
+}
+
 function normalizeSession(raw: Partial<SessionSummary>, sessionId: string): SessionSummary {
   const startedAt = raw.startedAt ?? raw.createdAt ?? new Date(0).toISOString();
   const endedAt = raw.endedAt ?? null;
@@ -467,6 +503,7 @@ function normalizeSession(raw: Partial<SessionSummary>, sessionId: string): Sess
     worstImageUrl: typeof raw.worstImageUrl === "string" ? raw.worstImageUrl : null,
     alertCount: typeof raw.alertCount === "number" ? raw.alertCount : 0,
     durationMinutes,
+    postureAreaStats: normalizePostureAreaStats(raw.postureAreaStats),
     preferredSideMode: raw.preferredSideMode ?? "auto",
     createdAt: raw.createdAt,
   };
