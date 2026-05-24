@@ -293,6 +293,16 @@ function getPostureAreaThreshold(area: PostureRecommendationArea) {
   return 75;
 }
 
+function getPostureAreaLabel(area: PostureRecommendationArea) {
+  if (area === "neck") {
+    return "목";
+  }
+  if (area === "torso") {
+    return "허리";
+  }
+  return "안정성";
+}
+
 function recordPostureAreaStats(stats: PostureAreaStats, posture: PostureResult) {
   if (!posture.isTracking || !posture.metrics) {
     return;
@@ -938,7 +948,7 @@ function AuthScreen({
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-blue-50 to-white px-6">
+    <div className="app-shell flex min-h-screen items-center justify-center px-6">
       <div className="w-full max-w-md">
         <div className="mb-8 text-center">
           <div className="mb-3 flex items-center justify-center gap-2">
@@ -948,13 +958,13 @@ function AuthScreen({
           <p className="text-gray-600">AI 기반 자세 분석 서비스</p>
         </div>
 
-        <div className="rounded-2xl border border-gray-100 bg-white p-8 shadow-xl">
-          <div className="mb-6 flex gap-2 rounded-lg bg-gray-100 p-1">
+        <div className="app-surface p-8">
+          <div className="mb-6 flex gap-1 border border-[rgba(18,100,76,0.18)] bg-[rgba(196,246,232,0.36)] p-1">
             <button
               type="button"
               onClick={() => setAuthPage("login")}
-              className={`flex-1 rounded-lg py-2 font-medium transition-colors ${
-                authPage === "login" ? "bg-white text-blue-600 shadow-sm" : "text-gray-600"
+              className={`flex-1 py-2 font-medium transition-colors ${
+                authPage === "login" ? "bg-white text-blue-600" : "text-gray-600"
               }`}
             >
               로그인
@@ -962,8 +972,8 @@ function AuthScreen({
             <button
               type="button"
               onClick={() => setAuthPage("signup")}
-              className={`flex-1 rounded-lg py-2 font-medium transition-colors ${
-                authPage === "signup" ? "bg-white text-blue-600 shadow-sm" : "text-gray-600"
+              className={`flex-1 py-2 font-medium transition-colors ${
+                authPage === "signup" ? "bg-white text-blue-600" : "text-gray-600"
               }`}
             >
               회원가입
@@ -978,7 +988,7 @@ function AuthScreen({
                   type="text"
                   value={name}
                   onChange={(event) => setName(event.target.value)}
-                  className="w-full rounded-lg border border-gray-300 px-4 py-3 focus:border-transparent focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full border border-gray-300 bg-white px-4 py-3 focus:outline-none"
                   placeholder="홍길동"
                 />
               </div>
@@ -990,7 +1000,7 @@ function AuthScreen({
                 type="email"
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
-                className="w-full rounded-lg border border-gray-300 px-4 py-3 focus:border-transparent focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full border border-gray-300 bg-white px-4 py-3 focus:outline-none"
                 placeholder="example@email.com"
               />
             </div>
@@ -1001,7 +1011,7 @@ function AuthScreen({
                 type="password"
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
-                className="w-full rounded-lg border border-gray-300 px-4 py-3 focus:border-transparent focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full border border-gray-300 bg-white px-4 py-3 focus:outline-none"
                 placeholder="••••••••"
               />
             </div>
@@ -1020,7 +1030,7 @@ function AuthScreen({
 
             <button
               type="submit"
-              className="w-full rounded-lg bg-blue-600 py-3 font-medium text-white shadow-sm transition-colors hover:bg-blue-700"
+              className="w-full bg-blue-600 py-3 font-medium text-white transition-colors hover:bg-blue-700"
             >
               {authPage === "login" ? "로그인" : "회원가입"}
             </button>
@@ -1036,7 +1046,7 @@ function AuthScreen({
             type="button"
             onClick={onGoogleLogin}
             disabled={isGoogleLoading}
-            className="flex w-full items-center justify-center gap-3 rounded-lg border border-gray-300 px-4 py-3 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+            className="flex w-full items-center justify-center gap-3 border border-gray-300 bg-white px-4 py-3 transition-colors hover:bg-[rgba(196,246,232,0.36)] disabled:cursor-not-allowed disabled:opacity-50"
           >
             {isGoogleLoading ? (
               <>
@@ -1054,7 +1064,7 @@ function AuthScreen({
           </button>
 
           {(formMessage || authMessage) && (
-            <div className="mt-5 rounded-lg border border-blue-100 bg-blue-50 p-3 text-center text-sm text-blue-900">
+            <div className="mt-5 border border-blue-100 bg-blue-50 p-3 text-center text-sm text-blue-900">
               {authMessage ?? formMessage}
             </div>
           )}
@@ -1108,15 +1118,15 @@ function SummaryCard({
 }) {
   const toneClass =
     tone === "green"
-      ? "bg-green-100 text-green-600"
+      ? "bg-[#C4F6E8] text-[#18755B]"
       : tone === "orange"
-        ? "bg-orange-100 text-orange-600"
-        : "bg-blue-100 text-blue-600";
+        ? "bg-[#FDECC8] text-orange-700"
+        : "bg-[#9BE7D1] text-[#12644C]";
 
   return (
-    <div className="rounded-xl border border-gray-100 bg-white p-6 shadow-sm">
+    <div className="app-surface p-6">
       <div className="mb-4 flex items-center gap-3">
-        <div className={`flex h-10 w-10 items-center justify-center rounded-lg ${toneClass}`}>{icon}</div>
+        <div className={`flex h-10 w-10 items-center justify-center ${toneClass}`}>{icon}</div>
         <span className="text-sm text-gray-600">{label}</span>
       </div>
       <div className="text-3xl font-bold text-gray-900">{value}</div>
@@ -1226,6 +1236,75 @@ export function PostureCoachApp() {
     () => historyGroups.flatMap((group) => group.sessions).slice(0, 30),
     [historyGroups]
   );
+  const homeScoreInsight = useMemo(() => {
+    const now = Date.now();
+    const sevenDaysAgo = now - 7 * 24 * 60 * 60 * 1000;
+    const recentSevenDaySessions = historyGroups
+      .flatMap((group) => group.sessions)
+      .filter((session) => {
+        const startedAt = new Date(session.startedAt).getTime();
+        return Number.isFinite(startedAt) && startedAt >= sevenDaysAgo && startedAt <= now;
+      });
+    const scoredSevenDaySessions = recentSevenDaySessions.filter((session) => typeof session.averageScore === "number");
+    const sevenDayAverage = scoredSevenDaySessions.length
+      ? Math.round(
+          scoredSevenDaySessions.reduce((sum, session) => sum + (session.averageScore ?? 0), 0) /
+            scoredSevenDaySessions.length
+        )
+      : null;
+    const currentAverage =
+      typeof recentSummary?.averageScore === "number" ? recentSummary.averageScore : null;
+    const trend = currentAverage !== null && sevenDayAverage !== null ? currentAverage - sevenDayAverage : null;
+    const bestScores = recentSevenDaySessions
+      .map((session) => session.bestScore)
+      .filter((score): score is number => typeof score === "number");
+    const worstScores = recentSevenDaySessions
+      .map((session) => session.worstScore)
+      .filter((score): score is number => typeof score === "number");
+    const mostRecentSession = recentSevenDaySessions
+      .filter((session) => Number.isFinite(new Date(session.startedAt).getTime()))
+      .sort((left, right) => new Date(right.startedAt).getTime() - new Date(left.startedAt).getTime())[0];
+    const areaTotals: Record<PostureRecommendationArea, { totalScore: number; totalCount: number }> = {
+      neck: { totalScore: 0, totalCount: 0 },
+      torso: { totalScore: 0, totalCount: 0 },
+      stability: { totalScore: 0, totalCount: 0 },
+    };
+
+    for (const session of recentSevenDaySessions) {
+      if (!session.postureAreaStats) {
+        continue;
+      }
+      for (const area of Object.keys(areaTotals) as PostureRecommendationArea[]) {
+        const stat = session.postureAreaStats[area];
+        if (!stat || typeof stat.averageScore !== "number" || stat.totalCount <= 0) {
+          continue;
+        }
+        areaTotals[area].totalScore += stat.averageScore * stat.totalCount;
+        areaTotals[area].totalCount += stat.totalCount;
+      }
+    }
+
+    const weakestArea = (Object.keys(areaTotals) as PostureRecommendationArea[])
+      .map((area) => {
+        const total = areaTotals[area];
+        return {
+          area,
+          score: total.totalCount > 0 ? Math.round(total.totalScore / total.totalCount) : null,
+        };
+      })
+      .filter((item): item is { area: PostureRecommendationArea; score: number } => item.score !== null)
+      .sort((left, right) => left.score - right.score)[0];
+
+    return {
+      trend,
+      sevenDayAverage,
+      weakestAreaLabel: weakestArea ? getPostureAreaLabel(weakestArea.area) : null,
+      weakestAreaScore: weakestArea?.score ?? null,
+      bestScore: bestScores.length ? Math.max(...bestScores) : null,
+      worstScore: worstScores.length ? Math.min(...worstScores) : null,
+      latestMeasuredAt: mostRecentSession?.startedAt ?? null,
+    };
+  }, [historyGroups, recentSummary?.averageScore]);
   const combinedScorePoints = useMemo(
     () =>
       [...todaySavedScorePoints, ...liveScorePoints]
@@ -2685,31 +2764,85 @@ export function PostureCoachApp() {
         <p className="mt-1 text-gray-600">오늘도 바른 자세로 시작해볼까요?</p>
       </div>
 
-      <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
-        <SummaryCard
-          icon={<CheckCircle className="h-5 w-5" />}
-          label="평균 점수"
-          value={recentSummary?.averageScore === null || recentSummary?.averageScore === undefined ? "--" : `${recentSummary.averageScore}`}
-          hint="지난 24시간"
-          tone="green"
-        />
-        <SummaryCard
-          icon={<Clock className="h-5 w-5" />}
-          label="사용 시간"
-          value={formatMinutes(recentSummary?.totalUsageMinutes ?? 0)}
-          hint="오늘 측정 시간"
-          tone="blue"
-        />
-        <SummaryCard
-          icon={<Bell className="h-5 w-5" />}
-          label="알림 횟수"
-          value={`${recentSummary?.alertCount ?? 0}`}
-          hint="자세 경고"
-          tone="orange"
-        />
+      <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-[minmax(0,1.1fr)_minmax(300px,0.9fr)]">
+        <div className="app-surface border-l-4 border-l-[#18755B] p-10 mt-12">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center bg-[#C4F6E8] text-[#18755B]">
+                <CheckCircle className="h-5 w-5" />
+              </div>
+              <span className="text-sm text-gray-600">평균 점수</span>
+            </div>
+            <span className="text-xs font-bold uppercase tracking-[0.14em] text-[#18755B]">Score</span>
+          </div>
+          <div className="grid gap-3 lg:grid-cols-[minmax(0,0.75fr)_minmax(240px,1fr)] lg:items-end">
+            <div>
+              <div className="flex items-end gap-3 text-gray-900">
+                <span className="text-4xl font-black leading-none">
+                  {recentSummary?.averageScore === null || recentSummary?.averageScore === undefined ? "--" : `${recentSummary.averageScore}`}
+                </span>
+                <span className="mb-1 text-sm font-bold text-gray-500">/100</span>
+              </div>
+              <p className="mt-1 text-sm text-gray-500">지난 24시간</p>
+              <p
+                className={`mt-2 inline-flex border px-2.5 py-1 text-sm font-bold ${
+                  homeScoreInsight.trend === null
+                    ? "border-gray-200 bg-white text-gray-500"
+                    : homeScoreInsight.trend >= 0
+                      ? "border-[#70E5C4] bg-[#C4F6E8] text-[#18755B]"
+                      : "border-yellow-200 bg-yellow-50 text-yellow-800"
+                }`}
+              >
+                {homeScoreInsight.trend === null
+                  ? "7일 평균 --"
+                  : `7일 평균보다 ${homeScoreInsight.trend >= 0 ? "+" : ""}${homeScoreInsight.trend}`}
+              </p>
+            </div>
+            <div className="grid gap-1.5 text-sm">
+              <div className="flex items-center justify-between gap-4 border-b border-gray-200 pb-2">
+                <span className="text-gray-500">주의 부위</span>
+                <strong className="text-right text-gray-900">
+                  {homeScoreInsight.weakestAreaLabel
+                    ? `${homeScoreInsight.weakestAreaLabel} ${homeScoreInsight.weakestAreaScore ?? "--"}`
+                    : "--"}
+                </strong>
+              </div>
+              <div className="flex items-center justify-between gap-4 border-b border-gray-200 pb-2">
+                <span className="text-gray-500">최고 / 최저</span>
+                <strong className="text-right text-gray-900">
+                  {homeScoreInsight.bestScore !== null || homeScoreInsight.worstScore !== null
+                    ? `${homeScoreInsight.bestScore ?? "--"} / ${homeScoreInsight.worstScore ?? "--"}`
+                    : "--"}
+                </strong>
+              </div>
+              <div className="flex items-center justify-between gap-4">
+                <span className="text-gray-500">최근 측정</span>
+                <strong className="text-right text-gray-900">
+                  {homeScoreInsight.latestMeasuredAt ? formatTime(homeScoreInsight.latestMeasuredAt) : "--"}
+                </strong>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-1">
+          <SummaryCard
+            icon={<Clock className="h-5 w-5" />}
+            label="사용 시간"
+            value={formatMinutes(recentSummary?.totalUsageMinutes ?? 0)}
+            hint="오늘 측정 시간"
+            tone="blue"
+          />
+          <SummaryCard
+            icon={<Bell className="h-5 w-5" />}
+            label="알림 횟수"
+            value={`${recentSummary?.alertCount ?? 0}`}
+            hint="자세 경고"
+            tone="orange"
+          />
+        </div>
       </div>
 
-      <div className="rounded-xl border border-gray-100 bg-white p-6 shadow-sm">
+      <div className="app-surface p-6">
         <h2 className="mb-4 text-lg font-bold text-gray-900">오늘의 자세 점수 변화</h2>
         {combinedScorePoints.length > 0 ? (
           <ResponsiveContainer width="100%" height={200}>
@@ -2718,11 +2851,11 @@ export function PostureCoachApp() {
               <XAxis dataKey="time" stroke="#9ca3af" fontSize={12} />
               <YAxis domain={[0, 100]} stroke="#9ca3af" fontSize={12} />
               <Tooltip />
-              <Line type="linear" dataKey="score" stroke="#3b82f6" strokeWidth={2} dot={{ r: 4 }} />
+              <Line type="linear" dataKey="score" stroke="#18755B" strokeWidth={2} dot={{ r: 3 }} />
             </LineChart>
           </ResponsiveContainer>
         ) : (
-          <div className="flex h-[200px] items-center justify-center rounded-xl border border-dashed border-gray-200 bg-gray-50 px-4 text-center text-sm font-medium text-gray-500">
+          <div className="flex h-[200px] items-center justify-center border border-dashed border-gray-200 bg-[rgba(196,246,232,0.28)] px-4 text-center text-sm font-medium text-gray-500">
             오늘 분석 기록이 아직 없습니다
           </div>
         )}
@@ -2732,7 +2865,7 @@ export function PostureCoachApp() {
         <button
           type="button"
           onClick={() => setActiveTab("analysis")}
-          className="rounded-xl bg-blue-600 p-6 text-white shadow-sm transition-colors hover:bg-blue-700"
+          className="app-action-tile p-6 transition-colors hover:bg-blue-700"
         >
           <div className="flex items-center justify-center gap-3">
             <Video className="h-5 w-5" />
@@ -2742,7 +2875,7 @@ export function PostureCoachApp() {
         <button
           type="button"
           onClick={() => setActiveTab("history")}
-          className="rounded-xl border border-gray-200 bg-white p-6 text-gray-700 shadow-sm transition-colors hover:bg-gray-50"
+          className="app-action-tile-secondary p-6 transition-colors hover:bg-[rgba(196,246,232,0.36)]"
         >
           <div className="flex items-center justify-center gap-3">
             <Calendar className="h-5 w-5" />
@@ -2755,7 +2888,7 @@ export function PostureCoachApp() {
 
   const renderAnalysis = () => (
     <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(320px,1fr)]">
-      <section className="rounded-3xl border border-gray-200 bg-white p-6 shadow-sm">
+      <section className="app-surface p-6">
         <div className="mb-4 flex flex-col justify-between gap-3 sm:flex-row sm:items-start">
           <div>
             <p className="mb-1 text-xs font-bold uppercase tracking-[0.18em] text-blue-600">실시간 카메라</p>
@@ -2765,34 +2898,36 @@ export function PostureCoachApp() {
             </p>
           </div>
           <span
-            className={`inline-flex min-h-9 items-center justify-center rounded-full px-3 py-1 text-sm font-bold ${
+            className={`inline-flex min-h-9 items-center justify-center gap-2 border px-3 py-1 text-sm font-bold ${
               cameraTone === "good"
-                ? "bg-green-100 text-green-700"
+                ? "border-[#70E5C4] bg-[#C4F6E8] text-[#18755B]"
                 : cameraTone === "danger"
                   ? "bg-red-100 text-red-700"
-                  : cameraTone === "warn"
-                    ? "bg-yellow-100 text-yellow-700"
-                    : "bg-gray-100 text-gray-600"
+                : cameraTone === "warn"
+                  ? "bg-yellow-100 text-yellow-700"
+                  : "border-gray-200 bg-gray-100 text-gray-600"
             }`}
           >
+            <span className="app-status-dot" />
             {cameraText}
           </span>
         </div>
-        <div className="mb-4 flex flex-wrap items-center gap-2">
-          <span className="rounded-full bg-blue-100 px-3 py-1 text-sm font-bold text-blue-700">
+        <div className="mb-4 flex flex-wrap items-center gap-x-4 gap-y-2 border-y border-gray-200 py-3 text-sm">
+          <span className="inline-flex items-center gap-2 font-bold text-blue-700">
+            <span className="app-status-dot" />
             {modeLabel}
           </span>
-          <span className="rounded-full bg-gray-100 px-3 py-1 text-sm font-bold text-gray-700">
+          <span className="font-bold text-gray-700">
             {getAnalysisSideLabel(latestPosture, settings.preferredSideMode)}
           </span>
           {modeMessage && (
-            <span className="rounded-full bg-yellow-100 px-3 py-1 text-sm font-bold text-yellow-800">
+            <span className="border-l border-yellow-300 pl-4 font-bold text-yellow-800">
               {modeMessage}
             </span>
           )}
         </div>
 
-        <div className="relative mt-4 aspect-video overflow-hidden rounded-2xl bg-gray-900">
+        <div className="app-camera-frame relative mt-4 aspect-video overflow-hidden">
           <video ref={videoRef} className="absolute inset-0 h-full w-full scale-x-[-1] object-cover" playsInline muted />
           <canvas ref={canvasRef} className="absolute inset-0 h-full w-full" />
           {!isRunning && (
@@ -2812,7 +2947,7 @@ export function PostureCoachApp() {
           <button
             type="button"
             onClick={() => (isRunning ? void stopApp() : void startApp())}
-            className={`min-h-12 flex-1 rounded-xl px-6 py-3 font-bold text-white transition-colors ${
+            className={`min-h-12 flex-1 px-6 py-3 font-bold text-white transition-colors ${
               isRunning ? "bg-red-600 hover:bg-red-700" : "bg-blue-600 hover:bg-blue-700"
             }`}
           >
@@ -2820,7 +2955,7 @@ export function PostureCoachApp() {
           </button>
         </div>
 
-        <div className="mt-5 rounded-2xl border border-gray-100 bg-gray-50 p-4">
+        <div className="app-surface-muted mt-5 p-4">
           <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
             <div className="flex items-center gap-3">
               <SlidersHorizontal className="h-5 w-5 text-blue-600" />
@@ -2828,7 +2963,7 @@ export function PostureCoachApp() {
             </div>
             {settingsStatusText && (
               <span
-                className={`rounded-full px-3 py-1 text-xs font-medium ${
+                className={`border px-3 py-1 text-xs font-medium ${
                   settingsSaveStatus === "error" ? "bg-red-100 text-red-700" : "bg-blue-50 text-blue-700"
                 }`}
               >
@@ -2867,23 +3002,24 @@ export function PostureCoachApp() {
       </section>
 
       <div className="space-y-4">
-        <section className="rounded-3xl border border-gray-200 bg-white p-6 shadow-sm">
+        <section className="app-surface p-6">
           <div className="mb-4 flex items-start justify-between gap-3">
             <div>
               <p className="mb-1 text-xs font-bold uppercase tracking-[0.18em] text-blue-600">실시간 자세</p>
               <h3 className="text-xl font-bold text-gray-900">실시간 자세 점수</h3>
             </div>
             <span
-              className={`rounded-full px-3 py-1 text-sm font-bold ${
+              className={`inline-flex items-center gap-2 border px-3 py-1 text-sm font-bold ${
                 postureStatus === "good"
-                  ? "bg-green-100 text-green-700"
+                  ? "border-[#70E5C4] bg-[#C4F6E8] text-[#18755B]"
                   : postureStatus === "warning"
                     ? "bg-yellow-100 text-yellow-700"
-                    : postureStatus === "danger"
-                      ? "bg-red-100 text-red-700"
-                      : "bg-gray-100 text-gray-600"
+                  : postureStatus === "danger"
+                    ? "bg-red-100 text-red-700"
+                    : "border-gray-200 bg-gray-100 text-gray-600"
               }`}
             >
+              <span className="app-status-dot" />
               {getStatusLabel(latestPosture.score)}
             </span>
           </div>
@@ -2892,13 +3028,13 @@ export function PostureCoachApp() {
             <span className="text-7xl leading-none">{latestPosture.score ?? "--"}</span>
             <span className="mb-2 text-lg text-gray-500">/100</span>
             {appMode === "stretching" && (
-              <span className="mb-3 rounded-full bg-yellow-100 px-3 py-1 text-sm font-bold text-yellow-800">
+              <span className="mb-3 border border-yellow-200 bg-yellow-100 px-3 py-1 text-sm font-bold text-yellow-800">
                 일시중지됨
               </span>
             )}
           </div>
 
-          <p className="rounded-2xl bg-blue-50 p-4 text-sm font-bold leading-6 text-blue-950">
+          <p className="border-l-4 border-l-[#18755B] bg-blue-50 p-4 text-sm font-bold leading-6 text-blue-950">
             현재 분석 평균 점수: {sessionAverageScore ?? "--"}점
           </p>
           <p className="mt-4 text-sm leading-6 text-gray-700">{getWeightMessage(latestPosture)}</p>
@@ -2908,7 +3044,7 @@ export function PostureCoachApp() {
               {latestPosture.feedbackItems.map((item) => (
                 <div
                   key={item.part}
-                  className={`rounded-2xl border p-3 text-sm leading-6 ${getFeedbackSeverityClass(item.severity)}`}
+                  className={`border p-3 text-sm leading-6 ${getFeedbackSeverityClass(item.severity)}`}
                 >
                   <div className="mb-1 flex flex-wrap items-center justify-between gap-2 font-bold">
                     <span>
@@ -2926,7 +3062,7 @@ export function PostureCoachApp() {
           </p>
         </section>
 
-        <section className="rounded-3xl border border-gray-200 bg-white p-6 shadow-sm">
+        <section className="app-surface p-6">
           <h3 className="mb-4 text-lg font-bold text-gray-900">분석 지표</h3>
           <div className="space-y-3">
             <div className="flex items-center justify-between border-t border-gray-100 pt-3 first:border-t-0 first:pt-0">
@@ -2967,14 +3103,14 @@ export function PostureCoachApp() {
         <button
           type="button"
           onClick={() => setActiveTab("analysis")}
-          className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-gray-300 bg-white px-5 py-2 font-bold text-gray-700 transition-colors hover:bg-gray-50"
+          className="inline-flex min-h-11 items-center justify-center gap-2 border border-gray-300 bg-white px-5 py-2 font-bold text-gray-700 transition-colors hover:bg-[rgba(196,246,232,0.36)]"
         >
           <Video className="h-5 w-5" />
           자세 분석 모드
         </button>
       </div>
 
-      <section className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm">
+      <section className="app-surface p-5">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <div>
             <h2 className="text-xl font-bold text-gray-900">맞춤 스트레칭 추천</h2>
@@ -2983,14 +3119,14 @@ export function PostureCoachApp() {
             )}
           </div>
           {isLoadingHistory && (
-            <span className="rounded-full bg-blue-100 px-3 py-1 text-xs font-bold text-blue-700">
+            <span className="border border-blue-100 bg-blue-50 px-3 py-1 text-xs font-bold text-blue-700">
               추천 계산 중...
             </span>
           )}
         </div>
 
         {isLoadingHistory ? (
-          <div className="rounded-lg border border-blue-100 bg-blue-50 px-4 py-3 text-sm font-bold text-blue-900">
+          <div className="border border-blue-100 bg-blue-50 px-4 py-3 text-sm font-bold text-blue-900">
             추천 계산 중...
           </div>
         ) : personalizedStretchRecommendations.recommendations.length > 0 ? (
@@ -3006,7 +3142,7 @@ export function PostureCoachApp() {
                   key={recommendation.stretchId}
                   type="button"
                   onClick={() => handleStretchSelection(recommendation.stretchId)}
-                  className={`rounded-xl border p-4 text-left shadow-sm transition-all hover:border-blue-300 hover:shadow-md ${
+                  className={`border p-4 text-left transition-colors hover:border-blue-300 ${
                     activeStretchId === recommendation.stretchId
                       ? "border-blue-400 bg-blue-50"
                       : "border-gray-100 bg-white"
@@ -3018,7 +3154,7 @@ export function PostureCoachApp() {
                       <h3 className="font-bold text-gray-900">{stretch.name}</h3>
                     </div>
                     <span
-                      className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-bold ${getRecommendationPriorityClass(
+                      className={`shrink-0 border px-2.5 py-1 text-xs font-bold ${getRecommendationPriorityClass(
                         recommendation.priorityLabel
                       )}`}
                     >
@@ -3038,7 +3174,7 @@ export function PostureCoachApp() {
             })}
           </div>
         ) : (
-          <div className="rounded-lg border border-gray-100 bg-gray-50 px-4 py-3 text-sm font-bold text-gray-700">
+            <div className="border border-gray-100 bg-[rgba(196,246,232,0.28)] px-4 py-3 text-sm font-bold text-gray-700">
             자세 분석을 먼저 진행하면 맞춤 스트레칭을 추천받을 수 있습니다.
           </div>
         )}
@@ -3047,7 +3183,7 @@ export function PostureCoachApp() {
           <button
             type="button"
             onClick={() => setShowAllStretchOptions((current) => !current)}
-            className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-blue-200 bg-white px-4 py-2 text-sm font-bold text-blue-700 transition-colors hover:bg-blue-50"
+            className="inline-flex min-h-10 items-center justify-center gap-2 border border-blue-200 bg-white px-4 py-2 text-sm font-bold text-blue-700 transition-colors hover:bg-blue-50"
           >
             {showAllStretchOptions ? "다른 스트레칭 목록 닫기" : "다른 스트레칭 선택하기"}
             <ChevronRight
@@ -3062,9 +3198,9 @@ export function PostureCoachApp() {
                   key={stretch.id}
                   type="button"
                   onClick={() => handleStretchSelection(stretch.id)}
-                  className={`rounded-xl border p-4 text-left transition-all hover:border-blue-300 hover:shadow-md ${
+                  className={`border p-4 text-left transition-colors hover:border-blue-300 ${
                     activeStretchId === stretch.id
-                      ? "border-blue-400 bg-blue-50 shadow-sm"
+                      ? "border-blue-400 bg-blue-50"
                       : "border-gray-100 bg-gray-50"
                   }`}
                 >
@@ -3090,7 +3226,7 @@ export function PostureCoachApp() {
 
       <div className="stretch-analysis-layout">
         <div className="space-y-4">
-          <div className="relative flex aspect-video items-center justify-center overflow-hidden rounded-xl bg-gray-900">
+          <div className="app-camera-frame relative flex aspect-video items-center justify-center overflow-hidden">
             <video ref={videoRef} className="absolute inset-0 h-full w-full scale-x-[-1] object-cover" playsInline muted />
             <canvas ref={canvasRef} className="absolute inset-0 h-full w-full" />
             {!isRunning ? (
@@ -3100,7 +3236,7 @@ export function PostureCoachApp() {
               </div>
             ) : (
               <div className="absolute left-4 top-4">
-                <div className="flex items-center gap-2 rounded-lg bg-green-600 px-3 py-1.5">
+                <div className="flex items-center gap-2 border border-[#70E5C4] bg-[#18755B] px-3 py-1.5">
                   <div className="h-2 w-2 animate-pulse rounded-full bg-white" />
                   <span className="text-sm font-medium text-white">자세 감지 중</span>
                 </div>
@@ -3108,13 +3244,13 @@ export function PostureCoachApp() {
             )}
             {selectedStretch && activeStretchStep && (
               <div className="absolute right-4 top-4 flex flex-col items-end gap-2">
-                <span className="rounded-lg bg-white/90 px-3 py-1.5 text-sm font-bold text-blue-950 backdrop-blur">
+                <span className="border border-white/40 bg-white/90 px-3 py-1.5 text-sm font-bold text-blue-950 backdrop-blur">
                   동작 정확도: {stretchCoaching.matchPercentage ?? stretchCoaching.poseScore ?? "--"}%
                 </span>
-                <span className="rounded-lg bg-blue-700/85 px-3 py-1.5 text-sm font-bold text-white backdrop-blur">
+                <span className="border border-[#70E5C4]/40 bg-[#18755B]/90 px-3 py-1.5 text-sm font-bold text-white backdrop-blur">
                   {activeStretchStepIndex + 1} / {selectedStretch.steps.length} 단계
                 </span>
-                <span className="rounded-lg bg-yellow-300/90 px-3 py-1.5 text-sm font-bold text-blue-950 backdrop-blur">
+                <span className="border border-yellow-200 bg-yellow-300/90 px-3 py-1.5 text-sm font-bold text-blue-950 backdrop-blur">
                   유지 시간: {stretchCoaching.holdSeconds ?? 0} / 5초
                 </span>
               </div>
@@ -3122,26 +3258,26 @@ export function PostureCoachApp() {
           </div>
 
           {selectedStretch && activeStretchStep && (
-            <div className="rounded-xl bg-blue-600 p-6 text-white">
+            <div className="border border-[#12644C] bg-[#18755B] p-6 text-white">
               <div className="flex items-start gap-3">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white/20">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center bg-white/20">
                   <Activity className="h-5 w-5" />
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
                     <p className="text-lg font-bold">{selectedStretch.name}</p>
-                    <span className="rounded-full bg-white/20 px-2.5 py-1 text-xs font-bold">
+                    <span className="border border-white/20 bg-white/20 px-2.5 py-1 text-xs font-bold">
                       {activeStretchStepIndex + 1} / {selectedStretch.steps.length} 단계
                     </span>
                     {isSelectedStretchComplete && (
-                      <span className="rounded-full bg-green-400 px-2.5 py-1 text-xs font-bold text-green-950">
+                      <span className="border border-green-200 bg-green-400 px-2.5 py-1 text-xs font-bold text-green-950">
                         완료
                       </span>
                     )}
                   </div>
                   <p className="mt-3 text-sm font-bold text-blue-50">{activeStretchStep.title}</p>
                   <p className="mt-1 text-base leading-7 text-blue-50">{activeStretchStep.instruction}</p>
-                  <div className="mt-4 rounded-lg bg-white/15 p-4">
+                  <div className="mt-4 border border-white/20 bg-white/15 p-4">
                     <p className="text-sm font-bold text-blue-50">실시간 피드백</p>
                     <p className="mt-1 text-lg font-bold leading-7">{stretchCoaching.coachingMessage}</p>
                     <p className="mt-3 text-2xl font-black text-white">
@@ -3150,7 +3286,7 @@ export function PostureCoachApp() {
                     {stretchCoaching.correctionMessages?.length ? (
                       <div className="mt-3 flex flex-wrap gap-2">
                         {stretchCoaching.correctionMessages.slice(0, 2).map((message) => (
-                          <span key={message} className="rounded-full bg-red-100 px-3 py-1 text-sm font-bold text-red-700">
+                          <span key={message} className="border border-red-200 bg-red-100 px-3 py-1 text-sm font-bold text-red-700">
                             {message}
                           </span>
                         ))}
@@ -3177,7 +3313,7 @@ export function PostureCoachApp() {
                 }
               }}
               disabled={!activeStretchId || isSelectedStretchComplete}
-              className={`flex-1 rounded-lg px-6 py-3 font-medium transition-colors ${
+              className={`flex-1 px-6 py-3 font-medium transition-colors ${
                 isStretchingMode
                   ? "bg-red-600 text-white hover:bg-red-700"
                   : !activeStretchId || isSelectedStretchComplete
@@ -3191,14 +3327,14 @@ export function PostureCoachApp() {
               type="button"
               onClick={handleNextStretchStep}
               disabled={!selectedStretch || isSelectedStretchComplete}
-              className="rounded-lg border border-blue-200 bg-white px-6 py-3 font-medium text-blue-700 transition-colors hover:bg-blue-50 disabled:cursor-not-allowed disabled:border-gray-200 disabled:text-gray-400"
+              className="border border-blue-200 bg-white px-6 py-3 font-medium text-blue-700 transition-colors hover:bg-blue-50 disabled:cursor-not-allowed disabled:border-gray-200 disabled:text-gray-400"
             >
               다음 단계
             </button>
             <button
               type="button"
               onClick={() => (isRunning ? void stopApp() : void startApp())}
-              className="rounded-lg border border-gray-300 bg-white px-6 py-3 font-medium text-gray-700 transition-colors hover:bg-gray-50"
+              className="border border-gray-300 bg-white px-6 py-3 font-medium text-gray-700 transition-colors hover:bg-gray-50"
             >
               {isRunning ? "카메라 중지" : "카메라 시작"}
             </button>
@@ -3208,7 +3344,7 @@ export function PostureCoachApp() {
         <div className="space-y-4">
           {selectedStretch ? (
             <>
-              <div className="rounded-xl border border-gray-100 bg-white p-6 shadow-sm">
+              <div className="app-surface p-6">
                 <div className="mb-4 flex items-start justify-between gap-4">
                   <div>
                     <p className="mb-2 text-xs font-bold text-blue-600">{selectedStretch.targetBodyPart}</p>
@@ -3254,9 +3390,9 @@ export function PostureCoachApp() {
                           };
                           setStretchCoaching(latestStretchCoachingRef.current);
                         }}
-                        className={`w-full rounded-xl border p-4 text-left transition-all ${
+                        className={`w-full border p-4 text-left transition-colors ${
                           isCurrent
-                            ? "border-blue-400 bg-blue-50 shadow-sm"
+                            ? "border-blue-400 bg-blue-50"
                             : isDone
                               ? "border-green-200 bg-green-50"
                               : "border-gray-200 bg-white hover:border-blue-200"
@@ -3278,12 +3414,12 @@ export function PostureCoachApp() {
                             <div className="flex flex-wrap items-center gap-2">
                               <p className="font-bold text-gray-900">{step.title}</p>
                               {isCurrent && (
-                                <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs font-bold text-blue-700">
+                                <span className="border border-blue-100 bg-blue-100 px-2 py-0.5 text-xs font-bold text-blue-700">
                                   현재 단계
                                 </span>
                               )}
                               {isDone && (
-                                <span className="rounded-full bg-green-100 px-2 py-0.5 text-xs font-bold text-green-700">
+                                <span className="border border-green-200 bg-green-100 px-2 py-0.5 text-xs font-bold text-green-700">
                                   완료
                                 </span>
                               )}
@@ -3297,7 +3433,7 @@ export function PostureCoachApp() {
                 </div>
               </div>
 
-              <div className="rounded-xl border border-green-200 bg-green-50 p-4">
+              <div className="border border-green-200 bg-green-50 p-4">
                 <p className="mb-2 text-sm font-medium text-green-900">진행 방법</p>
                 <ul className="space-y-1 text-sm text-green-800">
                   <li>현재 단계 안내를 보고 자세를 맞추세요.</li>
@@ -3314,7 +3450,7 @@ export function PostureCoachApp() {
                   key={stretch.id}
                   type="button"
                   onClick={() => handleStretchSelection(stretch.id)}
-                  className="w-full rounded-xl border border-gray-100 bg-white p-4 text-left shadow-sm transition-all hover:border-blue-300 hover:shadow-md"
+                  className="w-full border border-gray-100 bg-white p-4 text-left transition-colors hover:border-blue-300"
                 >
                   <div className="mb-2 flex items-start justify-between gap-3">
                     <div>
@@ -3346,17 +3482,17 @@ export function PostureCoachApp() {
       </div>
 
       {isLoadingHistory ? (
-        <div className="rounded-xl border border-gray-100 bg-white p-6 text-gray-600 shadow-sm">
+        <div className="app-surface p-6 text-gray-600">
           기록을 불러오는 중입니다...
         </div>
       ) : historyGroups.length === 0 ? (
-        <div className="rounded-xl border border-gray-100 bg-white p-6 text-gray-600 shadow-sm">
+        <div className="app-surface p-6 text-gray-600">
           아직 기록이 없습니다. 분석을 시작하면 세션 기록이 표시됩니다.
         </div>
       ) : (
         <div className="space-y-4">
           {historyGroups.map((day) => (
-            <div key={day.dateKey} className="rounded-xl border border-gray-100 bg-white p-6 shadow-sm">
+            <div key={day.dateKey} className="app-surface p-6">
               <div className="mb-4 flex flex-col justify-between gap-3 border-b border-gray-200 pb-4 md:flex-row md:items-center">
                 <div>
                   <h3 className="text-lg font-bold text-gray-900">{formatDateKey(day.dateKey)}</h3>
@@ -3380,7 +3516,7 @@ export function PostureCoachApp() {
 
               <div className="space-y-3">
                 {day.sessions.map((session) => (
-                  <div key={session.sessionId} className="rounded-lg bg-gray-50 p-4">
+                  <div key={session.sessionId} className="border border-gray-100 bg-[rgba(196,246,232,0.24)] p-4">
                     <div className="mb-3 flex flex-col justify-between gap-2 md:flex-row md:items-center">
                       <div>
                         <p className="font-medium text-gray-900">
@@ -3401,7 +3537,7 @@ export function PostureCoachApp() {
                       )}
                     </div>
                     <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                      <div className="overflow-hidden rounded-lg border border-gray-200 bg-white">
+                      <div className="overflow-hidden border border-gray-200 bg-white">
                         {session.bestImageUrl ? (
                           <img src={session.bestImageUrl} alt="최고 자세" className="aspect-video w-full object-cover" />
                         ) : (
@@ -3411,7 +3547,7 @@ export function PostureCoachApp() {
                         )}
                         <div className="p-3 text-sm font-medium text-gray-900">최고 점수: {session.bestScore ?? "--"}</div>
                       </div>
-                      <div className="overflow-hidden rounded-lg border border-gray-200 bg-white">
+                      <div className="overflow-hidden border border-gray-200 bg-white">
                         {session.worstImageUrl ? (
                           <img src={session.worstImageUrl} alt="최저 자세" className="aspect-video w-full object-cover" />
                         ) : (
@@ -3461,7 +3597,7 @@ export function PostureCoachApp() {
     onChange: (checked: boolean) => void;
     label: string;
   }) => (
-    <label className="flex cursor-pointer items-center justify-between gap-4 rounded-lg border border-gray-100 bg-gray-50 px-4 py-3">
+    <label className="flex cursor-pointer items-center justify-between gap-4 border border-gray-100 bg-[rgba(196,246,232,0.26)] px-4 py-3">
       <span className="font-medium text-gray-900">{label}</span>
       <input
         type="checkbox"
@@ -3482,9 +3618,9 @@ export function PostureCoachApp() {
         <div className="flex flex-wrap items-center gap-3">
           {settingsStatusText && (
             <span
-              className={`rounded-full px-3 py-1 text-sm font-medium ${
-                settingsSaveStatus === "error" ? "bg-red-100 text-red-700" : "bg-blue-50 text-blue-700"
-              }`}
+                className={`border px-3 py-1 text-sm font-medium ${
+                  settingsSaveStatus === "error" ? "bg-red-100 text-red-700" : "bg-blue-50 text-blue-700"
+                }`}
             >
               {settingsStatusText}
             </span>
@@ -3493,14 +3629,14 @@ export function PostureCoachApp() {
             type="button"
             onClick={handleApplySettings}
             disabled={!canApplySettings}
-            className="inline-flex min-h-11 items-center justify-center rounded-lg bg-blue-600 px-5 py-2 text-sm font-bold text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+            className="inline-flex min-h-11 items-center justify-center bg-blue-600 px-5 py-2 text-sm font-bold text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
           >
             적용하기
           </button>
         </div>
       </div>
 
-      <section className="rounded-xl border border-gray-100 bg-white p-6 shadow-sm">
+      <section className="app-surface p-6">
         <div className="mb-5 flex items-center gap-3">
           <Bell className="h-5 w-5 text-blue-600" />
           <h2 className="text-xl font-bold text-gray-900">자세 경고 알림</h2>
@@ -3530,7 +3666,7 @@ export function PostureCoachApp() {
             onChange={(checked) => updateSettingsDraft({ badPostureTestAlertEnabled: checked })}
             label="테스트 모드: 나쁜 자세가 1초 이상 지속되면 알림"
           />
-          <div className="rounded-lg border border-gray-100 bg-gray-50 p-4">
+          <div className="border border-gray-100 bg-[rgba(196,246,232,0.24)] p-4">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <p className="font-medium text-gray-900">Windows 알림</p>
@@ -3552,7 +3688,7 @@ export function PostureCoachApp() {
                   settingsDraft.notificationPermissionStatus === "granted" ||
                   settingsDraft.notificationPermissionStatus === "unsupported"
                 }
-                className="inline-flex min-h-10 items-center justify-center rounded-lg border border-blue-200 bg-white px-4 py-2 text-sm font-bold text-blue-700 transition-colors hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-60"
+                className="inline-flex min-h-10 items-center justify-center border border-blue-200 bg-white px-4 py-2 text-sm font-bold text-blue-700 transition-colors hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 Windows 알림 허용
               </button>
@@ -3576,7 +3712,7 @@ export function PostureCoachApp() {
                 setBadPostureDurationMinutesInput(event.target.value.replace(/\D/g, ""));
                 setSettingsSaveStatus("idle");
               }}
-              className={`mt-2 w-full rounded-lg border px-3 py-2 ${
+              className={`mt-2 w-full border px-3 py-2 ${
                 badPostureDurationError ? "border-red-300 bg-red-50" : "border-gray-300"
               }`}
             />
@@ -3591,7 +3727,7 @@ export function PostureCoachApp() {
             <select
               value={settingsDraft.realtimeScoreIntervalSeconds}
               onChange={(event) => updateSettingsDraft({ realtimeScoreIntervalSeconds: Number(event.target.value) })}
-              className="mt-2 w-full rounded-lg border border-gray-300 px-3 py-2"
+              className="mt-2 w-full border border-gray-300 px-3 py-2"
             >
               {[1, 2, 3, 4, 5].map((seconds) => (
                 <option key={seconds} value={seconds}>
@@ -3603,7 +3739,7 @@ export function PostureCoachApp() {
         </div>
       </section>
 
-      <section className="rounded-xl border border-gray-100 bg-white p-6 shadow-sm">
+      <section className="app-surface p-6">
         <div className="mb-5 flex items-center gap-3">
           <Clock className="h-5 w-5 text-blue-600" />
           <h2 className="text-xl font-bold text-gray-900">스트레칭 알림</h2>
@@ -3626,7 +3762,7 @@ export function PostureCoachApp() {
             <select
               value={settingsDraft.stretchReminderIntervalMinutes}
               onChange={(event) => updateSettingsDraft({ stretchReminderIntervalMinutes: Number(event.target.value) })}
-              className="mt-2 w-full rounded-lg border border-gray-300 px-3 py-2"
+              className="mt-2 w-full border border-gray-300 px-3 py-2"
             >
               {[10, 20, 30, 40, 50, 60].map((minutes) => (
                 <option key={minutes} value={minutes}>
@@ -3638,7 +3774,7 @@ export function PostureCoachApp() {
         </div>
       </section>
 
-      <section className="rounded-xl border border-gray-100 bg-white p-6 shadow-sm">
+      <section className="app-surface p-6">
         <div className="mb-5 flex items-center gap-3">
           <h2 className="text-xl font-bold text-gray-900">데이터 설정</h2>
         </div>
@@ -3647,7 +3783,7 @@ export function PostureCoachApp() {
             type="button"
             onClick={() => void handleClearHistory()}
             disabled={isClearingHistory}
-            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-red-200 px-4 py-2 font-medium text-red-700 transition-colors hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
+            className="inline-flex min-h-11 items-center justify-center gap-2 border border-red-200 px-4 py-2 font-medium text-red-700 transition-colors hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
           >
             <Trash2 className="h-4 w-4" />
             {isClearingHistory ? "기록 초기화 중..." : "기록 초기화"}
@@ -3655,7 +3791,7 @@ export function PostureCoachApp() {
           <button
             type="button"
             onClick={handleResetSettings}
-            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-gray-300 px-4 py-2 font-medium text-gray-700 transition-colors hover:bg-gray-50"
+            className="inline-flex min-h-11 items-center justify-center gap-2 border border-gray-300 px-4 py-2 font-medium text-gray-700 transition-colors hover:bg-gray-50"
           >
             <RotateCcw className="h-4 w-4" />
             기본 설정으로 되돌리기
@@ -3666,8 +3802,8 @@ export function PostureCoachApp() {
   );
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <nav className="sticky top-0 z-50 border-b border-gray-200 bg-white">
+    <div className="app-shell min-h-screen">
+      <nav className="sticky top-0 z-50 border-b border-gray-200 bg-white/90 backdrop-blur">
         <div className="mx-auto max-w-[1100px] px-6">
           <div className="flex min-h-16 flex-col gap-3 py-3 lg:h-16 lg:flex-row lg:items-center lg:justify-between lg:py-0">
             <div className="flex items-center gap-2">
@@ -3686,10 +3822,10 @@ export function PostureCoachApp() {
                     key={tab.id}
                     type="button"
                     onClick={() => setActiveTab(tab.id)}
-                    className={`rounded-lg px-6 py-2 transition-colors ${
+                    className={`border-b-2 px-4 py-2 text-sm transition-colors ${
                       activeTab === tab.id
-                        ? "bg-blue-50 font-medium text-blue-600"
-                        : "text-gray-600 hover:text-gray-900"
+                        ? "border-[#18755B] bg-transparent font-bold text-blue-600"
+                        : "border-transparent text-gray-600 hover:text-gray-900"
                     }`}
                   >
                     {tab.label}
@@ -3699,33 +3835,35 @@ export function PostureCoachApp() {
               <div className="hidden h-6 w-px bg-gray-300 lg:block" />
               <div className="flex flex-wrap items-center gap-3">
                 <span
-                  className={`rounded-full px-3 py-1 text-xs font-medium ${
+                  className={`inline-flex items-center gap-2 border px-3 py-1 text-xs font-medium ${
                     storageTone === "good"
-                      ? "bg-green-100 text-green-700"
+                      ? "border-[#70E5C4] bg-[#C4F6E8] text-[#18755B]"
                       : storageTone === "danger"
                         ? "bg-red-100 text-red-700"
                         : "bg-yellow-100 text-yellow-700"
                   }`}
                 >
+                  <span className="app-status-dot" />
                   {storageText}
                 </span>
                 <span
-                  className={`rounded-full px-3 py-1 text-xs font-medium ${
+                  className={`inline-flex items-center gap-2 border px-3 py-1 text-xs font-medium ${
                     cameraTone === "good"
-                      ? "bg-green-100 text-green-700"
+                      ? "border-[#70E5C4] bg-[#C4F6E8] text-[#18755B]"
                       : cameraTone === "danger"
                         ? "bg-red-100 text-red-700"
-                        : cameraTone === "warn"
-                          ? "bg-yellow-100 text-yellow-700"
-                          : "bg-gray-100 text-gray-600"
+                      : cameraTone === "warn"
+                        ? "bg-yellow-100 text-yellow-700"
+                        : "bg-gray-100 text-gray-600"
                   }`}
                 >
+                  <span className="app-status-dot" />
                   {cameraText}
                 </span>
                 <button
                   type="button"
                   onClick={() => setActiveTab("settings")}
-                  className={`flex items-center gap-2 rounded-full border px-2 py-1 transition-colors ${
+                  className={`flex items-center gap-2 border px-2 py-1 transition-colors ${
                     activeTab === "settings"
                       ? "border-blue-500 bg-blue-50 text-blue-700 ring-2 ring-blue-100"
                       : "border-gray-200 text-gray-700 hover:border-blue-200 hover:bg-gray-50"
@@ -3754,7 +3892,7 @@ export function PostureCoachApp() {
                 <button
                   type="button"
                   onClick={() => void handleLogout()}
-                  className="flex items-center gap-2 rounded-lg px-4 py-2 text-sm text-gray-700 transition-colors hover:bg-gray-100"
+                  className="flex items-center gap-2 border border-transparent px-4 py-2 text-sm text-gray-700 transition-colors hover:border-gray-200 hover:bg-gray-100"
                 >
                   <LogOut className="h-4 w-4" />
                   로그아웃
@@ -3767,7 +3905,7 @@ export function PostureCoachApp() {
 
       <main className="mx-auto max-w-[1100px] px-6 py-8">
         {alertMessage && (
-          <section className="mb-6 rounded-3xl border border-yellow-200 bg-yellow-50 p-5 shadow-sm">
+          <section className="mb-6 border border-yellow-200 bg-yellow-50 p-5">
             <div className="mb-2 flex items-center justify-between gap-3">
               <h3 className="font-bold text-yellow-950">자세 주의</h3>
               <AlertTriangle className="h-5 w-5 text-yellow-600" />

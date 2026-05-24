@@ -1,8 +1,22 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #111827;
+  --background: #d6f3eb;
+  --foreground: #001a12;
+  --app-ink: #001a12;
+  --app-brand: #18755b;
+  --app-brand-dark: #12644c;
+  --app-brand-mid: #249474;
+  --app-brand-soft: #70e5c4;
+  --app-mint-1: #d6f3eb;
+  --app-mint-2: #c4f6e8;
+  --app-mint-3: #b5efdf;
+  --app-mint-4: #a9eeda;
+  --app-mint-5: #9be7d1;
+  --app-border: rgba(18, 100, 76, 0.22);
+  --app-border-strong: rgba(18, 100, 76, 0.42);
+  --app-panel: rgba(255, 255, 255, 0.82);
+  --app-panel-muted: rgba(196, 246, 232, 0.44);
 }
 
 * {
@@ -30,6 +44,142 @@ textarea {
 
 button {
   cursor: pointer;
+}
+
+::selection {
+  background: var(--app-brand);
+  color: #ffffff;
+}
+
+.text-gray-900,
+.text-gray-800 {
+  color: var(--app-ink);
+}
+
+.text-blue-600,
+.text-blue-700,
+.text-blue-800,
+.text-blue-900,
+.text-blue-950 {
+  color: var(--app-brand);
+}
+
+.bg-blue-50,
+.bg-blue-100 {
+  background-color: rgba(155, 231, 209, 0.42);
+}
+
+.bg-blue-600,
+.bg-blue-700 {
+  background-color: var(--app-brand);
+}
+
+.hover\:bg-blue-50:hover {
+  background-color: rgba(155, 231, 209, 0.36);
+}
+
+.hover\:bg-blue-700:hover,
+.hover\:bg-blue-600:hover {
+  background-color: var(--app-brand-dark);
+}
+
+.border-blue-100,
+.border-blue-200,
+.border-blue-300,
+.border-blue-400,
+.border-blue-500 {
+  border-color: var(--app-border-strong);
+}
+
+.ring-blue-100,
+.ring-blue-500 {
+  --tw-ring-color: rgba(112, 229, 196, 0.5);
+}
+
+.border-gray-100,
+.border-gray-200,
+.border-gray-300 {
+  border-color: var(--app-border);
+}
+
+.rounded-lg,
+.rounded-xl,
+.rounded-2xl,
+.rounded-3xl {
+  border-radius: 6px;
+}
+
+.shadow-sm,
+.shadow-md,
+.shadow-lg,
+.shadow-xl {
+  box-shadow: none;
+}
+
+.bg-gradient-to-br {
+  background-image: none;
+  background-color: var(--app-mint-1);
+}
+
+input,
+select,
+textarea {
+  color: var(--app-ink);
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  border-color: var(--app-brand);
+  outline: 2px solid rgba(112, 229, 196, 0.32);
+  outline-offset: 0;
+}
+
+input[type="checkbox"] {
+  accent-color: var(--app-brand);
+}
+
+input[type="range"] {
+  accent-color: var(--app-brand);
+}
+
+.app-shell {
+  background: var(--app-mint-1);
+}
+
+.app-surface {
+  border: 1px solid var(--app-border);
+  background: var(--app-panel);
+}
+
+.app-surface-muted {
+  border: 1px solid var(--app-border);
+  background: var(--app-panel-muted);
+}
+
+.app-action-tile {
+  border: 1px solid rgba(18, 100, 76, 0.35);
+  background: linear-gradient(180deg, #18755b 0%, #12644c 100%);
+  color: #ffffff;
+}
+
+.app-action-tile-secondary {
+  border: 1px solid var(--app-border-strong);
+  background: rgba(255, 255, 255, 0.76);
+  color: var(--app-ink);
+}
+
+.app-camera-frame {
+  border: 1px solid rgba(112, 229, 196, 0.42);
+  background: #001a12;
+}
+
+.app-status-dot {
+  display: inline-flex;
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 999px;
+  background: currentColor;
 }
 
 .stretch-analysis-layout {
