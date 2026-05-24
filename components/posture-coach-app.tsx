@@ -1134,6 +1134,7 @@ export function PostureCoachApp() {
   const [authMessage, setAuthMessage] = useState<string | null>(null);
 
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
+  const [settingsDraft, setSettingsDraft] = useState<Settings>(DEFAULT_SETTINGS);
   const [settingsSaveStatus, setSettingsSaveStatus] = useState<SettingsSaveStatus>("idle");
   const [isClearingHistory, setIsClearingHistory] = useState(false);
   const [isRunning, setIsRunning] = useState(false);
@@ -2450,6 +2451,7 @@ export function PostureCoachApp() {
         settingsRef.current = nextSettings;
         analyzerRef.current.setPreferredSideMode(nextSettings.preferredSideMode);
         detectorRef.current?.setOptions({ smoothLandmarks: nextSettings.smoothingEnabled });
+        setSettingsDraft(nextSettings);
         void persistSettings(nextSettings);
         return nextSettings;
       });
@@ -2457,27 +2459,46 @@ export function PostureCoachApp() {
     [persistSettings]
   );
 
-  const handleResetSettings = useCallback(() => {
-    const nextSettings = createDefaultSettings();
+  const updateSettingsDraft = useCallback((changes: Partial<Settings>) => {
+    setSettingsDraft((current) => ({
+      ...current,
+      ...changes,
+      notificationPermissionStatus: getNotificationPermissionStatus(),
+    }));
+    setSettingsSaveStatus("idle");
+  }, []);
+
+  const handleApplySettings = useCallback(() => {
+    const nextSettings = {
+      ...settingsDraft,
+      notificationPermissionStatus: getNotificationPermissionStatus(),
+    };
     setSettings(nextSettings);
+    setSettingsDraft(nextSettings);
     settingsRef.current = nextSettings;
     analyzerRef.current.setPreferredSideMode(nextSettings.preferredSideMode);
     detectorRef.current?.setOptions({ smoothLandmarks: nextSettings.smoothingEnabled });
     void persistSettings(nextSettings);
-  }, [persistSettings]);
+  }, [persistSettings, settingsDraft]);
+
+  const handleResetSettings = useCallback(() => {
+    const nextSettings = createDefaultSettings();
+    setSettingsDraft(nextSettings);
+    setSettingsSaveStatus("idle");
+  }, []);
 
   const handleRequestNotificationPermission = useCallback(async () => {
     if (typeof window === "undefined" || !("Notification" in window)) {
-      updateSettings({ notificationPermissionStatus: "unsupported" });
+      updateSettingsDraft({ notificationPermissionStatus: "unsupported" });
       return;
     }
 
     const permission = await Notification.requestPermission();
-    updateSettings({ notificationPermissionStatus: permission });
+    updateSettingsDraft({ notificationPermissionStatus: permission });
     if (permission === "granted") {
       showDesktopNotification("알림 설정 완료", "나쁜 자세가 감지되면 Windows 알림으로 알려드릴게요.");
     }
-  }, [updateSettings]);
+  }, [updateSettingsDraft]);
 
   const handleClearHistory = useCallback(async () => {
     const uid = uidRef.current;
@@ -2524,6 +2545,7 @@ export function PostureCoachApp() {
   useEffect(() => {
     const initialSettings = createDefaultSettings();
     setSettings(initialSettings);
+    setSettingsDraft(initialSettings);
     settingsRef.current = initialSettings;
     analyzerRef.current.setPreferredSideMode(initialSettings.preferredSideMode);
 
@@ -2556,6 +2578,7 @@ export function PostureCoachApp() {
             notificationPermissionStatus: getNotificationPermissionStatus(),
           };
           setSettings(nextSettings);
+          setSettingsDraft(nextSettings);
           settingsRef.current = nextSettings;
           analyzerRef.current.setPreferredSideMode(nextSettings.preferredSideMode);
           detectorRef.current?.setOptions({ smoothLandmarks: nextSettings.smoothingEnabled });
@@ -2563,6 +2586,7 @@ export function PostureCoachApp() {
       } else {
         const nextSettings = createDefaultSettings();
         setSettings(nextSettings);
+        setSettingsDraft(nextSettings);
         settingsRef.current = nextSettings;
         analyzerRef.current.setPreferredSideMode(nextSettings.preferredSideMode);
         detectorRef.current?.setOptions({ smoothLandmarks: nextSettings.smoothingEnabled });
@@ -3450,15 +3474,24 @@ export function PostureCoachApp() {
           <h1 className="text-3xl font-bold text-gray-900">설정</h1>
           <p className="mt-1 text-gray-600">알림과 분석 방식을 원하는 대로 조정하세요.</p>
         </div>
-        {settingsStatusText && (
-          <span
-            className={`rounded-full px-3 py-1 text-sm font-medium ${
-              settingsSaveStatus === "error" ? "bg-red-100 text-red-700" : "bg-blue-50 text-blue-700"
-            }`}
+        <div className="flex flex-wrap items-center gap-3">
+          {settingsStatusText && (
+            <span
+              className={`rounded-full px-3 py-1 text-sm font-medium ${
+                settingsSaveStatus === "error" ? "bg-red-100 text-red-700" : "bg-blue-50 text-blue-700"
+              }`}
+            >
+              {settingsStatusText}
+            </span>
+          )}
+          <button
+            type="button"
+            onClick={handleApplySettings}
+            className="inline-flex min-h-11 items-center justify-center rounded-lg bg-blue-600 px-5 py-2 text-sm font-bold text-white transition-colors hover:bg-blue-700"
           >
-            {settingsStatusText}
-          </span>
-        )}
+            적용하기
+          </button>
+        </div>
       </div>
 
       <section className="rounded-xl border border-gray-100 bg-white p-6 shadow-sm">
@@ -3468,27 +3501,27 @@ export function PostureCoachApp() {
         </div>
         <div className="space-y-4">
           <ToggleControl
-            checked={settings.warningAlertEnabled}
-            onChange={(checked) => updateSettings({ warningAlertEnabled: checked })}
+            checked={settingsDraft.warningAlertEnabled}
+            onChange={(checked) => updateSettingsDraft({ warningAlertEnabled: checked })}
             label="자세 경고 알림 켜기/끄기"
           />
           <label className="block">
             <span className="text-sm font-medium text-gray-700">
-              {settings.warningScoreThreshold}점 이하일 때 경고
+              {settingsDraft.warningScoreThreshold}점 이하일 때 경고
             </span>
             <input
               type="range"
               min="40"
               max="90"
               step="5"
-              value={settings.warningScoreThreshold}
-              onChange={(event) => updateSettings({ warningScoreThreshold: Number(event.target.value) })}
+              value={settingsDraft.warningScoreThreshold}
+              onChange={(event) => updateSettingsDraft({ warningScoreThreshold: Number(event.target.value) })}
               className="mt-3 w-full"
             />
           </label>
           <ToggleControl
-            checked={settings.badPostureTestAlertEnabled}
-            onChange={(checked) => updateSettings({ badPostureTestAlertEnabled: checked })}
+            checked={settingsDraft.badPostureTestAlertEnabled}
+            onChange={(checked) => updateSettingsDraft({ badPostureTestAlertEnabled: checked })}
             label="테스트 모드: 나쁜 자세가 1초 이상 지속되면 알림"
           />
           <div className="rounded-lg border border-gray-100 bg-gray-50 p-4">
@@ -3497,11 +3530,11 @@ export function PostureCoachApp() {
                 <p className="font-medium text-gray-900">Windows 알림</p>
                 <p className="mt-1 text-sm text-gray-600">
                   현재 상태:{" "}
-                  {settings.notificationPermissionStatus === "granted"
+                  {settingsDraft.notificationPermissionStatus === "granted"
                     ? "허용됨"
-                    : settings.notificationPermissionStatus === "denied"
+                    : settingsDraft.notificationPermissionStatus === "denied"
                       ? "차단됨"
-                      : settings.notificationPermissionStatus === "unsupported"
+                      : settingsDraft.notificationPermissionStatus === "unsupported"
                         ? "지원 안 됨"
                         : "권한 필요"}
                 </p>
@@ -3510,15 +3543,15 @@ export function PostureCoachApp() {
                 type="button"
                 onClick={() => void handleRequestNotificationPermission()}
                 disabled={
-                  settings.notificationPermissionStatus === "granted" ||
-                  settings.notificationPermissionStatus === "unsupported"
+                  settingsDraft.notificationPermissionStatus === "granted" ||
+                  settingsDraft.notificationPermissionStatus === "unsupported"
                 }
                 className="inline-flex min-h-10 items-center justify-center rounded-lg border border-blue-200 bg-white px-4 py-2 text-sm font-bold text-blue-700 transition-colors hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 Windows 알림 허용
               </button>
             </div>
-            {settings.notificationPermissionStatus === "denied" && (
+            {settingsDraft.notificationPermissionStatus === "denied" && (
               <p className="mt-3 text-sm leading-6 text-red-600">
                 브라우저에서 알림이 차단되어 있습니다. 주소창 왼쪽 사이트 설정에서 알림 권한을 허용해주세요.
               </p>
@@ -3526,26 +3559,29 @@ export function PostureCoachApp() {
           </div>
           <label className="block">
             <span className="text-sm font-medium text-gray-700">
-              나쁜 자세가 {settings.badPostureDurationMinutes}분 이상 지속되면 알림
+              나쁜 자세가 {settingsDraft.badPostureDurationMinutes}분 이상 지속되면 알림
             </span>
             <input
               type="number"
+              inputMode="numeric"
               min="1"
-              max="30"
-              value={settings.badPostureDurationMinutes}
+              max="40"
+              value={settingsDraft.badPostureDurationMinutes}
               onChange={(event) =>
-                updateSettings({ badPostureDurationMinutes: Math.max(1, Number(event.target.value) || 1) })
+                updateSettingsDraft({
+                  badPostureDurationMinutes: Math.min(Math.max(Number(event.target.value) || 1, 1), 40),
+                })
               }
               className="mt-2 w-full rounded-lg border border-gray-300 px-3 py-2"
             />
           </label>
           <label className="block">
             <span className="text-sm font-medium text-gray-700">
-              실시간 자세 점수 갱신: {settings.realtimeScoreIntervalSeconds}초마다
+              실시간 자세 점수 갱신: {settingsDraft.realtimeScoreIntervalSeconds}초마다
             </span>
             <select
-              value={settings.realtimeScoreIntervalSeconds}
-              onChange={(event) => updateSettings({ realtimeScoreIntervalSeconds: Number(event.target.value) })}
+              value={settingsDraft.realtimeScoreIntervalSeconds}
+              onChange={(event) => updateSettingsDraft({ realtimeScoreIntervalSeconds: Number(event.target.value) })}
               className="mt-2 w-full rounded-lg border border-gray-300 px-3 py-2"
             >
               {[1, 2, 3, 4, 5].map((seconds) => (
@@ -3565,22 +3601,22 @@ export function PostureCoachApp() {
         </div>
         <div className="space-y-4">
           <ToggleControl
-            checked={settings.stretchReminderEnabled}
-            onChange={(checked) => updateSettings({ stretchReminderEnabled: checked })}
+            checked={settingsDraft.stretchReminderEnabled}
+            onChange={(checked) => updateSettingsDraft({ stretchReminderEnabled: checked })}
             label="스트레칭 알림 켜기/끄기"
           />
           <ToggleControl
-            checked={settings.stretchReminderTestAlertEnabled}
-            onChange={(checked) => updateSettings({ stretchReminderTestAlertEnabled: checked })}
+            checked={settingsDraft.stretchReminderTestAlertEnabled}
+            onChange={(checked) => updateSettingsDraft({ stretchReminderTestAlertEnabled: checked })}
             label="테스트 모드: 20초 이상 측정하면 Windows 스트레칭 알림"
           />
           <label className="block">
             <span className="text-sm font-medium text-gray-700">
-              {settings.stretchReminderIntervalMinutes}분마다 스트레칭 알림
+              {settingsDraft.stretchReminderIntervalMinutes}분마다 스트레칭 알림
             </span>
             <select
-              value={settings.stretchReminderIntervalMinutes}
-              onChange={(event) => updateSettings({ stretchReminderIntervalMinutes: Number(event.target.value) })}
+              value={settingsDraft.stretchReminderIntervalMinutes}
+              onChange={(event) => updateSettingsDraft({ stretchReminderIntervalMinutes: Number(event.target.value) })}
               className="mt-2 w-full rounded-lg border border-gray-300 px-3 py-2"
             >
               {[10, 20, 30, 40, 50, 60].map((minutes) => (
