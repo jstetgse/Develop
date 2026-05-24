@@ -2954,30 +2954,6 @@ export function PostureCoachApp() {
         </button>
       </div>
 
-      <div className="rounded-xl border border-blue-200 bg-blue-50 p-4">
-        <h3 className="mb-3 font-medium text-blue-900">스트레칭 상태</h3>
-        <div className="mb-3 flex flex-wrap items-center gap-2">
-          <span className="rounded-full bg-blue-100 px-3 py-1 text-sm font-bold text-blue-700">{modeLabel}</span>
-          {modeMessage && <span className="rounded-full bg-yellow-100 px-3 py-1 text-sm font-bold text-yellow-800">{modeMessage}</span>}
-        </div>
-        <p className="mb-3 rounded-lg bg-white px-3 py-2 text-sm font-bold text-blue-900">
-          {stretchCalibrationMessage}
-        </p>
-        <div className="flex flex-wrap items-center gap-3">
-          <AlertTriangle className="h-4 w-4 text-orange-600" />
-          <span className="text-sm text-gray-900">
-            {isRunning
-              ? latestPosture.isTracking
-                ? getIssueText(latestPosture)
-                : "자세가 감지되지 않습니다."
-              : "스트레칭 분석 시작을 누르면 카메라가 켜집니다."}
-          </span>
-          <span className="rounded-full bg-orange-100 px-2 py-0.5 text-xs text-orange-700">
-            {isRunning && latestPosture.isTracking ? latestPosture.mainIssue : cameraText}
-          </span>
-        </div>
-      </div>
-
       <section className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <div>
@@ -3094,6 +3070,17 @@ export function PostureCoachApp() {
 
       <div className="stretch-analysis-layout">
         <div className="space-y-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="rounded-full bg-blue-100 px-3 py-1 text-sm font-bold text-blue-700">{modeLabel}</span>
+            {modeMessage && (
+              <span className="rounded-full bg-yellow-100 px-3 py-1 text-sm font-bold text-yellow-800">
+                {modeMessage}
+              </span>
+            )}
+            <span className="text-sm font-medium text-gray-600">
+              {isRunning ? stretchCalibrationMessage : "시작하면 2초간 기준 자세를 측정합니다."}
+            </span>
+          </div>
           <div className="relative flex aspect-video items-center justify-center overflow-hidden rounded-xl bg-gray-900">
             <video ref={videoRef} className="absolute inset-0 h-full w-full scale-x-[-1] object-cover" playsInline muted />
             <canvas ref={canvasRef} className="absolute inset-0 h-full w-full" />
