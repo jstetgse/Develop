@@ -335,7 +335,7 @@ function formatDateKey(dateKey: string) {
     year: "numeric",
     month: "long",
     day: "numeric",
-    weekday: "short",
+    weekday: "long",
   }).format(date);
 }
 
@@ -1135,6 +1135,9 @@ export function PostureCoachApp() {
 
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
   const [settingsDraft, setSettingsDraft] = useState<Settings>(DEFAULT_SETTINGS);
+  const [badPostureDurationMinutesInput, setBadPostureDurationMinutesInput] = useState(
+    String(DEFAULT_SETTINGS.badPostureDurationMinutes)
+  );
   const [settingsSaveStatus, setSettingsSaveStatus] = useState<SettingsSaveStatus>("idle");
   const [isClearingHistory, setIsClearingHistory] = useState(false);
   const [isRunning, setIsRunning] = useState(false);
@@ -2452,6 +2455,7 @@ export function PostureCoachApp() {
         analyzerRef.current.setPreferredSideMode(nextSettings.preferredSideMode);
         detectorRef.current?.setOptions({ smoothLandmarks: nextSettings.smoothingEnabled });
         setSettingsDraft(nextSettings);
+        setBadPostureDurationMinutesInput(String(nextSettings.badPostureDurationMinutes));
         void persistSettings(nextSettings);
         return nextSettings;
       });
@@ -2469,21 +2473,34 @@ export function PostureCoachApp() {
   }, []);
 
   const handleApplySettings = useCallback(() => {
+    const badPostureDurationMinutes = Number(badPostureDurationMinutesInput);
+    if (
+      !badPostureDurationMinutesInput.trim() ||
+      !Number.isInteger(badPostureDurationMinutes) ||
+      badPostureDurationMinutes < 1 ||
+      badPostureDurationMinutes > 40
+    ) {
+      return;
+    }
+
     const nextSettings = {
       ...settingsDraft,
+      badPostureDurationMinutes,
       notificationPermissionStatus: getNotificationPermissionStatus(),
     };
     setSettings(nextSettings);
     setSettingsDraft(nextSettings);
+    setBadPostureDurationMinutesInput(String(nextSettings.badPostureDurationMinutes));
     settingsRef.current = nextSettings;
     analyzerRef.current.setPreferredSideMode(nextSettings.preferredSideMode);
     detectorRef.current?.setOptions({ smoothLandmarks: nextSettings.smoothingEnabled });
     void persistSettings(nextSettings);
-  }, [persistSettings, settingsDraft]);
+  }, [badPostureDurationMinutesInput, persistSettings, settingsDraft]);
 
   const handleResetSettings = useCallback(() => {
     const nextSettings = createDefaultSettings();
     setSettingsDraft(nextSettings);
+    setBadPostureDurationMinutesInput(String(nextSettings.badPostureDurationMinutes));
     setSettingsSaveStatus("idle");
   }, []);
 
@@ -2546,6 +2563,7 @@ export function PostureCoachApp() {
     const initialSettings = createDefaultSettings();
     setSettings(initialSettings);
     setSettingsDraft(initialSettings);
+    setBadPostureDurationMinutesInput(String(initialSettings.badPostureDurationMinutes));
     settingsRef.current = initialSettings;
     analyzerRef.current.setPreferredSideMode(initialSettings.preferredSideMode);
 
@@ -2579,6 +2597,7 @@ export function PostureCoachApp() {
           };
           setSettings(nextSettings);
           setSettingsDraft(nextSettings);
+          setBadPostureDurationMinutesInput(String(nextSettings.badPostureDurationMinutes));
           settingsRef.current = nextSettings;
           analyzerRef.current.setPreferredSideMode(nextSettings.preferredSideMode);
           detectorRef.current?.setOptions({ smoothLandmarks: nextSettings.smoothingEnabled });
@@ -2587,6 +2606,7 @@ export function PostureCoachApp() {
         const nextSettings = createDefaultSettings();
         setSettings(nextSettings);
         setSettingsDraft(nextSettings);
+        setBadPostureDurationMinutesInput(String(nextSettings.badPostureDurationMinutes));
         settingsRef.current = nextSettings;
         analyzerRef.current.setPreferredSideMode(nextSettings.preferredSideMode);
         detectorRef.current?.setOptions({ smoothLandmarks: nextSettings.smoothingEnabled });
@@ -2799,6 +2819,51 @@ export function PostureCoachApp() {
             {isRunning ? "분석 중지" : "분석 시작"}
           </button>
         </div>
+
+        <div className="mt-5 rounded-2xl border border-gray-100 bg-gray-50 p-4">
+          <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <SlidersHorizontal className="h-5 w-5 text-blue-600" />
+              <h3 className="text-lg font-bold text-gray-900">분석 옵션</h3>
+            </div>
+            {settingsStatusText && (
+              <span
+                className={`rounded-full px-3 py-1 text-xs font-medium ${
+                  settingsSaveStatus === "error" ? "bg-red-100 text-red-700" : "bg-blue-50 text-blue-700"
+                }`}
+              >
+                {settingsStatusText}
+              </span>
+            )}
+          </div>
+          <div className="space-y-4">
+            <ToggleControl
+              checked={settings.landmarkOverlayEnabled}
+              onChange={(checked) => updateSettings({ landmarkOverlayEnabled: checked })}
+              label="자세 랜드마크 표시 켜기/끄기"
+            />
+            <ToggleControl
+              checked={settings.smoothingEnabled}
+              onChange={(checked) => updateSettings({ smoothingEnabled: checked })}
+              label="점수 부드럽게 처리 켜기/끄기"
+            />
+            <label className="block">
+              <span className="text-sm font-medium text-gray-700">측면 분석 기준</span>
+              <select
+                value={settings.preferredSideMode}
+                onChange={(event) => updateSettings({ preferredSideMode: event.target.value as SideMode })}
+                className="mt-2 w-full rounded-lg border border-gray-300 bg-white px-3 py-2"
+              >
+                <option value="auto">자동</option>
+                <option value="left">왼쪽 옆모습 고정</option>
+                <option value="right">오른쪽 옆모습 고정</option>
+              </select>
+              <p className="mt-2 text-xs leading-5 text-gray-500">
+                자동은 더 잘 보이는 옆모습을 사용하고, 고정 모드는 선택한 방향만 분석합니다.
+              </p>
+            </label>
+          </div>
+        </div>
       </section>
 
       <div className="space-y-4">
@@ -2859,51 +2924,6 @@ export function PostureCoachApp() {
           <p className="mt-3 text-xs leading-5 text-gray-500">
             분석 시작 후 감지된 유효 자세 점수만 누적해 평균을 계산합니다.
           </p>
-        </section>
-
-        <section className="rounded-3xl border border-gray-200 bg-white p-6 shadow-sm">
-          <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
-            <div className="flex items-center gap-3">
-              <SlidersHorizontal className="h-5 w-5 text-blue-600" />
-              <h3 className="text-lg font-bold text-gray-900">분석 옵션</h3>
-            </div>
-            {settingsStatusText && (
-              <span
-                className={`rounded-full px-3 py-1 text-xs font-medium ${
-                  settingsSaveStatus === "error" ? "bg-red-100 text-red-700" : "bg-blue-50 text-blue-700"
-                }`}
-              >
-                {settingsStatusText}
-              </span>
-            )}
-          </div>
-          <div className="space-y-4">
-            <ToggleControl
-              checked={settings.landmarkOverlayEnabled}
-              onChange={(checked) => updateSettings({ landmarkOverlayEnabled: checked })}
-              label="자세 랜드마크 표시 켜기/끄기"
-            />
-            <ToggleControl
-              checked={settings.smoothingEnabled}
-              onChange={(checked) => updateSettings({ smoothingEnabled: checked })}
-              label="점수 부드럽게 처리 켜기/끄기"
-            />
-            <label className="block">
-              <span className="text-sm font-medium text-gray-700">측면 분석 기준</span>
-              <select
-                value={settings.preferredSideMode}
-                onChange={(event) => updateSettings({ preferredSideMode: event.target.value as SideMode })}
-                className="mt-2 w-full rounded-lg border border-gray-300 px-3 py-2"
-              >
-                <option value="auto">자동</option>
-                <option value="left">왼쪽 옆모습 고정</option>
-                <option value="right">오른쪽 옆모습 고정</option>
-              </select>
-              <p className="mt-2 text-xs leading-5 text-gray-500">
-                자동은 더 잘 보이는 옆모습을 사용하고, 고정 모드는 선택한 방향만 분석합니다.
-              </p>
-            </label>
-          </div>
         </section>
 
         <section className="rounded-3xl border border-gray-200 bg-white p-6 shadow-sm">
@@ -3070,17 +3090,6 @@ export function PostureCoachApp() {
 
       <div className="stretch-analysis-layout">
         <div className="space-y-4">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="rounded-full bg-blue-100 px-3 py-1 text-sm font-bold text-blue-700">{modeLabel}</span>
-            {modeMessage && (
-              <span className="rounded-full bg-yellow-100 px-3 py-1 text-sm font-bold text-yellow-800">
-                {modeMessage}
-              </span>
-            )}
-            <span className="text-sm font-medium text-gray-600">
-              {isRunning ? stretchCalibrationMessage : "시작하면 2초간 기준 자세를 측정합니다."}
-            </span>
-          </div>
           <div className="relative flex aspect-video items-center justify-center overflow-hidden rounded-xl bg-gray-900">
             <video ref={videoRef} className="absolute inset-0 h-full w-full scale-x-[-1] object-cover" playsInline muted />
             <canvas ref={canvasRef} className="absolute inset-0 h-full w-full" />
@@ -3433,6 +3442,15 @@ export function PostureCoachApp() {
         : settingsSaveStatus === "error"
           ? "설정 저장 실패"
           : "";
+  const badPostureDurationMinutesValue = Number(badPostureDurationMinutesInput);
+  const badPostureDurationError = !badPostureDurationMinutesInput.trim()
+    ? "숫자를 입력해주세요"
+    : !Number.isInteger(badPostureDurationMinutesValue) ||
+        badPostureDurationMinutesValue < 1 ||
+        badPostureDurationMinutesValue > 40
+      ? "1분부터 40분까지 입력해주세요"
+      : "";
+  const canApplySettings = !badPostureDurationError && settingsSaveStatus !== "saving";
 
   const ToggleControl = ({
     checked,
@@ -3474,7 +3492,8 @@ export function PostureCoachApp() {
           <button
             type="button"
             onClick={handleApplySettings}
-            className="inline-flex min-h-11 items-center justify-center rounded-lg bg-blue-600 px-5 py-2 text-sm font-bold text-white transition-colors hover:bg-blue-700"
+            disabled={!canApplySettings}
+            className="inline-flex min-h-11 items-center justify-center rounded-lg bg-blue-600 px-5 py-2 text-sm font-bold text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
           >
             적용하기
           </button>
@@ -3546,21 +3565,24 @@ export function PostureCoachApp() {
           </div>
           <label className="block">
             <span className="text-sm font-medium text-gray-700">
-              나쁜 자세가 {settingsDraft.badPostureDurationMinutes}분 이상 지속되면 알림
+              나쁜 자세가 {badPostureDurationMinutesInput || "?"}분 이상 지속되면 알림
             </span>
             <input
-              type="number"
+              type="text"
               inputMode="numeric"
-              min="1"
-              max="40"
-              value={settingsDraft.badPostureDurationMinutes}
-              onChange={(event) =>
-                updateSettingsDraft({
-                  badPostureDurationMinutes: Math.min(Math.max(Number(event.target.value) || 1, 1), 40),
-                })
-              }
-              className="mt-2 w-full rounded-lg border border-gray-300 px-3 py-2"
+              pattern="[0-9]*"
+              value={badPostureDurationMinutesInput}
+              onChange={(event) => {
+                setBadPostureDurationMinutesInput(event.target.value.replace(/\D/g, ""));
+                setSettingsSaveStatus("idle");
+              }}
+              className={`mt-2 w-full rounded-lg border px-3 py-2 ${
+                badPostureDurationError ? "border-red-300 bg-red-50" : "border-gray-300"
+              }`}
             />
+            {badPostureDurationError && (
+              <p className="mt-2 text-sm font-medium text-red-600">{badPostureDurationError}</p>
+            )}
           </label>
           <label className="block">
             <span className="text-sm font-medium text-gray-700">
