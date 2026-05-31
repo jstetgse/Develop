@@ -1,4 +1,4 @@
-import type { StretchBodyPart, StretchStep } from "@/lib/types";
+import type { StretchBodyPart, StretchCoachingResult, StretchStep } from "@/lib/types";
 
 export type Landmark = {
   x: number;
@@ -587,6 +587,109 @@ export function drawStretchGuidePose(
     context.strokeStyle = isIncorrect ? "rgba(127, 29, 29, 0.85)" : "rgba(30, 64, 175, 0.82)";
     context.stroke();
   }
+
+  context.restore();
+}
+
+function drawArrow(context: CanvasRenderingContext2D, from: { x: number; y: number }, to: { x: number; y: number }) {
+  const angle = Math.atan2(to.y - from.y, to.x - from.x);
+  const headLength = 14;
+  context.beginPath();
+  context.moveTo(from.x, from.y);
+  context.lineTo(to.x, to.y);
+  context.stroke();
+  context.beginPath();
+  context.moveTo(to.x, to.y);
+  context.lineTo(to.x - headLength * Math.cos(angle - Math.PI / 6), to.y - headLength * Math.sin(angle - Math.PI / 6));
+  context.lineTo(to.x - headLength * Math.cos(angle + Math.PI / 6), to.y - headLength * Math.sin(angle + Math.PI / 6));
+  context.closePath();
+  context.fill();
+}
+
+function getDynamicPath(checkType: StretchStep["checkType"]): GuidePoint[] {
+  if (checkType === "neck-circle") {
+    return Array.from({ length: 42 }, (_, index) => {
+      const progress = index / 41;
+      const x = (progress * 2 - 1) * 0.26;
+      return {
+        x,
+        y: -0.52 + (1 - Math.abs(x / 0.26)) * 0.1,
+      };
+    });
+  }
+
+  return Array.from({ length: 42 }, (_, index) => {
+    const progress = index / 41;
+    return {
+      x: (progress * 2 - 1) * 0.38,
+      y: 0.46,
+    };
+  });
+}
+
+export function drawDynamicStretchGuidePose(
+  context: CanvasRenderingContext2D,
+  canvas: HTMLCanvasElement,
+  checkType: StretchStep["checkType"],
+  landmarks?: Landmark[] | null,
+  coaching?: StretchCoachingResult | null,
+  calibration?: StretchCalibration | null
+) {
+  const frame = getGuideBodyFrame(landmarks, calibration);
+  const toCanvasPoint = (point: GuidePoint) => pointToCanvas(canvas, point, frame);
+  const currentPoint = coaching?.dynamicCurrentPoint;
+  const direction = coaching?.dynamicDirection;
+
+  context.save();
+  context.lineCap = "round";
+  context.lineJoin = "round";
+  context.globalAlpha = frame.isDetected ? 0.9 : 0.42;
+
+  const path = getDynamicPath(checkType).map(toCanvasPoint);
+  context.beginPath();
+  path.forEach((point, index) => {
+    if (index === 0) {
+      context.moveTo(point.x, point.y);
+    } else {
+      context.lineTo(point.x, point.y);
+    }
+  });
+  context.strokeStyle = "rgba(250, 204, 21, 0.9)";
+  context.lineWidth = 7;
+  context.stroke();
+  context.strokeStyle = "rgba(30, 64, 175, 0.75)";
+  context.lineWidth = 3;
+  context.stroke();
+
+  if (currentPoint) {
+    const current = toCanvasPoint(currentPoint);
+    context.beginPath();
+    context.arc(current.x, current.y, 10, 0, Math.PI * 2);
+    context.fillStyle = "rgba(59, 130, 246, 0.96)";
+    context.fill();
+    context.lineWidth = 3;
+    context.strokeStyle = "rgba(255,255,255,0.95)";
+    context.stroke();
+
+    if (direction) {
+      const arrowEnd = {
+        x: current.x + direction.x * frame.shoulderWidth * canvas.width * 1.8,
+        y: current.y + direction.y * frame.torsoLength * canvas.height * 1.8,
+      };
+      context.strokeStyle = "rgba(59, 130, 246, 0.96)";
+      context.fillStyle = "rgba(59, 130, 246, 0.96)";
+      context.lineWidth = 4;
+      drawArrow(context, current, arrowEnd);
+    }
+  }
+
+  context.setTransform(1, 0, 0, 1, 0, 0);
+  context.globalAlpha = 1;
+  context.font = "700 18px sans-serif";
+  context.fillStyle = "rgba(17, 24, 39, 0.86)";
+  context.fillRect(16, canvas.height - 58, 190, 42);
+  context.fillStyle = "white";
+  context.fillText(`반복 ${coaching?.repeatCount ?? 0} / ${coaching?.targetRepeats ?? 3}`, 32, canvas.height - 31);
 
   context.restore();
 }

@@ -78,6 +78,7 @@ export interface StretchStep {
   id: string;
   title: string;
   instruction: string;
+  stretchType?: "static" | "dynamic";
   checkType:
     | "neck-side-pull"
     | "neck-forward-pull"
@@ -114,6 +115,13 @@ export interface StretchCoachingResult {
   coachingMessage: string;
   holdSeconds?: number;
   isStepCompleted?: boolean;
+  isDynamic?: boolean;
+  repeatCount?: number;
+  targetRepeats?: number;
+  dynamicFeedback?: string[];
+  dynamicCurrentPoint?: { x: number; y: number } | null;
+  dynamicTargetPoint?: { x: number; y: number } | null;
+  dynamicDirection?: { x: number; y: number } | null;
 }
 
 export interface LowScoreCaptureEvent {

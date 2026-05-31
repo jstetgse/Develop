@@ -49,11 +49,20 @@ import { PostureAnalyzer } from "@/lib/posture-analysis";
 import {
   averageStretchCalibration,
   createStretchCalibrationSample,
+  drawDynamicStretchGuidePose,
   drawStretchGuidePose,
   type StretchCalibration,
   type StretchCalibrationSample,
 } from "@/lib/stretch-guide";
-import { analyzeStretchStep, getRecommendedStretches, getStretchById } from "@/lib/stretch-analysis";
+import {
+  analyzeDynamicStretchStep,
+  analyzeStretchStep,
+  createDynamicStretchRuntimeState,
+  getRecommendedStretches,
+  getStretchById,
+  isDynamicStretchStep,
+  type DynamicStretchRuntimeState,
+} from "@/lib/stretch-analysis";
 import {
   calculateStretchRecommendations,
   type StretchRecommendation,
@@ -1219,6 +1228,7 @@ export function PostureCoachApp() {
   const stretchCalibrationStartedAtRef = useRef<number | null>(null);
   const stretchCalibrationSamplesRef = useRef<StretchCalibrationSample[]>([]);
   const latestStretchCoachingRef = useRef<StretchCoachingResult>(createInitialStretchState());
+  const dynamicStretchRuntimeRef = useRef<DynamicStretchRuntimeState>(createDynamicStretchRuntimeState());
   const lastSnapshotAtRef = useRef(0);
   const snapshotSavingRef = useRef(false);
   const bestSnapshotRef = useRef<SnapshotExtrema>(null);
@@ -1342,6 +1352,9 @@ export function PostureCoachApp() {
       : appMode === "stretching"
         ? "스트레칭 중"
         : "자세 분석 일시중지";
+  const resetDynamicStretchRuntime = useCallback(() => {
+    dynamicStretchRuntimeRef.current = createDynamicStretchRuntimeState();
+  }, []);
   const setIsStretchingMode = useCallback((nextIsStretching: boolean) => {
     if (nextIsStretching) {
       appModeRef.current = "stretching";
@@ -1439,14 +1452,25 @@ export function PostureCoachApp() {
       context.save();
       context.translate(canvas.width, 0);
       context.scale(-1, 1);
-      drawStretchGuidePose(
-        context,
-        canvas,
-        guideStep.checkType,
-        results.poseLandmarks ?? null,
-        latestStretchCoachingRef.current.incorrectParts ?? [],
-        stretchCalibrationRef.current
-      );
+      if (isDynamicStretchStep(guideStep)) {
+        drawDynamicStretchGuidePose(
+          context,
+          canvas,
+          guideStep.checkType,
+          results.poseLandmarks ?? null,
+          latestStretchCoachingRef.current,
+          stretchCalibrationRef.current
+        );
+      } else {
+        drawStretchGuidePose(
+          context,
+          canvas,
+          guideStep.checkType,
+          results.poseLandmarks ?? null,
+          latestStretchCoachingRef.current.incorrectParts ?? [],
+          stretchCalibrationRef.current
+        );
+      }
       context.restore();
     }
 
@@ -1620,6 +1644,7 @@ export function PostureCoachApp() {
   }, []);
 
   const resetStretchCalibration = useCallback((message = "스트레칭 분석을 시작하면 기준 자세를 측정합니다.") => {
+    dynamicStretchRuntimeRef.current = createDynamicStretchRuntimeState();
     stretchCalibrationRef.current = null;
     stretchCalibrationStatusRef.current = "idle";
     stretchCalibrationStartedAtRef.current = null;
@@ -1629,6 +1654,7 @@ export function PostureCoachApp() {
   }, []);
 
   const beginStretchCalibration = useCallback(() => {
+    resetDynamicStretchRuntime();
     if (!usesPersonalizedStretchAnalysis(activeStretchIdRef.current)) {
       stretchCalibrationRef.current = null;
       stretchCalibrationStatusRef.current = "ready";
@@ -1659,7 +1685,7 @@ export function PostureCoachApp() {
       holdSeconds: 0,
     };
     setStretchCoaching(latestStretchCoachingRef.current);
-  }, []);
+  }, [resetDynamicStretchRuntime]);
 
   const processStretchCalibration = useCallback((landmarks?: Landmark[] | null) => {
     if (stretchCalibrationStatusRef.current !== "calibrating") {
@@ -1751,6 +1777,95 @@ export function PostureCoachApp() {
     const now = Date.now();
     let stableResult = nextResult;
     const activeStepIndex = activeStretchStepIndexRef.current;
+    if (nextResult.isDynamic) {
+      const rawScore = nextResult.matchPercentage ?? nextResult.poseScore;
+      const smoothedScore =
+        typeof rawScore === "number"
+          ? Math.round(
+              smoothedStretchMatchRef.current === null
+                ? rawScore
+                : smoothedStretchMatchRef.current * 0.65 + rawScore * 0.35
+            )
+          : null;
+      smoothedStretchMatchRef.current = smoothedScore;
+      stableResult = {
+        ...nextResult,
+        poseScore: smoothedScore,
+        matchPercentage: smoothedScore,
+        isPoseValid: typeof smoothedScore === "number" && smoothedScore >= 70,
+        holdSeconds: 0,
+      };
+
+      if (typeof smoothedScore === "number") {
+        stretchCompletionMatchSamplesRef.current = [...stretchCompletionMatchSamplesRef.current.slice(-239), smoothedScore];
+      }
+
+      if (stableResult.isStepCompleted && !completedStretchStepsRef.current.has(activeStepIndex)) {
+        const nextCompleted = new Set(completedStretchStepsRef.current);
+        nextCompleted.add(activeStepIndex);
+        completedStretchStepsRef.current = nextCompleted;
+        setCompletedStretchSteps([...nextCompleted].sort((left, right) => left - right));
+
+        const uid = uidRef.current;
+        const sessionId = sessionIdRef.current;
+        const stretchId = activeStretchIdRef.current;
+        const stretch = getStretchById(stretchId);
+        if (uid && sessionId && stretchId) {
+          void saveStretchLog(uid, sessionId, {
+            createdAt: new Date().toISOString(),
+            userId: uid,
+            stretchId,
+            stretchName: stretch?.name ?? stretchId,
+            stepIndex: activeStepIndex,
+            action: "dynamic-step-complete",
+            completedAt: new Date().toISOString(),
+            poseScore: stableResult.poseScore,
+            matchPercentage: stableResult.matchPercentage,
+            repeatCount: stableResult.repeatCount,
+            feedbackSummary: stableResult.coachingMessage,
+          });
+        }
+
+        if (stretch) {
+          const isLastStep = activeStepIndex >= stretch.steps.length - 1;
+          if (isLastStep) {
+            setIsStretchingMode(false);
+            stableResult = {
+              ...stableResult,
+              isStepCompleted: true,
+              coachingMessage: "스트레칭 완료!",
+            };
+          } else {
+            const nextStepIndex = activeStepIndex + 1;
+            activeStretchStepIndexRef.current = nextStepIndex;
+            setActiveStretchStepIndex(nextStepIndex);
+            resetDynamicStretchRuntime();
+            stretchHoldStartedAtRef.current = null;
+            smoothedStretchMatchRef.current = null;
+            lastStretchFeedbackUpdateAtRef.current = 0;
+            stableResult = {
+              stretchId: stretch.id,
+              stepIndex: nextStepIndex,
+              isPoseValid: false,
+              poseScore: null,
+              coachingMessage: "다음 단계로 이동했습니다. 안내에 맞춰 자세를 준비해주세요.",
+              holdSeconds: 0,
+            };
+          }
+        }
+      }
+
+      const elapsed = now - lastStretchFeedbackUpdateAtRef.current;
+      if (!force && elapsed < STRETCH_FEEDBACK_INTERVAL_MS) {
+        return;
+      }
+
+      latestStretchCoachingRef.current = stableResult;
+      lastStretchFeedbackUpdateAtRef.current = now;
+      setStretchCoaching(stableResult);
+      return;
+    }
+
     const rawMatch = nextResult.matchPercentage ?? nextResult.poseScore;
     const smoothedMatch =
       typeof rawMatch === "number"
@@ -1859,6 +1974,7 @@ export function PostureCoachApp() {
             const nextStepIndex = activeStepIndex + 1;
             activeStretchStepIndexRef.current = nextStepIndex;
             setActiveStretchStepIndex(nextStepIndex);
+            resetDynamicStretchRuntime();
             stretchHoldStartedAtRef.current = null;
             smoothedStretchMatchRef.current = null;
             lastStretchFeedbackUpdateAtRef.current = 0;
@@ -1985,13 +2101,24 @@ export function PostureCoachApp() {
           return;
         }
         if (activeStretchIdRef.current) {
+          const activeStretch = getStretchById(activeStretchIdRef.current);
+          const activeStep = activeStretch?.steps[activeStretchStepIndexRef.current];
           updateStretchCoaching(
-            analyzeStretchStep(
-              activeStretchIdRef.current,
-              activeStretchStepIndexRef.current,
-              results.poseLandmarks ?? null,
-              stretchCalibrationRef.current
-            )
+            isDynamicStretchStep(activeStep)
+              ? analyzeDynamicStretchStep(
+                  activeStretchIdRef.current,
+                  activeStretchStepIndexRef.current,
+                  results.poseLandmarks ?? null,
+                  dynamicStretchRuntimeRef.current,
+                  Date.now(),
+                  stretchCalibrationRef.current
+                )
+              : analyzeStretchStep(
+                  activeStretchIdRef.current,
+                  activeStretchStepIndexRef.current,
+                  results.poseLandmarks ?? null,
+                  stretchCalibrationRef.current
+                )
           );
         }
         return;
@@ -2438,6 +2565,7 @@ export function PostureCoachApp() {
     const nextStepIndex = Math.min(currentStepIndex + 1, stretch.steps.length - 1);
     activeStretchStepIndexRef.current = nextStepIndex;
     setActiveStretchStepIndex(nextStepIndex);
+    resetDynamicStretchRuntime();
     stretchHoldStartedAtRef.current = null;
     smoothedStretchMatchRef.current = null;
     lastStretchFeedbackUpdateAtRef.current = 0;
@@ -2489,7 +2617,7 @@ export function PostureCoachApp() {
       setIsStretchingMode(false);
       resetStretchCalibration();
     }
-  }, [resetStretchCalibration]);
+  }, [resetDynamicStretchRuntime, resetStretchCalibration]);
 
   const handleClearStretchSelection = useCallback(() => {
     if (isStretchingMode) {
@@ -3251,7 +3379,9 @@ export function PostureCoachApp() {
                   {activeStretchStepIndex + 1} / {selectedStretch.steps.length} 단계
                 </span>
                 <span className="border border-yellow-200 bg-yellow-300/90 px-3 py-1.5 text-sm font-bold text-blue-950 backdrop-blur">
-                  유지 시간: {stretchCoaching.holdSeconds ?? 0} / 5초
+                  {isDynamicStretchStep(activeStretchStep)
+                    ? `반복: ${stretchCoaching.repeatCount ?? 0} / ${stretchCoaching.targetRepeats ?? 3}`
+                    : `유지 시간: ${stretchCoaching.holdSeconds ?? 0} / 5초`}
                 </span>
               </div>
             )}
@@ -3277,6 +3407,11 @@ export function PostureCoachApp() {
                   </div>
                   <p className="mt-3 text-sm font-bold text-blue-50">{activeStretchStep.title}</p>
                   <p className="mt-1 text-base leading-7 text-blue-50">{activeStretchStep.instruction}</p>
+                  {isDynamicStretchStep(activeStretchStep) && (
+                    <p className="mt-3 border border-yellow-200/50 bg-yellow-300/20 px-3 py-2 text-sm font-bold text-yellow-50">
+                      천천히, 통증 없이 가능한 범위에서만 움직이세요.
+                    </p>
+                  )}
                   <div className="mt-4 border border-white/20 bg-white/15 p-4">
                     <p className="text-sm font-bold text-blue-50">실시간 피드백</p>
                     <p className="mt-1 text-lg font-bold leading-7">{stretchCoaching.coachingMessage}</p>
@@ -3294,7 +3429,11 @@ export function PostureCoachApp() {
                     ) : null}
                     <div className="mt-3 flex flex-wrap gap-2 text-sm text-blue-50">
                       <span>점수: {stretchCoaching.poseScore ?? "--"}점</span>
-                      <span>유지 시간: {stretchCoaching.holdSeconds ?? 0} / 5초</span>
+                      <span>
+                        {isDynamicStretchStep(activeStretchStep)
+                          ? `반복: ${stretchCoaching.repeatCount ?? 0} / ${stretchCoaching.targetRepeats ?? 3}`
+                          : `유지 시간: ${stretchCoaching.holdSeconds ?? 0} / 5초`}
+                      </span>
                     </div>
                   </div>
                 </div>
@@ -3378,6 +3517,7 @@ export function PostureCoachApp() {
                         onClick={() => {
                           activeStretchStepIndexRef.current = index;
                           setActiveStretchStepIndex(index);
+                          resetDynamicStretchRuntime();
                           stretchHoldStartedAtRef.current = null;
                           lastStretchFeedbackUpdateAtRef.current = 0;
                           latestStretchCoachingRef.current = {

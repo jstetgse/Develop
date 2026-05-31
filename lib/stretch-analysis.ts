@@ -43,6 +43,7 @@ const STRETCHES: StretchDefinition[] = [
         id: "neck-circle",
         title: "4단계: 목 돌리기",
         instruction: "원을 천천히 그리면서 목을 지그시 돌려주세요.",
+        stretchType: "dynamic",
         checkType: "neck-circle",
       },
     ],
@@ -151,6 +152,7 @@ const STRETCHES: StretchDefinition[] = [
         id: "back-hip-circle",
         title: "4단계: 허리 돌리기",
         instruction: "양쪽 다리를 살짝 굽힌 채 좌우로 허리를 돌려주세요.",
+        stretchType: "dynamic",
         checkType: "back-hip-circle",
       },
     ],
@@ -204,6 +206,44 @@ type PoseMatchEvaluation = {
   incorrectParts: StretchBodyPart[];
   correctionMessages: string[];
 };
+
+export const DYNAMIC_STRETCH_TARGET_REPEATS = 3;
+
+export type DynamicStretchRuntimeState = {
+  startedAt: number | null;
+  lastTimestamp: number | null;
+  lastValue: number | null;
+  lastDirection: -1 | 0 | 1;
+  reachedLeft: boolean;
+  reachedRight: boolean;
+  repeatCount: number;
+  currentCycleScores: number[];
+  speedSamples: number[];
+  minValue: number;
+  maxValue: number;
+  smoothedScore: number | null;
+};
+
+export function createDynamicStretchRuntimeState(): DynamicStretchRuntimeState {
+  return {
+    startedAt: null,
+    lastTimestamp: null,
+    lastValue: null,
+    lastDirection: 0,
+    reachedLeft: false,
+    reachedRight: false,
+    repeatCount: 0,
+    currentCycleScores: [],
+    speedSamples: [],
+    minValue: Number.POSITIVE_INFINITY,
+    maxValue: Number.NEGATIVE_INFINITY,
+    smoothedScore: null,
+  };
+}
+
+export function isDynamicStretchStep(step?: StretchStep | null) {
+  return step?.stretchType === "dynamic";
+}
 
 const REQUIRED_PARTS_BY_CHECK: Record<StretchStep["checkType"], StretchBodyPart[]> = {
   "neck-side-pull": ["neck", "leftArm"],
@@ -293,6 +333,189 @@ function distance(a: GuidePoint | undefined, b: GuidePoint | undefined) {
 
 function averageScores(scores: number[]) {
   return scores.length ? scores.reduce((sum, score) => sum + score, 0) / scores.length : 0;
+}
+
+function targetForMovementValue(value: number, scale: number, y: number): GuidePoint {
+  return {
+    x: clamp(value / scale, -0.46, 0.46),
+    y,
+  };
+}
+
+function scoreDynamicCycle(state: DynamicStretchRuntimeState, minRange: number, maxImbalance: number) {
+  const average = averageScores(state.currentCycleScores);
+  const range = Number.isFinite(state.minValue) && Number.isFinite(state.maxValue) ? state.maxValue - state.minValue : 0;
+  const imbalance =
+    Number.isFinite(state.minValue) && Number.isFinite(state.maxValue)
+      ? Math.abs(Math.abs(state.minValue) - Math.abs(state.maxValue))
+      : Number.POSITIVE_INFINITY;
+  return {
+    average,
+    range,
+    imbalance,
+    isValid: average >= 70 && range >= minRange && imbalance <= maxImbalance,
+  };
+}
+
+function registerUserDrivenDynamicSample(
+  state: DynamicStretchRuntimeState,
+  timestamp: number,
+  score: number,
+  value: number,
+  speed: number,
+  leftThreshold: number,
+  rightThreshold: number,
+  minRange: number,
+  maxImbalance: number
+) {
+  const delta = state.lastValue === null ? 0 : value - state.lastValue;
+  const direction: -1 | 0 | 1 = Math.abs(delta) < Math.max(minRange * 0.012, 0.01) ? 0 : delta > 0 ? 1 : -1;
+  const previousDirection = state.lastDirection;
+
+  state.smoothedScore = state.smoothedScore === null ? score : state.smoothedScore * 0.82 + score * 0.18;
+  state.currentCycleScores = [...state.currentCycleScores.slice(-89), state.smoothedScore];
+  state.speedSamples = [...state.speedSamples.slice(-59), speed];
+  state.minValue = Math.min(state.minValue, value);
+  state.maxValue = Math.max(state.maxValue, value);
+
+  if (value <= leftThreshold) {
+    state.reachedLeft = true;
+  }
+  if (value >= rightThreshold) {
+    state.reachedRight = true;
+  }
+
+  const turnedAtRight = previousDirection > 0 && direction < 0 && state.reachedRight;
+  const turnedAtLeft = previousDirection < 0 && direction > 0 && state.reachedLeft;
+  if ((turnedAtRight || turnedAtLeft) && state.reachedLeft && state.reachedRight) {
+    const cycle = scoreDynamicCycle(state, minRange, maxImbalance);
+    if (cycle.isValid) {
+      state.repeatCount += 1;
+    }
+    state.currentCycleScores = [];
+    state.speedSamples = [];
+    state.minValue = Number.POSITIVE_INFINITY;
+    state.maxValue = Number.NEGATIVE_INFINITY;
+    state.reachedLeft = turnedAtRight;
+    state.reachedRight = turnedAtLeft;
+  }
+
+  if (direction !== 0) {
+    state.lastDirection = direction;
+  }
+  state.lastValue = value;
+  state.lastTimestamp = timestamp;
+}
+
+function averageRecentSpeed(state: DynamicStretchRuntimeState) {
+  return averageScores(state.speedSamples);
+}
+
+function neckDynamicEvaluation(userPose: GuidePose, state: DynamicStretchRuntimeState, timestamp: number) {
+  const head = userPose.head;
+  if (!head) {
+    return null;
+  }
+
+  state.startedAt ??= timestamp;
+  const expectedY = -0.52 + (1 - Math.min(Math.abs(head.x) / 0.26, 1)) * 0.1;
+  const pathDistance = Math.abs(head.y - expectedY);
+  const pathScore = clamp(100 - (pathDistance / 0.22) * 100, 0, 100);
+  const range = Number.isFinite(state.minValue) && Number.isFinite(state.maxValue) ? state.maxValue - state.minValue : 0;
+  const rangeScore = clamp((range / 0.24) * 100, 0, 100);
+  const imbalance =
+    Number.isFinite(state.minValue) && Number.isFinite(state.maxValue)
+      ? Math.abs(Math.abs(state.minValue) - Math.abs(state.maxValue))
+      : 0;
+  const balanceScore = clamp(100 - (imbalance / 0.16) * 100, 0, 100);
+  const speed =
+    state.lastTimestamp && state.lastTimestamp !== timestamp
+      ? Math.abs(head.x - (state.lastValue ?? head.x)) / Math.max((timestamp - state.lastTimestamp) / 1000, 0.001)
+      : 0;
+  const speedScore = speed <= 0.45 ? 100 : clamp(100 - ((speed - 0.45) / 0.65) * 100, 0, 100);
+  const score = roundScore(pathScore * 0.36 + rangeScore * 0.26 + balanceScore * 0.2 + speedScore * 0.18);
+
+  registerUserDrivenDynamicSample(state, timestamp, score, head.x, speed, -0.18, 0.18, 0.24, 0.16);
+
+  const cycle = scoreDynamicCycle(state, 0.24, 0.16);
+  const messages: string[] = [];
+  if (averageRecentSpeed(state) > 0.7) {
+    messages.push("조금 천천히 움직여주세요.");
+  }
+  if (cycle.range > 0 && cycle.range < 0.24) {
+    messages.push("좌우 범위가 조금 부족해요.");
+  }
+  if (Number.isFinite(cycle.imbalance) && cycle.imbalance > 0.16) {
+    messages.push("좌우를 균형 있게 움직여주세요.");
+  }
+  if (!messages.length) {
+    messages.push("좋아요. 가능한 범위에서 천천히 이어가세요.");
+  }
+
+  return {
+    score: roundScore(state.smoothedScore ?? score),
+    currentPoint: head,
+    targetPoint: null,
+    direction: state.lastDirection === 0 ? null : { x: state.lastDirection * 0.12, y: 0 },
+    correctionMessages: Array.from(new Set(messages)),
+  };
+}
+
+function backDynamicEvaluation(userPose: GuidePose, state: DynamicStretchRuntimeState, timestamp: number) {
+  if (!userPose.leftShoulder || !userPose.rightShoulder || !userPose.leftHip || !userPose.rightHip) {
+    return null;
+  }
+
+  const shoulderCenter = {
+    x: (userPose.leftShoulder.x + userPose.rightShoulder.x) / 2,
+    y: (userPose.leftShoulder.y + userPose.rightShoulder.y) / 2,
+  };
+  const hipCenter = {
+    x: (userPose.leftHip.x + userPose.rightHip.x) / 2,
+    y: (userPose.leftHip.y + userPose.rightHip.y) / 2,
+  };
+  state.startedAt ??= timestamp;
+  const currentAngle = lineAngleDegrees(shoulderCenter, hipCenter);
+  const range = Number.isFinite(state.minValue) && Number.isFinite(state.maxValue) ? state.maxValue - state.minValue : 0;
+  const rangeScore = clamp((range / 18) * 100, 0, 100);
+  const imbalance =
+    Number.isFinite(state.minValue) && Number.isFinite(state.maxValue)
+      ? Math.abs(Math.abs(state.minValue) - Math.abs(state.maxValue))
+      : 0;
+  const balanceScore = clamp(100 - (imbalance / 10) * 100, 0, 100);
+  const centerControlScore = clamp(100 - (Math.abs(currentAngle) / 42) * 100, 0, 100);
+  const speed =
+    state.lastTimestamp && state.lastTimestamp !== timestamp
+      ? Math.abs(currentAngle - (state.lastValue ?? currentAngle)) / Math.max((timestamp - state.lastTimestamp) / 1000, 0.001)
+      : 0;
+  const speedScore = speed <= 70 ? 100 : clamp(100 - ((speed - 70) / 80) * 100, 0, 100);
+  const score = roundScore(rangeScore * 0.36 + balanceScore * 0.26 + speedScore * 0.24 + centerControlScore * 0.14);
+  const currentPoint = { x: currentAngle / 70, y: 0.46 };
+
+  registerUserDrivenDynamicSample(state, timestamp, score, currentAngle, speed, -14, 14, 18, 10);
+
+  const cycle = scoreDynamicCycle(state, 18, 10);
+  const messages: string[] = [];
+  if (averageRecentSpeed(state) > 105) {
+    messages.push("조금 천천히 움직여주세요.");
+  }
+  if (cycle.range > 0 && cycle.range < 18) {
+    messages.push("좌우 회전 범위가 조금 부족해요.");
+  }
+  if (Number.isFinite(cycle.imbalance) && cycle.imbalance > 10) {
+    messages.push("좌우를 균형 있게 움직여주세요.");
+  }
+  if (!messages.length) {
+    messages.push("좋아요. 천천히 좌우로 이어가세요.");
+  }
+
+  return {
+    score: roundScore(state.smoothedScore ?? score),
+    currentPoint,
+    targetPoint: null,
+    direction: state.lastDirection === 0 ? null : { x: state.lastDirection * 0.12, y: 0 },
+    correctionMessages: messages,
+  };
 }
 
 function capGoodScore(score: number) {
@@ -562,6 +785,84 @@ function missing(stretchId: string | null, stepIndex: number, message = "자세�
     incorrectParts: [],
     correctionMessages: [message],
     coachingMessage: message,
+  };
+}
+
+export function analyzeDynamicStretchStep(
+  stretchId: string | null,
+  stepIndex: number,
+  landmarks: Landmark[] | null | undefined,
+  runtimeState: DynamicStretchRuntimeState,
+  timestamp: number,
+  calibration?: StretchCalibration | null
+): StretchCoachingResult {
+  const stretch = getStretchById(stretchId);
+  const step = stretch?.steps[stepIndex];
+  if (!stretch || !step || !isDynamicStretchStep(step)) {
+    return missing(stretchId, stepIndex, "동적 스트레칭 정보를 찾을 수 없습니다.");
+  }
+  if (!landmarks?.length) {
+    return {
+      ...missing(stretch.id, stepIndex),
+      isDynamic: true,
+      repeatCount: runtimeState.repeatCount,
+      targetRepeats: DYNAMIC_STRETCH_TARGET_REPEATS,
+    };
+  }
+
+  const usePersonalized = isPersonalizedStretch(stretch.id) && Boolean(calibration);
+  const userPose = normalizeLandmarksToGuideSpace(landmarks, usePersonalized ? calibration : null);
+  if (!userPose) {
+    return {
+      ...missing(stretch.id, stepIndex),
+      isDynamic: true,
+      repeatCount: runtimeState.repeatCount,
+      targetRepeats: DYNAMIC_STRETCH_TARGET_REPEATS,
+    };
+  }
+
+  const dynamic =
+    step.checkType === "neck-circle"
+      ? neckDynamicEvaluation(userPose, runtimeState, timestamp)
+      : step.checkType === "back-hip-circle"
+        ? backDynamicEvaluation(userPose, runtimeState, timestamp)
+        : null;
+
+  if (!dynamic) {
+    return {
+      ...missing(stretch.id, stepIndex),
+      isDynamic: true,
+      repeatCount: runtimeState.repeatCount,
+      targetRepeats: DYNAMIC_STRETCH_TARGET_REPEATS,
+    };
+  }
+
+  const correctionMessages = dynamic.correctionMessages.length
+    ? dynamic.correctionMessages
+    : dynamic.score >= 70
+      ? ["좋아요. 천천히 좌우 움직임을 이어가세요."]
+      : ["안전 범위 안에서 천천히 좌우로 움직여주세요."];
+  const isStepCompleted = runtimeState.repeatCount >= DYNAMIC_STRETCH_TARGET_REPEATS;
+
+  return {
+    stretchId: stretch.id,
+    stepIndex,
+    isPoseValid: dynamic.score >= 70,
+    poseScore: dynamic.score,
+    matchPercentage: dynamic.score,
+    incorrectParts: dynamic.score >= 70 ? [] : REQUIRED_PARTS_BY_CHECK[step.checkType],
+    correctionMessages,
+    coachingMessage: isStepCompleted
+      ? "동적 스트레칭 반복을 완료했습니다. 다음 단계로 이동하세요."
+      : correctionMessages[0],
+    isDynamic: true,
+    repeatCount: runtimeState.repeatCount,
+    targetRepeats: DYNAMIC_STRETCH_TARGET_REPEATS,
+    dynamicFeedback: correctionMessages,
+    dynamicCurrentPoint: dynamic.currentPoint,
+    dynamicTargetPoint: dynamic.targetPoint,
+    dynamicDirection: dynamic.direction,
+    isStepCompleted,
   };
 }
 
