@@ -2685,7 +2685,7 @@ export function PostureCoachApp() {
       !badPostureDurationMinutesInput.trim() ||
       !Number.isInteger(badPostureDurationMinutes) ||
       badPostureDurationMinutes < 1 ||
-      badPostureDurationMinutes > 40
+      badPostureDurationMinutes > 10
     ) {
       return;
     }
@@ -3723,8 +3723,8 @@ export function PostureCoachApp() {
     ? "숫자를 입력해주세요"
     : !Number.isInteger(badPostureDurationMinutesValue) ||
         badPostureDurationMinutesValue < 1 ||
-        badPostureDurationMinutesValue > 40
-      ? "1분부터 40분까지 입력해주세요"
+        badPostureDurationMinutesValue > 10
+      ? "1분부터 10분까지 입력해주세요"
       : "";
   const canApplySettings = !badPostureDurationError && settingsSaveStatus !== "saving";
 

@@ -196,7 +196,7 @@ function normalizeSettings(raw: Partial<Settings>, defaults: Settings): Settings
       typeof raw.warningScoreThreshold === "number" ? raw.warningScoreThreshold : defaults.warningScoreThreshold,
     badPostureDurationMinutes:
       typeof raw.badPostureDurationMinutes === "number"
-        ? raw.badPostureDurationMinutes
+        ? Math.min(Math.max(Math.round(raw.badPostureDurationMinutes), 1), 10)
         : defaults.badPostureDurationMinutes,
     badPostureTestAlertEnabled:
       typeof raw.badPostureTestAlertEnabled === "boolean"
