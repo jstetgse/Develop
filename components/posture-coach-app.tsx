@@ -6,13 +6,20 @@ import {
   Activity,
   AlertTriangle,
   Bell,
+  Bone,
   Calendar,
   CheckCircle,
   ChevronRight,
   Clock,
+  History,
+  House,
   LogOut,
+  PersonStanding,
   RotateCcw,
+  Settings as SettingsIcon,
+  ShieldCheck,
   SlidersHorizontal,
+  StretchHorizontal,
   Trash2,
   User,
   Video,
@@ -310,6 +317,35 @@ function getPostureAreaLabel(area: PostureRecommendationArea) {
     return "허리";
   }
   return "안정성";
+}
+
+function getPostureAreaIcon(area: PostureRecommendationArea, className = "h-4 w-4") {
+  if (area === "neck") {
+    return <Bone className={className} />;
+  }
+  if (area === "torso") {
+    return <PersonStanding className={className} />;
+  }
+  return <ShieldCheck className={className} />;
+}
+
+const HISTORY_REPORT_AREAS: PostureRecommendationArea[] = ["neck", "torso"];
+
+function getHistoryAreaScores(postureAreaStats?: PostureAreaStats) {
+  return HISTORY_REPORT_AREAS.map((area) => {
+    const score = postureAreaStats?.[area]?.averageScore;
+    return {
+      area,
+      label: getPostureAreaLabel(area),
+      score: typeof score === "number" ? score : null,
+    };
+  });
+}
+
+function getHistoryWeakestArea(postureAreaStats?: PostureAreaStats) {
+  return getHistoryAreaScores(postureAreaStats)
+    .filter((item): item is { area: PostureRecommendationArea; label: string; score: number } => item.score !== null)
+    .sort((left, right) => left.score - right.score)[0] ?? null;
 }
 
 function recordPostureAreaStats(stats: PostureAreaStats, posture: PostureResult) {
@@ -972,7 +1008,7 @@ function AuthScreen({
             <button
               type="button"
               onClick={() => setAuthPage("login")}
-              className={`flex-1 py-2 font-medium transition-colors ${
+              className={`flex-1 py-2 font-medium ${
                 authPage === "login" ? "bg-white text-blue-600" : "text-gray-600"
               }`}
             >
@@ -981,7 +1017,7 @@ function AuthScreen({
             <button
               type="button"
               onClick={() => setAuthPage("signup")}
-              className={`flex-1 py-2 font-medium transition-colors ${
+              className={`flex-1 py-2 font-medium ${
                 authPage === "signup" ? "bg-white text-blue-600" : "text-gray-600"
               }`}
             >
@@ -1031,7 +1067,7 @@ function AuthScreen({
                   <input type="checkbox" className="rounded border-gray-300" />
                   <span className="text-gray-600">로그인 상태 유지</span>
                 </label>
-                <button type="button" className="text-blue-600 hover:text-blue-700">
+                <button type="button" className="text-blue-600">
                   비밀번호 찾기
                 </button>
               </div>
@@ -1039,7 +1075,7 @@ function AuthScreen({
 
             <button
               type="submit"
-              className="w-full bg-blue-600 py-3 font-medium text-white transition-colors hover:bg-blue-700"
+              className="w-full bg-blue-600 py-3 font-medium text-white"
             >
               {authPage === "login" ? "로그인" : "회원가입"}
             </button>
@@ -1055,7 +1091,7 @@ function AuthScreen({
             type="button"
             onClick={onGoogleLogin}
             disabled={isGoogleLoading}
-            className="flex w-full items-center justify-center gap-3 border border-gray-300 bg-white px-4 py-3 transition-colors hover:bg-[rgba(196,246,232,0.36)] disabled:cursor-not-allowed disabled:opacity-50"
+            className="flex w-full items-center justify-center gap-3 border border-gray-300 bg-white px-4 py-3 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {isGoogleLoading ? (
               <>
@@ -1085,7 +1121,7 @@ function AuthScreen({
                 <button
                   type="button"
                   onClick={() => setAuthPage("signup")}
-                  className="font-medium text-blue-600 hover:text-blue-700"
+                  className="font-medium text-blue-600"
                 >
                   회원가입
                 </button>
@@ -1096,7 +1132,7 @@ function AuthScreen({
                 <button
                   type="button"
                   onClick={() => setAuthPage("login")}
-                  className="font-medium text-blue-600 hover:text-blue-700"
+                  className="font-medium text-blue-600"
                 >
                   로그인
                 </button>
@@ -1183,6 +1219,7 @@ export function PostureCoachApp() {
   const [todaySavedScorePoints, setTodaySavedScorePoints] = useState<ScorePoint[]>([]);
   const [liveScorePoints, setLiveScorePoints] = useState<ScorePoint[]>([]);
   const [sessionAverageScore, setSessionAverageScore] = useState<number | null>(null);
+  const [expandedHistoryImageSessions, setExpandedHistoryImageSessions] = useState<Set<string>>(() => new Set());
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -1294,22 +1331,25 @@ export function PostureCoachApp() {
       }
     }
 
-    const weakestArea = (Object.keys(areaTotals) as PostureRecommendationArea[])
-      .map((area) => {
-        const total = areaTotals[area];
-        return {
-          area,
-          score: total.totalCount > 0 ? Math.round(total.totalScore / total.totalCount) : null,
-        };
-      })
-      .filter((item): item is { area: PostureRecommendationArea; score: number } => item.score !== null)
+    const areaScores = (Object.keys(areaTotals) as PostureRecommendationArea[]).map((area) => {
+      const total = areaTotals[area];
+      return {
+        area,
+        label: getPostureAreaLabel(area),
+        score: total.totalCount > 0 ? Math.round(total.totalScore / total.totalCount) : null,
+      };
+    });
+    const weakestArea = areaScores
+      .filter((item): item is { area: PostureRecommendationArea; label: string; score: number } => item.score !== null)
       .sort((left, right) => left.score - right.score)[0];
 
     return {
       trend,
       sevenDayAverage,
-      weakestAreaLabel: weakestArea ? getPostureAreaLabel(weakestArea.area) : null,
+      weakestAreaLabel: weakestArea?.label ?? null,
+      weakestArea: weakestArea?.area ?? null,
       weakestAreaScore: weakestArea?.score ?? null,
+      areaScores,
       bestScore: bestScores.length ? Math.max(...bestScores) : null,
       worstScore: worstScores.length ? Math.min(...worstScores) : null,
       latestMeasuredAt: mostRecentSession?.startedAt ?? null,
@@ -2892,83 +2932,150 @@ export function PostureCoachApp() {
         <p className="mt-1 text-gray-600">오늘도 바른 자세로 시작해볼까요?</p>
       </div>
 
-      <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-[minmax(0,1.1fr)_minmax(300px,0.9fr)]">
-        <div className="app-surface border-l-4 border-l-[#18755B] p-10 mt-12">
-          <div className="mb-3 flex items-center justify-between gap-3">
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center bg-[#C4F6E8] text-[#18755B]">
-                <CheckCircle className="h-5 w-5" />
+      <section className="app-surface border-l-4 border-l-[#18755B] p-5">
+        <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(280px,360px)] lg:items-center">
+          <div>
+            <div className="mb-4 flex items-center gap-3">
+              <div className="flex h-9 w-9 items-center justify-center bg-[#C4F6E8] text-[#18755B]">
+                <Activity className="h-5 w-5" />
               </div>
-              <span className="text-sm text-gray-600">평균 점수</span>
-            </div>
-            <span className="text-xs font-bold uppercase tracking-[0.14em] text-[#18755B]">Score</span>
-          </div>
-          <div className="grid gap-3 lg:grid-cols-[minmax(0,0.75fr)_minmax(240px,1fr)] lg:items-end">
-            <div>
-              <div className="flex items-end gap-3 text-gray-900">
-                <span className="text-4xl font-black leading-none">
-                  {recentSummary?.averageScore === null || recentSummary?.averageScore === undefined ? "--" : `${recentSummary.averageScore}`}
-                </span>
-                <span className="mb-1 text-sm font-bold text-gray-500">/100</span>
+              <div>
+                <h2 className="text-lg font-bold text-gray-900">현재 상태</h2>
+                <p className="text-sm text-gray-500">측정 준비 상태를 확인하세요</p>
               </div>
-              <p className="mt-1 text-sm text-gray-500">지난 24시간</p>
-              <p
-                className={`mt-2 inline-flex border px-2.5 py-1 text-sm font-bold ${
-                  homeScoreInsight.trend === null
-                    ? "border-gray-200 bg-white text-gray-500"
-                    : homeScoreInsight.trend >= 0
-                      ? "border-[#70E5C4] bg-[#C4F6E8] text-[#18755B]"
-                      : "border-yellow-200 bg-yellow-50 text-yellow-800"
-                }`}
-              >
-                {homeScoreInsight.trend === null
-                  ? "7일 평균 --"
-                  : `7일 평균보다 ${homeScoreInsight.trend >= 0 ? "+" : ""}${homeScoreInsight.trend}`}
-              </p>
             </div>
             <div className="grid gap-1.5 text-sm">
-              <div className="flex items-center justify-between gap-4 border-b border-gray-200 pb-2">
-                <span className="text-gray-500">주의 부위</span>
-                <strong className="text-right text-gray-900">
-                  {homeScoreInsight.weakestAreaLabel
-                    ? `${homeScoreInsight.weakestAreaLabel} ${homeScoreInsight.weakestAreaScore ?? "--"}`
-                    : "--"}
+              <div className="flex items-center justify-between gap-4 border-b border-gray-200 pb-1.5 leading-5">
+                <span className="text-gray-500">카메라 상태</span>
+                <strong className="inline-flex items-center gap-2 text-right font-bold text-gray-900">
+                  <span className="app-status-dot text-[#18755B]" />
+                  {cameraText}
                 </strong>
               </div>
-              <div className="flex items-center justify-between gap-4 border-b border-gray-200 pb-2">
-                <span className="text-gray-500">최고 / 최저</span>
-                <strong className="text-right text-gray-900">
-                  {homeScoreInsight.bestScore !== null || homeScoreInsight.worstScore !== null
-                    ? `${homeScoreInsight.bestScore ?? "--"} / ${homeScoreInsight.worstScore ?? "--"}`
-                    : "--"}
+              <div className="flex items-center justify-between gap-4 border-b border-gray-200 pb-1.5 leading-5">
+                <span className="text-gray-500">분석 상태</span>
+                <strong className="inline-flex items-center gap-2 text-right font-bold text-gray-900">
+                  <span className={`app-status-dot ${isRunning ? "text-[#18755B]" : "text-gray-400"}`} />
+                  {isRunning ? "분석 중" : "분석 대기"}
                 </strong>
               </div>
-              <div className="flex items-center justify-between gap-4">
+              <div className="flex items-center justify-between gap-4 leading-5">
                 <span className="text-gray-500">최근 측정</span>
-                <strong className="text-right text-gray-900">
+                <strong className="text-right font-bold tabular-nums text-gray-900">
                   {homeScoreInsight.latestMeasuredAt ? formatTime(homeScoreInsight.latestMeasuredAt) : "--"}
                 </strong>
               </div>
             </div>
+            <div className="mt-4 border-t border-gray-200 pt-3">
+              <div className="grid gap-2 text-sm sm:grid-cols-[minmax(160px,0.7fr)_minmax(0,1fr)] sm:items-start">
+                <div className="flex items-center justify-between gap-4 border-b border-gray-200 pb-1.5 leading-5">
+                  <span className="font-bold text-gray-900">주의 부위</span>
+                  <strong className="inline-flex items-center justify-end gap-1.5 text-right tabular-nums text-[#18755B]">
+                    {homeScoreInsight.weakestArea ? getPostureAreaIcon(homeScoreInsight.weakestArea) : null}
+                    <span>
+                      {homeScoreInsight.weakestAreaLabel
+                        ? `${homeScoreInsight.weakestAreaLabel} ${homeScoreInsight.weakestAreaScore ?? "--"}`
+                        : "--"}
+                    </span>
+                  </strong>
+                </div>
+                <div className="grid gap-2">
+                  {homeScoreInsight.areaScores.map((area) => (
+                    <div key={area.area} className="grid grid-cols-[56px_minmax(0,1fr)_44px] items-center gap-3 leading-5">
+                      <span className="inline-flex items-center gap-1.5 text-gray-500">
+                        {getPostureAreaIcon(area.area, "h-3.5 w-3.5")}
+                        {area.label}
+                      </span>
+                      <div className="h-1.5 bg-[#D6F3EB]">
+                        <div
+                          className="block h-full bg-[#39AF8E]"
+                          style={{ width: `${area.score ?? 0}%` }}
+                        />
+                      </div>
+                      <strong className="text-right tabular-nums text-gray-900">{area.score ?? "--"}</strong>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+          <div className="grid gap-3">
+            <button
+              type="button"
+              onClick={() => setActiveTab("analysis")}
+              className="app-action-tile p-5"
+            >
+              <div className="flex items-center justify-center gap-3">
+                <Video className="h-5 w-5" />
+                <span className="text-lg font-medium">자세 분석 시작</span>
+              </div>
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab("history")}
+              className="app-action-tile-secondary p-4"
+            >
+              <div className="flex items-center justify-center gap-3">
+                <Calendar className="h-5 w-5" />
+                <span className="text-base font-medium">기록 보기</span>
+              </div>
+            </button>
           </div>
         </div>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-1">
-          <SummaryCard
-            icon={<Clock className="h-5 w-5" />}
-            label="사용 시간"
-            value={formatMinutes(recentSummary?.totalUsageMinutes ?? 0)}
-            hint="오늘 측정 시간"
-            tone="blue"
-          />
-          <SummaryCard
-            icon={<Bell className="h-5 w-5" />}
-            label="알림 횟수"
-            value={`${recentSummary?.alertCount ?? 0}`}
-            hint="자세 경고"
-            tone="orange"
-          />
+      </section>
+
+      <section className="app-surface p-5">
+        <div className="mb-4 flex items-center gap-3">
+          <div className="flex h-9 w-9 items-center justify-center bg-[#C4F6E8] text-[#18755B]">
+            <CheckCircle className="h-5 w-5" />
+          </div>
+          <div>
+            <h2 className="text-lg font-bold text-gray-900">최근 변화</h2>
+            <p className="text-sm text-gray-500">지난 24시간</p>
+          </div>
         </div>
-      </div>
+        <div className="grid gap-5 lg:grid-cols-[minmax(0,0.8fr)_minmax(260px,1fr)] lg:items-start">
+          <div>
+            <div className="flex items-end gap-3 text-gray-900">
+              <span className="text-3xl font-black leading-none">
+                {recentSummary?.averageScore === null || recentSummary?.averageScore === undefined ? "--" : `${recentSummary.averageScore}`}
+              </span>
+              <span className="mb-1 text-sm font-bold text-gray-500">/100</span>
+            </div>
+            <p
+              className={`mt-2 inline-flex border px-2.5 py-1 text-sm font-bold ${
+                homeScoreInsight.trend === null
+                  ? "border-gray-200 bg-white text-gray-500"
+                  : homeScoreInsight.trend >= 0
+                    ? "border-[#70E5C4] bg-[#C4F6E8] text-[#18755B]"
+                    : "border-yellow-200 bg-yellow-50 text-yellow-800"
+              }`}
+            >
+              {homeScoreInsight.trend === null
+                ? "7일 평균 --"
+                : `7일 평균보다 ${homeScoreInsight.trend >= 0 ? "+" : ""}${homeScoreInsight.trend}`}
+            </p>
+          </div>
+          <div className="grid gap-2 text-sm">
+            <div className="flex items-center justify-between gap-4 border-b border-gray-200 pb-2 leading-5">
+              <span className="text-gray-500">주의 부위</span>
+              <strong className="text-right tabular-nums text-gray-900">
+                {homeScoreInsight.weakestAreaLabel
+                  ? `${homeScoreInsight.weakestAreaLabel} ${homeScoreInsight.weakestAreaScore ?? "--"}`
+                  : "--"}
+              </strong>
+            </div>
+            <div className="flex items-center justify-between gap-4 border-b border-gray-200 pb-2 leading-5">
+              <span className="text-gray-500">최고 / 최저</span>
+              <strong className="text-right tabular-nums text-gray-900">
+                {homeScoreInsight.bestScore !== null || homeScoreInsight.worstScore !== null
+                  ? `${homeScoreInsight.bestScore ?? "--"} / ${homeScoreInsight.worstScore ?? "--"}`
+                  : "--"}
+              </strong>
+            </div>
+          </div>
+        </div>
+      </section>
 
       <div className="app-surface p-6">
         <h2 className="mb-4 text-lg font-bold text-gray-900">오늘의 자세 점수 변화</h2>
@@ -2987,29 +3094,16 @@ export function PostureCoachApp() {
             오늘 분석 기록이 아직 없습니다
           </div>
         )}
-      </div>
-
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-        <button
-          type="button"
-          onClick={() => setActiveTab("analysis")}
-          className="app-action-tile p-6 transition-colors hover:bg-blue-700"
-        >
-          <div className="flex items-center justify-center gap-3">
-            <Video className="h-5 w-5" />
-            <span className="text-lg font-medium">자세 분석 시작</span>
+        <div className="mt-4 grid gap-2 border-t border-gray-200 pt-3 text-sm sm:grid-cols-2">
+          <div className="flex items-center justify-between gap-4">
+            <span className="text-gray-500">사용 시간</span>
+            <strong className="text-right tabular-nums text-gray-900">{formatMinutes(recentSummary?.totalUsageMinutes ?? 0)}</strong>
           </div>
-        </button>
-        <button
-          type="button"
-          onClick={() => setActiveTab("history")}
-          className="app-action-tile-secondary p-6 transition-colors hover:bg-[rgba(196,246,232,0.36)]"
-        >
-          <div className="flex items-center justify-center gap-3">
-            <Calendar className="h-5 w-5" />
-            <span className="text-lg font-medium">기록 보기</span>
+          <div className="flex items-center justify-between gap-4">
+            <span className="text-gray-500">알림 횟수</span>
+            <strong className="text-right tabular-nums text-gray-900">{recentSummary?.alertCount ?? 0}</strong>
           </div>
-        </button>
+        </div>
       </div>
     </div>
   );
@@ -3075,8 +3169,8 @@ export function PostureCoachApp() {
           <button
             type="button"
             onClick={() => (isRunning ? void stopApp() : void startApp())}
-            className={`min-h-12 flex-1 px-6 py-3 font-bold text-white transition-colors ${
-              isRunning ? "bg-red-600 hover:bg-red-700" : "bg-blue-600 hover:bg-blue-700"
+            className={`min-h-12 flex-1 px-6 py-3 font-bold text-white ${
+              isRunning ? "bg-red-600" : "bg-blue-600"
             }`}
           >
             {isRunning ? "분석 중지" : "분석 시작"}
@@ -3231,126 +3325,127 @@ export function PostureCoachApp() {
         <button
           type="button"
           onClick={() => setActiveTab("analysis")}
-          className="inline-flex min-h-11 items-center justify-center gap-2 border border-gray-300 bg-white px-5 py-2 font-bold text-gray-700 transition-colors hover:bg-[rgba(196,246,232,0.36)]"
+          className="inline-flex min-h-11 items-center justify-center gap-2 border border-gray-300 bg-white px-5 py-2 font-bold text-gray-700"
         >
           <Video className="h-5 w-5" />
           자세 분석 모드
         </button>
       </div>
 
-      <section className="app-surface p-5">
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h2 className="text-xl font-bold text-gray-900">맞춤 스트레칭 추천</h2>
-            {personalizedStretchRecommendations.message && (
-              <p className="mt-1 text-sm text-gray-600">{personalizedStretchRecommendations.message}</p>
+      {hasCurrentSessionPostureData && (
+        <section className="app-surface p-5">
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="text-xl font-bold text-gray-900">맞춤 스트레칭 추천</h2>
+              {personalizedStretchRecommendations.message && (
+                <p className="mt-1 text-sm text-gray-600">{personalizedStretchRecommendations.message}</p>
+              )}
+            </div>
+            {isLoadingHistory && (
+              <span className="border border-blue-100 bg-blue-50 px-3 py-1 text-xs font-bold text-blue-700">
+                추천 계산 중...
+              </span>
             )}
           </div>
-          {isLoadingHistory && (
-            <span className="border border-blue-100 bg-blue-50 px-3 py-1 text-xs font-bold text-blue-700">
+
+          {isLoadingHistory ? (
+            <div className="border border-blue-100 bg-blue-50 px-4 py-3 text-sm font-bold text-blue-900">
               추천 계산 중...
-            </span>
-          )}
-        </div>
+            </div>
+          ) : personalizedStretchRecommendations.recommendations.length > 0 ? (
+            <div className="grid gap-3 lg:grid-cols-3">
+              {personalizedStretchRecommendations.recommendations.slice(0, 3).map((recommendation) => {
+                const stretch = getStretchById(recommendation.stretchId);
+                if (!stretch) {
+                  return null;
+                }
 
-        {isLoadingHistory ? (
-          <div className="border border-blue-100 bg-blue-50 px-4 py-3 text-sm font-bold text-blue-900">
-            추천 계산 중...
-          </div>
-        ) : personalizedStretchRecommendations.recommendations.length > 0 ? (
-          <div className="grid gap-3 lg:grid-cols-3">
-            {personalizedStretchRecommendations.recommendations.slice(0, 3).map((recommendation) => {
-              const stretch = getStretchById(recommendation.stretchId);
-              if (!stretch) {
-                return null;
-              }
-
-              return (
-                <button
-                  key={recommendation.stretchId}
-                  type="button"
-                  onClick={() => handleStretchSelection(recommendation.stretchId)}
-                  className={`border p-4 text-left transition-colors hover:border-blue-300 ${
-                    activeStretchId === recommendation.stretchId
-                      ? "border-blue-400 bg-blue-50"
-                      : "border-gray-100 bg-white"
-                  }`}
-                >
-                  <div className="mb-3 flex items-start justify-between gap-3">
-                    <div>
-                      <p className="mb-1 text-xs font-bold text-blue-600">{stretch.targetBodyPart}</p>
-                      <h3 className="font-bold text-gray-900">{stretch.name}</h3>
+                return (
+                  <button
+                    key={recommendation.stretchId}
+                    type="button"
+                    onClick={() => handleStretchSelection(recommendation.stretchId)}
+                    className={`border p-4 text-left ${
+                      activeStretchId === recommendation.stretchId
+                        ? "border-blue-400 bg-blue-50"
+                        : "border-gray-100 bg-white"
+                    }`}
+                  >
+                    <div className="mb-3 flex items-start justify-between gap-3">
+                      <div>
+                        <p className="mb-1 text-xs font-bold text-blue-600">{stretch.targetBodyPart}</p>
+                        <h3 className="font-bold text-gray-900">{stretch.name}</h3>
+                      </div>
+                      <span
+                        className={`shrink-0 border px-2.5 py-1 text-xs font-bold ${getRecommendationPriorityClass(
+                          recommendation.priorityLabel
+                        )}`}
+                      >
+                        우선순위: {recommendation.priorityLabel}
+                      </span>
                     </div>
-                    <span
-                      className={`shrink-0 border px-2.5 py-1 text-xs font-bold ${getRecommendationPriorityClass(
-                        recommendation.priorityLabel
-                      )}`}
-                    >
-                      우선순위: {recommendation.priorityLabel}
-                    </span>
-                  </div>
-                  <div>
-                    <p className="text-sm font-bold text-gray-800">추천 이유:</p>
-                    <ul className="mt-1 space-y-1 text-sm leading-6 text-gray-600">
-                      {recommendation.reasons.slice(0, 2).map((reason) => (
-                        <li key={reason}>- {reason}</li>
-                      ))}
-                    </ul>
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-        ) : (
+                    <div>
+                      <p className="text-sm font-bold text-gray-800">추천 이유:</p>
+                      <ul className="mt-1 space-y-1 text-sm leading-6 text-gray-600">
+                        {recommendation.reasons.slice(0, 2).map((reason) => (
+                          <li key={reason}>- {reason}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          ) : (
             <div className="border border-gray-100 bg-[rgba(196,246,232,0.28)] px-4 py-3 text-sm font-bold text-gray-700">
-            자세 분석을 먼저 진행하면 맞춤 스트레칭을 추천받을 수 있습니다.
-          </div>
-        )}
-
-        <div className="mt-4 border-t border-gray-100 pt-4">
-          <button
-            type="button"
-            onClick={() => setShowAllStretchOptions((current) => !current)}
-            className="inline-flex min-h-10 items-center justify-center gap-2 border border-blue-200 bg-white px-4 py-2 text-sm font-bold text-blue-700 transition-colors hover:bg-blue-50"
-          >
-            {showAllStretchOptions ? "다른 스트레칭 목록 닫기" : "다른 스트레칭 선택하기"}
-            <ChevronRight
-              className={`h-4 w-4 transition-transform ${showAllStretchOptions ? "rotate-90" : ""}`}
-            />
-          </button>
-
-          {showAllStretchOptions && (
-            <div className="mt-3 grid gap-3 md:grid-cols-2 lg:grid-cols-3">
-              {allStretchOptions.map((stretch) => (
-                <button
-                  key={stretch.id}
-                  type="button"
-                  onClick={() => handleStretchSelection(stretch.id)}
-                  className={`border p-4 text-left transition-colors hover:border-blue-300 ${
-                    activeStretchId === stretch.id
-                      ? "border-blue-400 bg-blue-50"
-                      : "border-gray-100 bg-gray-50"
-                  }`}
-                >
-                  <div className="mb-2 flex items-start justify-between gap-3">
-                    <div>
-                      <p className="mb-1 text-xs font-bold text-blue-600">{stretch.targetBodyPart}</p>
-                      <h3 className="font-bold text-gray-900">{stretch.name}</h3>
-                    </div>
-                    <ChevronRight className="h-5 w-5 shrink-0 text-gray-400" />
-                  </div>
-                  <p className="text-sm leading-6 text-gray-600">{stretch.shortDescription}</p>
-                  <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-gray-500">
-                    <Clock className="h-3 w-3" />
-                    <span>{stretch.durationSec}초</span>
-                    <span>{stretch.steps.length}단계</span>
-                  </div>
-                </button>
-              ))}
+              자세 분석을 먼저 진행하면 맞춤 스트레칭을 추천받을 수 있습니다.
             </div>
           )}
-        </div>
-      </section>
+          <div className="mt-4 border-t border-gray-100 pt-4">
+            <button
+              type="button"
+              onClick={() => setShowAllStretchOptions((current) => !current)}
+              className="inline-flex min-h-10 items-center justify-center gap-2 border border-blue-200 bg-white px-4 py-2 text-sm font-bold text-blue-700"
+            >
+              {showAllStretchOptions ? "다른 스트레칭 목록 닫기" : "다른 스트레칭 선택하기"}
+              <ChevronRight
+                className="h-4 w-4"
+              />
+            </button>
+
+            {showAllStretchOptions && (
+              <div className="mt-3 grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+                {allStretchOptions.map((stretch) => (
+                  <button
+                    key={stretch.id}
+                    type="button"
+                    onClick={() => handleStretchSelection(stretch.id)}
+                    className={`border p-4 text-left ${
+                      activeStretchId === stretch.id
+                        ? "border-blue-400 bg-blue-50"
+                        : "border-gray-100 bg-gray-50"
+                    }`}
+                  >
+                    <div className="mb-2 flex items-start justify-between gap-3">
+                      <div>
+                        <p className="mb-1 text-xs font-bold text-blue-600">{stretch.targetBodyPart}</p>
+                        <h3 className="font-bold text-gray-900">{stretch.name}</h3>
+                      </div>
+                      <ChevronRight className="h-5 w-5 shrink-0 text-gray-400" />
+                    </div>
+                    <p className="text-sm leading-6 text-gray-600">{stretch.shortDescription}</p>
+                    <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-gray-500">
+                      <Clock className="h-3 w-3" />
+                      <span>{stretch.durationSec}초</span>
+                      <span>{stretch.steps.length}단계</span>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </section>
+      )}
 
       <div className="stretch-analysis-layout">
         <div className="space-y-4">
@@ -3372,13 +3467,13 @@ export function PostureCoachApp() {
             )}
             {selectedStretch && activeStretchStep && (
               <div className="absolute right-4 top-4 flex flex-col items-end gap-2">
-                <span className="border border-white/40 bg-white/90 px-3 py-1.5 text-sm font-bold text-blue-950 backdrop-blur">
+                <span className="border border-white/40 bg-white px-3 py-1.5 text-sm font-bold text-blue-950">
                   동작 정확도: {stretchCoaching.matchPercentage ?? stretchCoaching.poseScore ?? "--"}%
                 </span>
-                <span className="border border-[#70E5C4]/40 bg-[#18755B]/90 px-3 py-1.5 text-sm font-bold text-white backdrop-blur">
+                <span className="border border-[#70E5C4]/40 bg-[#18755B] px-3 py-1.5 text-sm font-bold text-white">
                   {activeStretchStepIndex + 1} / {selectedStretch.steps.length} 단계
                 </span>
-                <span className="border border-yellow-200 bg-yellow-300/90 px-3 py-1.5 text-sm font-bold text-blue-950 backdrop-blur">
+                <span className="border border-yellow-200 bg-yellow-300 px-3 py-1.5 text-sm font-bold text-blue-950">
                   {isDynamicStretchStep(activeStretchStep)
                     ? `반복: ${stretchCoaching.repeatCount ?? 0} / ${stretchCoaching.targetRepeats ?? 3}`
                     : `유지 시간: ${stretchCoaching.holdSeconds ?? 0} / 5초`}
@@ -3452,12 +3547,12 @@ export function PostureCoachApp() {
                 }
               }}
               disabled={!activeStretchId || isSelectedStretchComplete}
-              className={`flex-1 px-6 py-3 font-medium transition-colors ${
+              className={`flex-1 px-6 py-3 font-medium ${
                 isStretchingMode
-                  ? "bg-red-600 text-white hover:bg-red-700"
+                  ? "bg-red-600 text-white"
                   : !activeStretchId || isSelectedStretchComplete
                     ? "cursor-not-allowed bg-gray-300 text-gray-500"
-                    : "bg-blue-600 text-white hover:bg-blue-700"
+                    : "bg-blue-600 text-white"
               }`}
             >
               {isStretchingMode ? "중지" : "스트레칭 분석 시작"}
@@ -3466,14 +3561,14 @@ export function PostureCoachApp() {
               type="button"
               onClick={handleNextStretchStep}
               disabled={!selectedStretch || isSelectedStretchComplete}
-              className="border border-blue-200 bg-white px-6 py-3 font-medium text-blue-700 transition-colors hover:bg-blue-50 disabled:cursor-not-allowed disabled:border-gray-200 disabled:text-gray-400"
+              className="border border-blue-200 bg-white px-6 py-3 font-medium text-blue-700 disabled:cursor-not-allowed disabled:border-gray-200 disabled:text-gray-400"
             >
               다음 단계
             </button>
             <button
               type="button"
               onClick={() => (isRunning ? void stopApp() : void startApp())}
-              className="border border-gray-300 bg-white px-6 py-3 font-medium text-gray-700 transition-colors hover:bg-gray-50"
+              className="border border-gray-300 bg-white px-6 py-3 font-medium text-gray-700"
             >
               {isRunning ? "카메라 중지" : "카메라 시작"}
             </button>
@@ -3493,7 +3588,7 @@ export function PostureCoachApp() {
                   <button
                     type="button"
                     onClick={handleClearStretchSelection}
-                    className="shrink-0 text-sm text-gray-400 hover:text-gray-600"
+                    className="shrink-0 text-sm text-gray-400"
                   >
                     변경
                   </button>
@@ -3530,12 +3625,12 @@ export function PostureCoachApp() {
                           };
                           setStretchCoaching(latestStretchCoachingRef.current);
                         }}
-                        className={`w-full border p-4 text-left transition-colors ${
+                        className={`w-full border p-4 text-left ${
                           isCurrent
                             ? "border-blue-400 bg-blue-50"
                             : isDone
                               ? "border-green-200 bg-green-50"
-                              : "border-gray-200 bg-white hover:border-blue-200"
+                              : "border-gray-200 bg-white"
                         }`}
                       >
                         <div className="flex gap-3">
@@ -3590,7 +3685,7 @@ export function PostureCoachApp() {
                   key={stretch.id}
                   type="button"
                   onClick={() => handleStretchSelection(stretch.id)}
-                  className="w-full border border-gray-100 bg-white p-4 text-left transition-colors hover:border-blue-300"
+                  className="w-full border border-gray-100 bg-white p-4 text-left"
                 >
                   <div className="mb-2 flex items-start justify-between gap-3">
                     <div>
@@ -3655,53 +3750,112 @@ export function PostureCoachApp() {
               </div>
 
               <div className="space-y-3">
-                {day.sessions.map((session) => (
-                  <div key={session.sessionId} className="border border-gray-100 bg-[rgba(196,246,232,0.24)] p-4">
-                    <div className="mb-3 flex flex-col justify-between gap-2 md:flex-row md:items-center">
-                      <div>
-                        <p className="font-medium text-gray-900">
-                          {formatTime(session.startedAt)}
-                          {session.endedAt ? ` - ${formatTime(session.endedAt)}` : ""}
-                        </p>
-                        <div className="mt-1 flex gap-4 text-sm text-gray-600">
-                          <span>평균: {session.averageScore ?? "--"}</span>
-                          <span>최고: {session.bestScore ?? "--"}</span>
-                          <span>최저: {session.worstScore ?? "--"}</span>
-                          <span>알림: {session.alertCount}</span>
+                {day.sessions.map((session) => {
+                  const areaScores = getHistoryAreaScores(session.postureAreaStats);
+                  const weakestArea = getHistoryWeakestArea(session.postureAreaStats);
+                  const isImagesExpanded = expandedHistoryImageSessions.has(session.sessionId);
+
+                  return (
+                    <div key={session.sessionId} className="border border-gray-100 bg-[rgba(196,246,232,0.24)] p-4">
+                      <div className="mb-4 flex flex-col justify-between gap-2 md:flex-row md:items-start">
+                        <div>
+                          <p className="font-medium text-gray-900">
+                            {formatTime(session.startedAt)}
+                            {session.endedAt ? ` - ${formatTime(session.endedAt)}` : ""}
+                          </p>
+                          <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-sm text-gray-600">
+                            <span>최고: {session.bestScore ?? "--"}</span>
+                            <span>최저: {session.worstScore ?? "--"}</span>
+                            <span>알림: {session.alertCount}</span>
+                            <span>사용: {formatMinutes(session.durationMinutes ?? 0)}</span>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 text-sm font-bold text-gray-900">
+                          <span>평균</span>
+                          <span className="tabular-nums text-[#18755B]">{session.averageScore ?? "--"}</span>
+                          {session.averageScore !== null && session.averageScore >= 80 ? (
+                            <CheckCircle className="h-4 w-4 text-green-600" />
+                          ) : (
+                            <AlertTriangle className="h-4 w-4 text-yellow-600" />
+                          )}
                         </div>
                       </div>
-                      {session.averageScore !== null && session.averageScore >= 80 ? (
-                        <CheckCircle className="h-5 w-5 text-green-600" />
-                      ) : (
-                        <AlertTriangle className="h-5 w-5 text-yellow-600" />
+
+                      <div className="mb-4 border-y border-gray-200 py-3">
+                        <div className="mb-2 flex items-center justify-between gap-4 text-sm leading-5">
+                          <span className="font-bold text-gray-900">주의 부위</span>
+                          <strong className="inline-flex items-center justify-end gap-1.5 text-right tabular-nums text-[#18755B]">
+                            {weakestArea ? getPostureAreaIcon(weakestArea.area, "h-3.5 w-3.5") : null}
+                            <span>{weakestArea ? `${weakestArea.label} ${weakestArea.score}` : "--"}</span>
+                          </strong>
+                        </div>
+                        <div className="grid gap-2 text-sm">
+                          {areaScores.map((area) => (
+                            <div key={area.area} className="grid grid-cols-[56px_minmax(0,1fr)_44px] items-center gap-3 leading-5">
+                              <span className="inline-flex items-center gap-1.5 text-gray-500">
+                                {getPostureAreaIcon(area.area, "h-3.5 w-3.5")}
+                                {area.label}
+                              </span>
+                              <div className="h-1.5 bg-[#D6F3EB]">
+                                <div
+                                  className="block h-full bg-[#39AF8E]"
+                                  style={{ width: `${area.score ?? 0}%` }}
+                                />
+                              </div>
+                              <strong className="text-right tabular-nums text-gray-900">{area.score ?? "--"}</strong>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setExpandedHistoryImageSessions((current) => {
+                            const next = new Set(current);
+                            if (next.has(session.sessionId)) {
+                              next.delete(session.sessionId);
+                            } else {
+                              next.add(session.sessionId);
+                            }
+                            return next;
+                          })
+                        }
+                        className="inline-flex min-h-10 items-center justify-center gap-2 border border-gray-300 bg-white px-4 py-2 text-sm font-bold text-gray-700"
+                      >
+                        <span>{isImagesExpanded ? "자세 이미지 닫기" : "자세 이미지 보기"}</span>
+                        <ChevronRight className="h-4 w-4" />
+                      </button>
+
+                      {isImagesExpanded && (
+                        <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
+                          <div className="overflow-hidden border border-gray-200 bg-white">
+                            {session.bestImageUrl ? (
+                              <img src={session.bestImageUrl} alt="최고 자세" className="aspect-video w-full object-cover" />
+                            ) : (
+                              <div className="flex aspect-video items-center justify-center text-sm text-gray-400">
+                                최고 자세 이미지 없음
+                              </div>
+                            )}
+                            <div className="p-3 text-sm font-medium text-gray-900">최고 점수: {session.bestScore ?? "--"}</div>
+                          </div>
+                          <div className="overflow-hidden border border-gray-200 bg-white">
+                            {session.worstImageUrl ? (
+                              <img src={session.worstImageUrl} alt="최저 자세" className="aspect-video w-full object-cover" />
+                            ) : (
+                              <div className="flex aspect-video items-center justify-center text-sm text-gray-400">
+                                최저 자세 이미지 없음
+                              </div>
+                            )}
+                            <div className="p-3 text-sm font-medium text-gray-900">
+                              최저 점수: {session.worstScore ?? "--"}
+                            </div>
+                          </div>
+                        </div>
                       )}
                     </div>
-                    <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                      <div className="overflow-hidden border border-gray-200 bg-white">
-                        {session.bestImageUrl ? (
-                          <img src={session.bestImageUrl} alt="최고 자세" className="aspect-video w-full object-cover" />
-                        ) : (
-                          <div className="flex aspect-video items-center justify-center text-sm text-gray-400">
-                            최고 자세 이미지 없음
-                          </div>
-                        )}
-                        <div className="p-3 text-sm font-medium text-gray-900">최고 점수: {session.bestScore ?? "--"}</div>
-                      </div>
-                      <div className="overflow-hidden border border-gray-200 bg-white">
-                        {session.worstImageUrl ? (
-                          <img src={session.worstImageUrl} alt="최저 자세" className="aspect-video w-full object-cover" />
-                        ) : (
-                          <div className="flex aspect-video items-center justify-center text-sm text-gray-400">
-                            최저 자세 이미지 없음
-                          </div>
-                        )}
-                        <div className="p-3 text-sm font-medium text-gray-900">
-                          최저 점수: {session.worstScore ?? "--"}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           ))}
@@ -3769,7 +3923,7 @@ export function PostureCoachApp() {
             type="button"
             onClick={handleApplySettings}
             disabled={!canApplySettings}
-            className="inline-flex min-h-11 items-center justify-center bg-blue-600 px-5 py-2 text-sm font-bold text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+            className="inline-flex min-h-11 items-center justify-center bg-blue-600 px-5 py-2 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-60"
           >
             적용하기
           </button>
@@ -3828,7 +3982,7 @@ export function PostureCoachApp() {
                   settingsDraft.notificationPermissionStatus === "granted" ||
                   settingsDraft.notificationPermissionStatus === "unsupported"
                 }
-                className="inline-flex min-h-10 items-center justify-center border border-blue-200 bg-white px-4 py-2 text-sm font-bold text-blue-700 transition-colors hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-60"
+                className="inline-flex min-h-10 items-center justify-center border border-blue-200 bg-white px-4 py-2 text-sm font-bold text-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 Windows 알림 허용
               </button>
@@ -3923,7 +4077,7 @@ export function PostureCoachApp() {
             type="button"
             onClick={() => void handleClearHistory()}
             disabled={isClearingHistory}
-            className="inline-flex min-h-11 items-center justify-center gap-2 border border-red-200 px-4 py-2 font-medium text-red-700 transition-colors hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
+            className="inline-flex min-h-11 items-center justify-center gap-2 border border-red-200 px-4 py-2 font-medium text-red-700 disabled:cursor-not-allowed disabled:opacity-60"
           >
             <Trash2 className="h-4 w-4" />
             {isClearingHistory ? "기록 초기화 중..." : "기록 초기화"}
@@ -3931,7 +4085,7 @@ export function PostureCoachApp() {
           <button
             type="button"
             onClick={handleResetSettings}
-            className="inline-flex min-h-11 items-center justify-center gap-2 border border-gray-300 px-4 py-2 font-medium text-gray-700 transition-colors hover:bg-gray-50"
+            className="inline-flex min-h-11 items-center justify-center gap-2 border border-gray-300 px-4 py-2 font-medium text-gray-700"
           >
             <RotateCcw className="h-4 w-4" />
             기본 설정으로 되돌리기
@@ -3943,70 +4097,50 @@ export function PostureCoachApp() {
 
   return (
     <div className="app-shell min-h-screen">
-      <nav className="sticky top-0 z-50 border-b border-gray-200 bg-white/90 backdrop-blur">
+      <nav className="sticky top-0 z-50 border-b border-[#12644C]/20 bg-[#C4F6E8]">
         <div className="mx-auto max-w-[1100px] px-6">
-          <div className="flex min-h-16 flex-col gap-3 py-3 lg:h-16 lg:flex-row lg:items-center lg:justify-between lg:py-0">
-            <div className="flex items-center gap-2">
-              <Activity className="h-6 w-6 text-blue-600" />
-              <span className="text-xl font-bold text-gray-900">PostureAI</span>
-            </div>
-            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:gap-4">
-              <div className="flex gap-1 overflow-x-auto">
-                {[
-                  { id: "home" as Tab, label: "홈" },
-                  { id: "analysis" as Tab, label: "자세 분석" },
-                  { id: "stretching" as Tab, label: "스트레칭 분석" },
-                  { id: "history" as Tab, label: "기록 보기" },
-                ].map((tab) => (
-                  <button
-                    key={tab.id}
-                    type="button"
-                    onClick={() => setActiveTab(tab.id)}
-                    className={`border-b-2 px-4 py-2 text-sm transition-colors ${
-                      activeTab === tab.id
-                        ? "border-[#18755B] bg-transparent font-bold text-blue-600"
-                        : "border-transparent text-gray-600 hover:text-gray-900"
-                    }`}
-                  >
-                    {tab.label}
-                  </button>
-                ))}
-              </div>
-              <div className="hidden h-6 w-px bg-gray-300 lg:block" />
-              <div className="flex flex-wrap items-center gap-3">
+          <div className="flex flex-col gap-1.5 py-2">
+            <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5">
+                <div className="flex items-center gap-2">
+                  <Activity className="h-5 w-5 text-blue-600" />
+                  <span className="text-lg font-bold text-gray-900">PostureAI</span>
+                </div>
                 <span
-                  className={`inline-flex items-center gap-2 border px-3 py-1 text-xs font-medium ${
-                    storageTone === "good"
-                      ? "border-[#70E5C4] bg-[#C4F6E8] text-[#18755B]"
-                      : storageTone === "danger"
-                        ? "bg-red-100 text-red-700"
-                        : "bg-yellow-100 text-yellow-700"
-                  }`}
-                >
-                  <span className="app-status-dot" />
-                  {storageText}
-                </span>
-                <span
-                  className={`inline-flex items-center gap-2 border px-3 py-1 text-xs font-medium ${
+                  className={`inline-flex items-center gap-1.5 px-1 py-1 text-xs font-medium ${
                     cameraTone === "good"
-                      ? "border-[#70E5C4] bg-[#C4F6E8] text-[#18755B]"
+                      ? "text-[#18755B]"
                       : cameraTone === "danger"
-                        ? "bg-red-100 text-red-700"
+                        ? "text-red-700"
                       : cameraTone === "warn"
-                        ? "bg-yellow-100 text-yellow-700"
-                        : "bg-gray-100 text-gray-600"
+                        ? "text-yellow-700"
+                        : "text-gray-600"
                   }`}
                 >
                   <span className="app-status-dot" />
                   {cameraText}
                 </span>
+                <span
+                  className={`inline-flex items-center gap-1.5 px-1 py-1 text-xs font-medium ${
+                    storageTone === "good"
+                      ? "text-[#18755B]"
+                      : storageTone === "danger"
+                        ? "text-red-700"
+                        : "text-yellow-700"
+                  }`}
+                >
+                  <span className="app-status-dot" />
+                  {storageText}
+                </span>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
                 <button
                   type="button"
                   onClick={() => setActiveTab("settings")}
-                  className={`flex items-center gap-2 border px-2 py-1 transition-colors ${
+                  className={`flex max-w-full items-center gap-2 border px-2 py-1 text-gray-700 ${
                     activeTab === "settings"
-                      ? "border-blue-500 bg-blue-50 text-blue-700 ring-2 ring-blue-100"
-                      : "border-gray-200 text-gray-700 hover:border-blue-200 hover:bg-gray-50"
+                      ? "border-[#18755B] text-[#18755B]"
+                      : "border-gray-200 text-gray-700"
                   }`}
                   aria-label="설정으로 이동"
                 >
@@ -4015,24 +4149,24 @@ export function PostureCoachApp() {
                       src={authUser.photoURL}
                       alt=""
                       className={`h-7 w-7 rounded-full border object-cover ${
-                        activeTab === "settings" ? "border-blue-500" : "border-white"
+                        activeTab === "settings" ? "border-[#18755B]" : "border-white"
                       }`}
                     />
                   ) : (
                     <span
                       className={`flex h-7 w-7 items-center justify-center rounded-full border ${
-                        activeTab === "settings" ? "border-blue-500 bg-white" : "border-gray-200 bg-gray-50"
+                        activeTab === "settings" ? "border-[#18755B] bg-white" : "border-gray-200 bg-gray-50"
                       }`}
                     >
                       <User className="h-4 w-4 text-gray-600" />
                     </span>
                   )}
-                  <span className="text-sm">{authUser.displayName ?? authUser.email}</span>
+                  <span className="max-w-[180px] truncate text-sm">{authUser.displayName ?? authUser.email}</span>
                 </button>
                 <button
                   type="button"
                   onClick={() => void handleLogout()}
-                  className="flex items-center gap-2 border border-transparent px-4 py-2 text-sm text-gray-700 transition-colors hover:border-gray-200 hover:bg-gray-100"
+                  className="flex items-center gap-2 border border-transparent px-2 py-1 text-sm text-gray-700"
                 >
                   <LogOut className="h-4 w-4" />
                   로그아웃
@@ -4043,7 +4177,7 @@ export function PostureCoachApp() {
         </div>
       </nav>
 
-      <main className="mx-auto max-w-[1100px] px-6 py-8">
+      <main className="mx-auto max-w-[1100px] px-6 pb-[calc(6rem+env(safe-area-inset-bottom))] pt-8">
         {alertMessage && (
           <section className="mb-6 border border-yellow-200 bg-yellow-50 p-5">
             <div className="mb-2 flex items-center justify-between gap-3">
@@ -4059,6 +4193,34 @@ export function PostureCoachApp() {
         {activeTab === "history" && renderHistory()}
         {activeTab === "settings" && renderSettings()}
       </main>
+
+      <nav className="fixed inset-x-0 bottom-0 z-50 bg-transparent px-4 pb-[calc(0.5rem+env(safe-area-inset-bottom))]" aria-label="하단 내비게이션">
+        <div className="mx-auto grid max-w-[520px] grid-cols-5 border border-[#12644C]/20 bg-white px-2 pt-1">
+          {[
+            { id: "home" as Tab, label: "홈", icon: <House className="h-5 w-5" /> },
+            { id: "analysis" as Tab, label: "자세 분석", icon: <Video className="h-5 w-5" /> },
+            { id: "stretching" as Tab, label: "스트레칭 분석", icon: <StretchHorizontal className="h-5 w-5" /> },
+            { id: "history" as Tab, label: "기록 보기", icon: <History className="h-5 w-5" /> },
+            { id: "settings" as Tab, label: "설정", icon: <SettingsIcon className="h-5 w-5" /> },
+          ].map((tab) => {
+            const isActive = activeTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setActiveTab(tab.id)}
+                className={`relative flex min-h-14 min-w-0 flex-col items-center justify-center gap-1 px-1 text-[10px] leading-tight sm:text-xs ${
+                  isActive ? "font-bold text-[#18755B]" : "text-gray-500"
+                }`}
+              >
+                <span className={`absolute top-0 h-0.5 w-5 ${isActive ? "bg-[#18755B]" : "bg-transparent"}`} />
+                {tab.icon}
+                <span className="max-w-full truncate">{tab.label}</span>
+              </button>
+            );
+          })}
+        </div>
+      </nav>
     </div>
   );
 }
