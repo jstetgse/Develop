@@ -16,7 +16,6 @@ import {
   LogOut,
   PersonStanding,
   RotateCcw,
-  Settings as SettingsIcon,
   ShieldCheck,
   SlidersHorizontal,
   StretchHorizontal,
@@ -4195,13 +4194,12 @@ export function PostureCoachApp() {
       </main>
 
       <nav className="fixed inset-x-0 bottom-0 z-50 bg-transparent px-4 pb-[calc(0.5rem+env(safe-area-inset-bottom))]" aria-label="하단 내비게이션">
-        <div className="mx-auto grid max-w-[520px] grid-cols-5 border border-[#12644C]/20 bg-white px-2 pt-1">
+        <div className="mx-auto grid max-w-[560px] grid-cols-4 border border-[#12644C]/20 bg-white px-2 pt-1">
           {[
             { id: "home" as Tab, label: "홈", icon: <House className="h-5 w-5" /> },
             { id: "analysis" as Tab, label: "자세 분석", icon: <Video className="h-5 w-5" /> },
             { id: "stretching" as Tab, label: "스트레칭 분석", icon: <StretchHorizontal className="h-5 w-5" /> },
             { id: "history" as Tab, label: "기록 보기", icon: <History className="h-5 w-5" /> },
-            { id: "settings" as Tab, label: "설정", icon: <SettingsIcon className="h-5 w-5" /> },
           ].map((tab) => {
             const isActive = activeTab === tab.id;
             return (
@@ -4215,7 +4213,7 @@ export function PostureCoachApp() {
               >
                 <span className={`absolute top-0 h-0.5 w-5 ${isActive ? "bg-[#18755B]" : "bg-transparent"}`} />
                 {tab.icon}
-                <span className="max-w-full truncate">{tab.label}</span>
+                <span className="max-w-full whitespace-nowrap">{tab.label}</span>
               </button>
             );
           })}
