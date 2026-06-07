@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type JSX, type ReactNode } from "react";
 import type { User as FirebaseUser } from "firebase/auth";
 import {
   Activity,
@@ -11,6 +11,7 @@ import {
   CheckCircle,
   ChevronRight,
   Clock,
+  Dumbbell,
   History,
   House,
   LogOut,
@@ -18,7 +19,6 @@ import {
   RotateCcw,
   ShieldCheck,
   SlidersHorizontal,
-  StretchHorizontal,
   Trash2,
   User,
   Video,
@@ -187,6 +187,7 @@ const STRETCH_HOLD_TARGET_MS = 5_000;
 const STRETCH_CALIBRATION_TARGET_MS = 2_000;
 const STRETCH_CALIBRATION_MIN_SAMPLES = 12;
 const STRETCH_CALIBRATION_MAX_MOVEMENT = 0.09;
+const STRETCH_BEEP_STORAGE_KEY = "posture-coach-stretch-beep-enabled";
 const POSE_CONNECTIONS_FALLBACK: Array<[number, number]> = [
   [11, 12],
   [11, 13],
@@ -328,6 +329,365 @@ function getPostureAreaIcon(area: PostureRecommendationArea, className = "h-4 w-
   return <ShieldCheck className={className} />;
 }
 
+function getGenericStretchPictogram(className: string): JSX.Element {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 64 64"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="3.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <circle cx="32" cy="12" r="6" />
+      <path d="M32 18v15" />
+      <path d="M18 27c5-5 23-5 28 0" />
+      <path d="M25 33l-7 13" />
+      <path d="M39 33l7 13" />
+      <path d="M23 50h18" />
+    </svg>
+  );
+}
+
+function getStretchStepPictogram(checkType: StretchStep["checkType"], className = "h-6 w-6"): JSX.Element {
+  const icon = (children: ReactNode) => (
+    <svg
+      className={className}
+      viewBox="0 0 64 64"
+      fill="currentColor"
+      aria-hidden="true"
+    >
+      {children}
+    </svg>
+  );
+
+  const person = ({
+    head = [32, 10, 5],
+    torso = "M29 18c-3 8-3 16 0 25h10c3-9 3-17 0-25z",
+    leftArm = "M28 23c-6 3-10 8-12 15l6 2c2-5 5-9 9-11z",
+    rightArm = "M40 23c5 3 8 7 10 13l-6 2c-2-5-5-8-8-10z",
+    leftLeg = "M29 41c-4 6-7 11-10 17h8c2-4 5-8 8-13z",
+    rightLeg = "M39 41c5 5 9 10 12 17h-8c-3-5-6-9-10-13z",
+    extras,
+  }: {
+    head?: [number, number, number];
+    torso?: string;
+    leftArm?: string;
+    rightArm?: string;
+    leftLeg?: string;
+    rightLeg?: string;
+    extras?: ReactNode;
+  }) => (
+    <>
+      <circle cx={head[0]} cy={head[1]} r={head[2]} />
+      <path d={torso} />
+      <path d={leftArm} />
+      <path d={rightArm} />
+      <path d={leftLeg} />
+      <path d={rightLeg} />
+      {extras}
+    </>
+  );
+
+  const arrowRight = (x: number, y: number) => (
+    <path d={`M${x} ${y}h13l-4-4 2-2 8 7-8 7-2-2 4-4H${x}z`} opacity="0.6" />
+  );
+
+  const arrowLeft = (x: number, y: number) => (
+    <path d={`M${x + 19} ${y}H${x + 6}l4-4-2-2-8 7 8 7 2-2-4-4h13z`} opacity="0.6" />
+  );
+
+  switch (checkType) {
+    case "neck-side-pull":
+      return icon(
+        person({
+          head: [29, 13, 5],
+          torso: "M27 20c-2 8-2 17 1 27h10c2-10 2-19-1-27z",
+          leftArm: "M28 22c-7 1-12 5-16 12l5 5c3-5 7-8 13-10z",
+          rightArm: "M38 23c5 3 8 8 9 15l-6 2c-1-5-3-9-7-12z",
+          leftLeg: "M29 46c-3 4-5 8-7 12h8c2-3 4-6 6-9z",
+          rightLeg: "M38 46c3 4 6 8 8 12h-8c-2-3-4-6-7-9z",
+          extras: (
+            <>
+              <path d="M18 18c5-7 13-9 21-5l-5-6 4-2 10 13-15 4-1-4 6-2c-6-3-12-1-16 4z" opacity="0.65" />
+              <path d="M24 20c2-6 7-9 13-8l-2 6c-4-1-7 1-9 5z" opacity="0.55" />
+            </>
+          ),
+        })
+      );
+    case "neck-forward-pull":
+      return icon(
+        person({
+          head: [32, 17, 5],
+          torso: "M27 23c-2 8-2 17 1 27h10c3-10 3-19 0-27z",
+          leftArm: "M27 25c-7 2-12 6-15 12l5 5c3-5 7-8 13-10z",
+          rightArm: "M38 25c7 2 12 6 15 12l-5 5c-3-5-7-8-13-10z",
+          leftLeg: "M29 49c-3 3-5 6-7 9h8c1-2 3-4 5-6z",
+          rightLeg: "M38 49c3 3 5 6 7 9h-8c-1-2-3-4-5-6z",
+          extras: <path d="M17 15c9-9 24-9 33 0l-2-7 4-1 5 16-17-2 1-4 6 1c-8-7-19-7-27 1z" opacity="0.65" />,
+        })
+      );
+    case "neck-back-tilt":
+      return icon(
+        person({
+          head: [32, 13, 5],
+          torso: "M27 21c-2 8-2 17 1 27h10c3-10 3-19 0-27z",
+          leftArm: "M28 25c-5 3-8 7-10 13l5 4c2-4 5-7 9-10z",
+          rightArm: "M38 25c5 3 8 7 10 13l-5 4c-2-4-5-7-9-10z",
+          leftLeg: "M29 47c-3 4-5 7-7 11h8c1-3 3-5 5-8z",
+          rightLeg: "M38 47c3 4 5 7 7 11h-8c-1-3-3-5-5-8z",
+          extras: (
+            <>
+              <path d="M25 14c3-5 9-6 14-2l-4 4c-3-2-6-1-8 2z" opacity="0.55" />
+              <path d="M38 7c7 5 10 12 8 20l5-4 3 3-11 11-6-14 4-1 2 6c2-7-1-13-7-16z" opacity="0.65" />
+              <path d="M49 6h8v5h-8zM50 11h6v9h-6zM48 20a5 5 0 1 0 10 0 5 5 0 0 0-10 0z" opacity="0.5" />
+            </>
+          ),
+        })
+      );
+    case "neck-circle":
+      return icon(
+        person({
+          head: [38, 17, 5],
+          torso: "M28 24c-2 8-2 17 1 27h10c3-10 3-19 0-27z",
+          leftArm: "M29 27c-4 3-7 7-8 13l6 2c1-4 3-7 6-9z",
+          rightArm: "M39 27c4 3 7 7 8 13l-6 2c-1-4-3-7-6-9z",
+          leftLeg: "M30 50c-3 3-5 6-7 8h8c1-2 3-4 5-6z",
+          rightLeg: "M39 50c3 3 5 6 6 8h-8c-1-2-3-4-5-6z",
+          extras: (
+            <>
+              <path d="M17 19c5-12 19-17 31-10l-6-6 3-3 13 13-18 4-1-4 7-2c-10-5-21-1-25 9z" opacity="0.65" />
+              <path d="M55 20c3 13-6 25-19 27l6 4-2 4-16-9 13-12 3 3-5 5c10-2 17-11 14-21z" opacity="0.65" />
+              <path d="M24 19c4 2 8 2 12 0l1 4c-5 3-11 3-17 0z" opacity="0.4" />
+            </>
+          ),
+        })
+      );
+    case "shoulder-roll":
+      return icon(
+        person({
+          head: [32, 10, 5],
+          torso: "M28 18c-2 8-2 16 0 25h10c3-9 3-17 0-25z",
+          leftArm: "M27 22c-5 2-8 6-9 12l6 2c1-4 3-7 7-9z",
+          rightArm: "M39 22c5 2 8 6 9 12l-6 2c-1-4-3-7-7-9z",
+          leftLeg: "M29 42c-3 5-6 10-8 16h8c2-4 4-8 7-12z",
+          rightLeg: "M38 42c4 5 7 10 9 16h-8c-2-4-4-8-7-12z",
+          extras: (
+            <>
+              <path d="M15 21c3-7 9-10 16-8l-4-4 2-3 9 8-10 7-2-3 4-3c-5-1-9 1-11 6z" opacity="0.55" />
+              <path d="M49 21c-3-7-9-10-16-8l4-4-2-3-9 8 10 7 2-3-4-3c5-1 9 1 11 6z" opacity="0.55" />
+            </>
+          ),
+        })
+      );
+    case "shoulder-cross":
+      return icon(
+        person({
+          head: [32, 10, 5],
+          torso: "M28 18c-2 8-2 16 0 25h10c3-9 3-17 0-25z",
+          leftArm: "M19 27c9 0 16 3 22 9l-5 5c-5-5-10-7-18-7z",
+          rightArm: "M47 27c-9 0-16 3-22 9l5 5c5-5 10-7 18-7z",
+          leftLeg: "M29 42c-3 5-5 10-7 16h8c2-4 4-8 6-12z",
+          rightLeg: "M38 42c3 5 6 10 8 16h-8c-2-4-4-8-6-12z",
+          extras: arrowLeft(8, 32),
+        })
+      );
+    case "shoulder-overhead":
+      return icon(
+        person({
+          head: [32, 16, 5],
+          torso: "M28 24c-2 7-2 14 0 22h10c3-8 3-15 0-22z",
+          leftArm: "M27 25c-6-5-9-10-9-17h7c0 5 2 8 7 12z",
+          rightArm: "M39 25c6-5 9-10 9-17h-7c0 5-2 8-7 12z",
+          leftLeg: "M29 45c-3 4-5 8-7 13h8c2-3 4-6 6-9z",
+          rightLeg: "M38 45c3 4 5 8 7 13h-8c-2-3-4-6-6-9z",
+          extras: <path d="M25 4h14l-3-3 2-2 8 7-8 7-2-2 3-3H25z" opacity="0.55" />,
+        })
+      );
+    case "shoulder-chest-open":
+      return icon(
+        person({
+          head: [32, 10, 5],
+          torso: "M28 18c-2 8-2 16 0 25h10c3-9 3-17 0-25z",
+          leftArm: "M29 24c-6 1-11 0-16-4l-3 6c6 5 13 7 21 4z",
+          rightArm: "M37 24c6 1 11 0 16-4l3 6c-6 5-13 7-21 4z",
+          leftLeg: "M29 42c-3 5-6 10-8 16h8c2-4 4-8 7-12z",
+          rightLeg: "M38 42c4 5 7 10 9 16h-8c-2-4-4-8-7-12z",
+          extras: (
+            <>
+              {arrowLeft(6, 23)}
+              {arrowRight(45, 23)}
+            </>
+          ),
+        })
+      );
+    case "wrist-roll":
+      return icon(
+        person({
+          head: [30, 10, 5],
+          torso: "M26 18c-2 8-2 16 0 25h10c3-9 3-17 0-25z",
+          leftArm: "M25 24c-5 3-8 7-10 13l5 3c2-4 5-8 9-10z",
+          rightArm: "M37 23c6 4 10 8 13 14l-6 3c-3-5-6-8-11-11z",
+          leftLeg: "M27 42c-3 5-5 10-7 16h8c2-4 4-8 6-12z",
+          rightLeg: "M36 42c4 5 7 10 9 16h-8c-2-4-4-8-7-12z",
+          extras: <path d="M45 15c7 2 11 8 9 15l4-3 2 3-9 8-6-10 3-2 2 4c1-5-1-9-6-11z" opacity="0.6" />,
+        })
+      );
+    case "wrist-back-press":
+      return icon(
+        person({
+          head: [32, 10, 5],
+          torso: "M28 18c-2 8-2 16 0 25h10c3-9 3-17 0-25z",
+          leftArm: "M28 26c-6 2-10 5-14 10l5 4c3-4 6-6 11-8z",
+          rightArm: "M38 26c5 2 9 5 13 10l-5 4c-3-4-7-6-11-8z",
+          leftLeg: "M29 42c-3 5-6 10-8 16h8c2-4 4-8 7-12z",
+          rightLeg: "M38 42c4 5 7 10 9 16h-8c-2-4-4-8-7-12z",
+          extras: <path d="M16 36h34v7H16zM22 29h6v7h-6zM36 29h6v7h-6z" opacity="0.65" />,
+        })
+      );
+    case "wrist-open-close":
+      return icon(
+        person({
+          head: [31, 10, 5],
+          torso: "M27 18c-2 8-2 16 0 25h10c3-9 3-17 0-25z",
+          leftArm: "M27 24c-5 3-8 7-10 13l5 3c2-4 5-8 9-10z",
+          rightArm: "M38 24c5 3 9 7 12 13l-6 3c-2-4-5-7-9-10z",
+          leftLeg: "M28 42c-3 5-5 10-7 16h8c2-4 4-8 6-12z",
+          rightLeg: "M37 42c4 5 7 10 9 16h-8c-2-4-4-8-7-12z",
+          extras: (
+            <>
+              <path d="M50 30l8-7v14z" opacity="0.6" />
+              <circle cx="47" cy="30" r="3" opacity="0.7" />
+              <path d="M43 46l9-5 2 4-5 3 5 3-2 4z" opacity="0.6" />
+            </>
+          ),
+        })
+      );
+    case "wrist-pull":
+      return icon(
+        person({
+          head: [32, 10, 5],
+          torso: "M28 18c-2 8-2 16 0 25h10c3-9 3-17 0-25z",
+          leftArm: "M28 25c-5 2-9 5-13 10l5 4c3-4 6-6 11-8z",
+          rightArm: "M38 25c7 2 12 5 17 10l-5 5c-4-4-8-7-14-8z",
+          leftLeg: "M29 42c-3 5-6 10-8 16h8c2-4 4-8 7-12z",
+          rightLeg: "M38 42c4 5 7 10 9 16h-8c-2-4-4-8-7-12z",
+          extras: arrowRight(45, 36),
+        })
+      );
+    case "back-side":
+      return icon(
+        person({
+          head: [35, 14, 5],
+          torso: "M31 21c-8 8-11 17-10 28h10c0-8 3-15 9-22z",
+          leftArm: "M29 22c-4-5-6-10-5-17h7c0 5 2 8 6 12z",
+          rightArm: "M39 25c5-3 8-8 10-14l6 3c-2 8-7 14-14 18z",
+          leftLeg: "M23 48c-3 3-6 6-9 10h8c2-2 4-4 7-7z",
+          rightLeg: "M31 48c5 3 10 6 15 10h-10c-4-3-7-5-11-7z",
+          extras: (
+            <>
+              {arrowLeft(7, 24)}
+              {arrowRight(42, 24)}
+            </>
+          ),
+        })
+      );
+    case "back-forward-reach":
+      return icon(
+        person({
+          head: [42, 25, 5],
+          torso: "M20 29c9-4 18-4 27 1l-3 9c-8-3-15-3-22 0z",
+          leftArm: "M43 30c5 0 10 2 14 5l-3 6c-4-3-8-4-13-4z",
+          rightArm: "M42 36c5 1 9 3 13 7l-4 5c-3-3-7-5-12-6z",
+          leftLeg: "M21 37c-4 5-8 9-13 13l6 5c5-4 9-8 13-13z",
+          rightLeg: "M29 38c-1 6-1 12 1 18h8c-2-5-2-10-1-15z",
+          extras: arrowRight(44, 17),
+        })
+      );
+    case "back-twist":
+      return icon(
+        person({
+          head: [32, 10, 5],
+          torso: "M27 18c-3 8-2 17 2 26h10c-4-10-4-18 0-26z",
+          leftArm: "M27 24c-6 0-11 2-15 6l4 5c4-3 8-4 13-4z",
+          rightArm: "M39 24c6 1 10 4 14 9l-5 4c-3-4-6-6-11-7z",
+          leftLeg: "M29 43c-5 2-9 5-14 10l6 5c3-3 7-6 12-8z",
+          rightLeg: "M39 43c4 4 8 8 12 15h-9c-3-4-6-8-10-11z",
+          extras: (
+            <>
+              <path d="M17 20c9-6 20-6 29 0l-5 2 2 4 12-5-8-10-3 3 3 4c-10-6-21-5-31 2z" opacity="0.6" />
+              <path d="M17 46c10 5 21 5 31-1l-3-3 3-3 8 9-11 6-2-4 5-2c-9 4-19 4-28-1z" opacity="0.5" />
+            </>
+          ),
+        })
+      );
+    case "back-hip-circle":
+      return icon(
+        person({
+          head: [32, 10, 5],
+          torso: "M28 18c-2 8-2 16 0 25h10c3-9 3-17 0-25z",
+          leftArm: "M27 24c-5 3-8 7-10 13l5 3c2-4 5-8 9-10z",
+          rightArm: "M39 24c5 3 8 7 10 13l-5 3c-2-4-5-8-9-10z",
+          leftLeg: "M29 42c-3 5-6 10-8 16h8c2-4 4-8 7-12z",
+          rightLeg: "M38 42c4 5 7 10 9 16h-8c-2-4-4-8-7-12z",
+          extras: <path d="M20 40c2-8 9-13 18-12l-4-4 3-3 10 8-11 8-2-3 4-4c-6 0-11 4-13 10 1 7 6 11 13 11l-4-4 3-3 10 8-10 8-3-3 4-4c-10 0-17-6-18-15z" opacity="0.6" />,
+        })
+      );
+    case "leg-forward-fold":
+      return icon(
+        person({
+          head: [43, 31, 5],
+          torso: "M18 28c10-5 20-4 31 3l-4 8c-8-4-15-4-23 0z",
+          leftArm: "M45 33c4 2 7 5 10 10l-5 4c-2-3-5-5-9-7z",
+          rightArm: "M38 36c3 4 5 8 6 13l-6 2c-1-4-3-7-6-10z",
+          leftLeg: "M22 37c-5 5-9 9-14 13l6 5c4-3 8-7 13-12z",
+          rightLeg: "M30 38c-1 6 0 11 2 18h8c-2-5-3-10-2-15z",
+          extras: <path d="M48 47h11v6H48z" opacity="0.55" />,
+        })
+      );
+    case "leg-knee-pull":
+      return icon(
+        person({
+          head: [31, 10, 5],
+          torso: "M27 18c-2 8-2 16 0 25h10c3-9 3-17 0-25z",
+          leftArm: "M27 26c-4 4-6 9-5 15l6-1c0-4 1-7 4-10z",
+          rightArm: "M39 26c4 4 6 9 5 15l-6-1c0-4-1-7-4-10z",
+          leftLeg: "M28 42c-2 5-4 10-5 16h8c1-4 2-8 5-12z",
+          rightLeg: "M38 42c4 1 7 4 9 8l-5 5c-2-3-4-5-8-6z",
+          extras: <path d="M34 42c4-7 8-9 13-8l2 7c-5-1-8 1-11 7z" opacity="0.9" />,
+        })
+      );
+    case "leg-quad-pull":
+      return icon(
+        person({
+          head: [32, 10, 5],
+          torso: "M28 18c-2 8-2 16 0 25h10c3-9 3-17 0-25z",
+          leftArm: "M27 24c-5 3-8 7-10 13l5 3c2-4 5-8 9-10z",
+          rightArm: "M39 24c4 5 7 10 8 17l-6 1c-1-5-3-9-7-12z",
+          leftLeg: "M29 42c-2 5-3 10-4 16h8c1-4 2-8 4-12z",
+          rightLeg: "M38 43c5-1 8-4 9-9l6 3c-2 8-8 13-16 14z",
+          extras: <path d="M48 34c2 0 4 1 5 3l-2 5c-2-1-4-1-6 0z" opacity="0.7" />,
+        })
+      );
+    case "leg-calf-stretch":
+      return icon(
+        person({
+          head: [34, 12, 5],
+          torso: "M29 19c-4 7-4 15-1 23h10c3-8 3-15-1-23z",
+          leftArm: "M29 24c-6 1-11 4-15 9l5 5c3-4 7-6 12-7z",
+          rightArm: "M38 24c5 2 9 5 12 10l-5 4c-3-4-6-6-11-7z",
+          leftLeg: "M29 41c-6 1-11 4-16 9l5 6c4-4 9-6 15-7z",
+          rightLeg: "M38 41c7 4 12 8 18 15h-10c-4-4-8-7-13-10z",
+          extras: <path d="M51 20h7v38h-7z" opacity="0.55" />,
+        })
+      );
+    default:
+      return getGenericStretchPictogram(className);
+  }
+}
+
 const HISTORY_REPORT_AREAS: PostureRecommendationArea[] = ["neck", "torso"];
 
 function getHistoryAreaScores(postureAreaStats?: PostureAreaStats) {
@@ -345,6 +705,27 @@ function getHistoryWeakestArea(postureAreaStats?: PostureAreaStats) {
   return getHistoryAreaScores(postureAreaStats)
     .filter((item): item is { area: PostureRecommendationArea; label: string; score: number } => item.score !== null)
     .sort((left, right) => left.score - right.score)[0] ?? null;
+}
+
+function getHistoryReportComment(areaScores: ReturnType<typeof getHistoryAreaScores>) {
+  const validScores = areaScores
+    .filter((item): item is { area: PostureRecommendationArea; label: string; score: number } => item.score !== null)
+    .sort((left, right) => left.score - right.score);
+  const weakest = validScores[0];
+
+  if (!weakest) {
+    return "부위별 기록이 아직 충분하지 않습니다.";
+  }
+
+  if (weakest.score < 60) {
+    return `${weakest.label} 점수가 낮아 먼저 확인이 필요합니다.`;
+  }
+
+  if (weakest.score < 75) {
+    return `${weakest.label} 정렬을 조금 더 확인하세요.`;
+  }
+
+  return "목과 허리 균형이 안정적으로 기록되었습니다.";
 }
 
 function getScoreIndicatorStyle(score: number | null) {
@@ -1221,6 +1602,12 @@ export function PostureCoachApp() {
   const [completedStretchSteps, setCompletedStretchSteps] = useState<number[]>([]);
   const [stretchCalibrationStatus, setStretchCalibrationStatus] = useState<StretchCalibrationStatus>("idle");
   const [stretchCalibrationMessage, setStretchCalibrationMessage] = useState("스트레칭 분석을 시작하면 기준 자세를 측정합니다.");
+  const [stretchBeepEnabled, setStretchBeepEnabled] = useState(() => {
+    if (typeof window === "undefined") {
+      return true;
+    }
+    return window.localStorage.getItem(STRETCH_BEEP_STORAGE_KEY) !== "false";
+  });
   const [latestPosture, setLatestPosture] = useState<PostureResult>(createInitialPosture);
   const [hasCurrentSessionPostureData, setHasCurrentSessionPostureData] = useState(false);
   const [stretchCoaching, setStretchCoaching] = useState<StretchCoachingResult>(createInitialStretchState);
@@ -1283,6 +1670,8 @@ export function PostureCoachApp() {
   const stretchCalibrationSamplesRef = useRef<StretchCalibrationSample[]>([]);
   const latestStretchCoachingRef = useRef<StretchCoachingResult>(createInitialStretchState());
   const dynamicStretchRuntimeRef = useRef<DynamicStretchRuntimeState>(createDynamicStretchRuntimeState());
+  const stretchBeepAudioContextRef = useRef<AudioContext | null>(null);
+  const stretchBeepEventKeysRef = useRef<Set<string>>(new Set());
   const lastSnapshotAtRef = useRef(0);
   const snapshotSavingRef = useRef(false);
   const bestSnapshotRef = useRef<SnapshotExtrema>(null);
@@ -1407,6 +1796,9 @@ export function PostureCoachApp() {
     selectedStretch && completedStretchSteps.length >= selectedStretch.steps.length
   );
   const isStretchingMode = appMode === "stretching";
+  const isStretchBeepSupported =
+    typeof window === "undefined" ||
+    Boolean(window.AudioContext || (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext);
   const modeLabel =
     appMode === "posture"
       ? "자세 분석 중"
@@ -1415,6 +1807,72 @@ export function PostureCoachApp() {
         : "자세 분석 일시중지";
   const resetDynamicStretchRuntime = useCallback(() => {
     dynamicStretchRuntimeRef.current = createDynamicStretchRuntimeState();
+  }, []);
+  const playStretchBeep = useCallback((count: 1 | 2 | 3, eventKey: string, delayMs = 0) => {
+    if (!stretchBeepEnabled || typeof window === "undefined" || appModeRef.current !== "stretching") {
+      return;
+    }
+    if (stretchBeepEventKeysRef.current.has(eventKey)) {
+      return;
+    }
+    stretchBeepEventKeysRef.current.add(eventKey);
+
+    const audioWindow = window as Window & typeof globalThis & { webkitAudioContext?: typeof AudioContext };
+    const AudioContextConstructor = audioWindow.AudioContext ?? audioWindow.webkitAudioContext;
+    if (!AudioContextConstructor) {
+      return;
+    }
+
+    let audioContext = stretchBeepAudioContextRef.current;
+    if (!audioContext) {
+      audioContext = new AudioContextConstructor();
+      stretchBeepAudioContextRef.current = audioContext;
+    }
+
+    const playSequence = async () => {
+      if (!audioContext) {
+        return;
+      }
+      if (audioContext.state === "suspended") {
+        await audioContext.resume();
+      }
+
+      for (let index = 0; index < count; index += 1) {
+        window.setTimeout(() => {
+          if (!audioContext) {
+            return;
+          }
+          const oscillator = audioContext.createOscillator();
+          const gain = audioContext.createGain();
+          const startAt = audioContext.currentTime;
+          oscillator.type = "sine";
+          oscillator.frequency.setValueAtTime(880, startAt);
+          gain.gain.setValueAtTime(0.0001, startAt);
+          gain.gain.exponentialRampToValueAtTime(0.045, startAt + 0.015);
+          gain.gain.exponentialRampToValueAtTime(0.0001, startAt + 0.12);
+          oscillator.connect(gain);
+          gain.connect(audioContext.destination);
+          oscillator.start(startAt);
+          oscillator.stop(startAt + 0.13);
+          oscillator.onended = () => {
+            oscillator.disconnect();
+            gain.disconnect();
+          };
+        }, index * 180);
+      }
+    };
+
+    window.setTimeout(() => {
+      void playSequence().catch((error) => {
+        console.warn("Failed to play stretch beep:", error);
+      });
+    }, delayMs);
+  }, [stretchBeepEnabled]);
+  const updateStretchBeepEnabled = useCallback((enabled: boolean) => {
+    setStretchBeepEnabled(enabled);
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(STRETCH_BEEP_STORAGE_KEY, String(enabled));
+    }
   }, []);
   const setIsStretchingMode = useCallback((nextIsStretching: boolean) => {
     if (nextIsStretching) {
@@ -1890,6 +2348,7 @@ export function PostureCoachApp() {
         if (stretch) {
           const isLastStep = activeStepIndex >= stretch.steps.length - 1;
           if (isLastStep) {
+            playStretchBeep(3, `stretch-complete:${stretch.id}`);
             setIsStretchingMode(false);
             stableResult = {
               ...stableResult,
@@ -1898,6 +2357,8 @@ export function PostureCoachApp() {
             };
           } else {
             const nextStepIndex = activeStepIndex + 1;
+            playStretchBeep(2, `step-complete:${stretch.id}:${activeStepIndex}`);
+            playStretchBeep(1, `step-start:${stretch.id}:${nextStepIndex}`, 520);
             activeStretchStepIndexRef.current = nextStepIndex;
             setActiveStretchStepIndex(nextStepIndex);
             resetDynamicStretchRuntime();
@@ -2007,6 +2468,7 @@ export function PostureCoachApp() {
             const averageMatchPercentage = matchSamples.length
               ? Math.round(matchSamples.reduce((sum, score) => sum + score, 0) / matchSamples.length)
               : stableResult.matchPercentage;
+            playStretchBeep(3, `stretch-complete:${stretch.id}`);
             setIsStretchingMode(false);
             stableResult = {
               ...stableResult,
@@ -2033,6 +2495,8 @@ export function PostureCoachApp() {
             }
           } else {
             const nextStepIndex = activeStepIndex + 1;
+            playStretchBeep(2, `step-complete:${stretch.id}:${activeStepIndex}`);
+            playStretchBeep(1, `step-start:${stretch.id}:${nextStepIndex}`, 520);
             activeStretchStepIndexRef.current = nextStepIndex;
             setActiveStretchStepIndex(nextStepIndex);
             resetDynamicStretchRuntime();
@@ -2063,7 +2527,7 @@ export function PostureCoachApp() {
     latestStretchCoachingRef.current = stableResult;
     lastStretchFeedbackUpdateAtRef.current = now;
     setStretchCoaching(stableResult);
-  }, []);
+  }, [playStretchBeep, resetDynamicStretchRuntime, setIsStretchingMode]);
 
   const recordPostureScore = useCallback((posture: PostureResult) => {
     if (!posture.isTracking || typeof posture.score !== "number") {
@@ -2527,6 +2991,7 @@ export function PostureCoachApp() {
     activeStretchIdRef.current = stretchId;
     activeStretchStepIndexRef.current = 0;
     completedStretchStepsRef.current = new Set();
+    stretchBeepEventKeysRef.current = new Set();
     if (appModeRef.current === "stretching") {
       setIsStretchingMode(false);
     }
@@ -2561,6 +3026,8 @@ export function PostureCoachApp() {
     setActiveTab("stretching");
     setModeMessage("스트레칭 모드로 전환합니다. 자세 분석이 일시중지됩니다.");
     setIsStretchingMode(true);
+    stretchBeepEventKeysRef.current = new Set();
+    playStretchBeep(1, `step-start:${activeStretchIdRef.current}:${activeStretchStepIndexRef.current}`);
     beginStretchCalibration();
 
     if (!isRunning) {
@@ -2578,7 +3045,7 @@ export function PostureCoachApp() {
       };
       void saveStretchLog(uid, sessionId, payload);
     }
-  }, [beginStretchCalibration, isRunning, startApp]);
+  }, [beginStretchCalibration, isRunning, playStretchBeep, startApp]);
 
   const handleStopStretchingMode = useCallback(async () => {
     setIsStretchingMode(false);
@@ -2675,10 +3142,14 @@ export function PostureCoachApp() {
     }
 
     if (isComplete) {
+      playStretchBeep(3, `stretch-complete:${stretch.id}`);
       setIsStretchingMode(false);
       resetStretchCalibration();
+    } else if (appModeRef.current === "stretching") {
+      playStretchBeep(2, `step-complete:${stretch.id}:${currentStepIndex}`);
+      playStretchBeep(1, `step-start:${stretch.id}:${nextStepIndex}`, 520);
     }
-  }, [resetDynamicStretchRuntime, resetStretchCalibration]);
+  }, [playStretchBeep, resetDynamicStretchRuntime, resetStretchCalibration, setIsStretchingMode]);
 
   const handleClearStretchSelection = useCallback(() => {
     if (isStretchingMode) {
@@ -2690,6 +3161,7 @@ export function PostureCoachApp() {
     activeStretchIdRef.current = null;
     activeStretchStepIndexRef.current = 0;
     completedStretchStepsRef.current = new Set();
+    stretchBeepEventKeysRef.current = new Set();
     stretchHoldStartedAtRef.current = null;
     smoothedStretchMatchRef.current = null;
     stretchCompletionMatchSamplesRef.current = [];
@@ -2710,26 +3182,6 @@ export function PostureCoachApp() {
     const saved = await saveUserSettings(uid, nextSettings);
     setSettingsSaveStatus(saved ? "saved" : "error");
   }, []);
-
-  const updateSettings = useCallback(
-    (changes: Partial<Settings>) => {
-      setSettings((current) => {
-        const nextSettings = {
-          ...current,
-          ...changes,
-          notificationPermissionStatus: getNotificationPermissionStatus(),
-        };
-        settingsRef.current = nextSettings;
-        analyzerRef.current.setPreferredSideMode(nextSettings.preferredSideMode);
-        detectorRef.current?.setOptions({ smoothLandmarks: nextSettings.smoothingEnabled });
-        setSettingsDraft(nextSettings);
-        setBadPostureDurationMinutesInput(String(nextSettings.badPostureDurationMinutes));
-        void persistSettings(nextSettings);
-        return nextSettings;
-      });
-    },
-    [persistSettings]
-  );
 
   const updateSettingsDraft = useCallback((changes: Partial<Settings>) => {
     setSettingsDraft((current) => ({
@@ -2764,6 +3216,28 @@ export function PostureCoachApp() {
     detectorRef.current?.setOptions({ smoothLandmarks: nextSettings.smoothingEnabled });
     void persistSettings(nextSettings);
   }, [badPostureDurationMinutesInput, persistSettings, settingsDraft]);
+
+  const handleApplyAnalysisSettings = useCallback(() => {
+    const nextSettings = {
+      ...settings,
+      landmarkOverlayEnabled: settingsDraft.landmarkOverlayEnabled,
+      smoothingEnabled: settingsDraft.smoothingEnabled,
+      preferredSideMode: settingsDraft.preferredSideMode,
+      notificationPermissionStatus: getNotificationPermissionStatus(),
+    };
+    setSettings(nextSettings);
+    setSettingsDraft((current) => ({
+      ...current,
+      landmarkOverlayEnabled: nextSettings.landmarkOverlayEnabled,
+      smoothingEnabled: nextSettings.smoothingEnabled,
+      preferredSideMode: nextSettings.preferredSideMode,
+      notificationPermissionStatus: nextSettings.notificationPermissionStatus,
+    }));
+    settingsRef.current = nextSettings;
+    analyzerRef.current.setPreferredSideMode(nextSettings.preferredSideMode);
+    detectorRef.current?.setOptions({ smoothLandmarks: nextSettings.smoothingEnabled });
+    void persistSettings(nextSettings);
+  }, [persistSettings, settings, settingsDraft.landmarkOverlayEnabled, settingsDraft.preferredSideMode, settingsDraft.smoothingEnabled]);
 
   const handleResetSettings = useCallback(() => {
     const nextSettings = createDefaultSettings();
@@ -2891,6 +3365,8 @@ export function PostureCoachApp() {
       const detector = detectorRef.current;
       detectorRef.current = null;
       void detector?.close?.();
+      void stretchBeepAudioContextRef.current?.close();
+      stretchBeepAudioContextRef.current = null;
     };
   }, [refreshHistory]);
 
@@ -2978,7 +3454,8 @@ export function PostureCoachApp() {
                 <p className="text-sm text-gray-500">측정 준비 상태를 확인하세요</p>
               </div>
             </div>
-            <div className="grid gap-1.5 text-sm">
+            <div className="grid gap-4 text-sm sm:grid-cols-[300px_minmax(0,1fr)] sm:items-start">
+              <div className="grid gap-1.5">
               <div className="grid max-w-[300px] grid-cols-[92px_minmax(0,180px)] items-center gap-3 border-b border-gray-200 pb-1.5 leading-5">
                 <span className="text-gray-500">카메라 상태</span>
                 <strong className="inline-flex items-center justify-end gap-2 text-right font-bold text-gray-900">
@@ -2999,10 +3476,9 @@ export function PostureCoachApp() {
                   {homeScoreInsight.latestMeasuredAt ? formatTime(homeScoreInsight.latestMeasuredAt) : "--"}
                 </strong>
               </div>
-            </div>
-            <div className="mt-4 border-t border-gray-200 pt-3">
-              <div className="grid gap-2 text-sm sm:grid-cols-[minmax(160px,0.7fr)_minmax(0,1fr)] sm:items-start">
-                <div className="grid grid-cols-[76px_minmax(0,160px)] items-center gap-3 border-b border-gray-200 pb-1.5 leading-5">
+              </div>
+              <div className="grid max-w-[560px] gap-2">
+                <div className="grid max-w-[280px] grid-cols-[76px_minmax(0,160px)] items-center gap-3 border-b border-gray-200 pb-1.5 leading-5">
                   <span className="font-bold text-gray-900">주의 부위</span>
                   <strong className="inline-flex items-center justify-end gap-1.5 text-right tabular-nums text-[#18755B]">
                     {homeScoreInsight.weakestArea ? getPostureAreaIcon(homeScoreInsight.weakestArea) : null}
@@ -3058,27 +3534,27 @@ export function PostureCoachApp() {
         </div>
       </section>
 
-      <div className="grid gap-5 xl:grid-cols-[440px_minmax(0,1fr)]">
-      <section className="app-surface p-5">
-        <div className="mb-4 flex items-center gap-3">
-          <div className="flex h-9 w-9 items-center justify-center bg-[#C4F6E8] text-[#18755B]">
-            <CheckCircle className="h-5 w-5" />
+      <div className="grid items-start gap-5 xl:grid-cols-[380px_minmax(0,1fr)]">
+      <section className="app-surface self-start px-4 py-3 xl:self-center">
+        <div className="mb-2 flex items-center gap-3">
+          <div className="flex h-8 w-8 items-center justify-center bg-[#C4F6E8] text-[#18755B]">
+            <CheckCircle className="h-4 w-4" />
           </div>
           <div>
             <h2 className="text-lg font-bold text-gray-900">최근 변화</h2>
             <p className="text-sm text-gray-500">지난 24시간</p>
           </div>
         </div>
-        <div className="grid gap-5 sm:grid-cols-[140px_240px] sm:items-end">
+        <div className="grid gap-3 sm:grid-cols-[120px_220px] sm:items-end">
           <div className="min-w-0">
             <div className="flex items-end gap-3 text-gray-900">
-              <span className="text-3xl font-black leading-none">
+              <span className="text-2xl font-black leading-none">
                 {recentSummary?.averageScore === null || recentSummary?.averageScore === undefined ? "--" : `${recentSummary.averageScore}`}
               </span>
               <span className="mb-1 text-sm font-bold text-gray-500">/100</span>
             </div>
             <p
-              className={`mt-2 inline-flex border px-2.5 py-1 text-sm font-bold ${
+              className={`mt-1 inline-flex border px-2 py-0.5 text-sm font-bold ${
                 homeScoreInsight.trend === null
                   ? "border-gray-200 bg-white text-gray-500"
                   : homeScoreInsight.trend >= 0
@@ -3091,8 +3567,8 @@ export function PostureCoachApp() {
                 : `7일 평균보다 ${homeScoreInsight.trend >= 0 ? "+" : ""}${homeScoreInsight.trend}`}
             </p>
           </div>
-          <div className="grid max-w-[240px] gap-2 text-sm">
-            <div className="grid max-w-[240px] grid-cols-[76px_minmax(0,120px)] items-center gap-3 border-b border-gray-200 pb-2 leading-5">
+          <div className="grid max-w-[220px] gap-1 text-sm">
+            <div className="grid max-w-[220px] grid-cols-[76px_minmax(0,100px)] items-center gap-3 border-b border-gray-200 pb-1 leading-5">
               <span className="text-gray-500">주의 부위</span>
               <strong className="text-right tabular-nums text-gray-900">
                 {homeScoreInsight.weakestAreaLabel
@@ -3100,7 +3576,7 @@ export function PostureCoachApp() {
                   : "--"}
               </strong>
             </div>
-            <div className="grid max-w-[240px] grid-cols-[76px_minmax(0,120px)] items-center gap-3 border-b border-gray-200 pb-2 leading-5">
+            <div className="grid max-w-[220px] grid-cols-[76px_minmax(0,100px)] items-center gap-3 border-b border-gray-200 pb-1 leading-5">
               <span className="text-gray-500">최고 / 최저</span>
               <strong className="text-right tabular-nums text-gray-900">
                 {homeScoreInsight.bestScore !== null || homeScoreInsight.worstScore !== null
@@ -3219,32 +3695,41 @@ export function PostureCoachApp() {
               <SlidersHorizontal className="h-5 w-5 text-blue-600" />
               <h3 className="text-lg font-bold text-gray-900">분석 옵션</h3>
             </div>
-            {settingsStatusText && (
-              <span
-                className={`border px-3 py-1 text-xs font-medium ${
-                  settingsSaveStatus === "error" ? "bg-red-100 text-red-700" : "bg-blue-50 text-blue-700"
-                }`}
+            <div className="flex flex-wrap items-center gap-2">
+              {settingsStatusText && (
+                <span
+                  className={`border px-3 py-1 text-xs font-medium ${
+                    settingsSaveStatus === "error" ? "bg-red-100 text-red-700" : "bg-blue-50 text-blue-700"
+                  }`}
+                >
+                  {settingsStatusText}
+                </span>
+              )}
+              <button
+                type="button"
+                onClick={handleApplyAnalysisSettings}
+                className="bg-blue-600 px-4 py-2 text-sm font-bold text-white"
               >
-                {settingsStatusText}
-              </span>
-            )}
+                적용하기
+              </button>
+            </div>
           </div>
           <div className="space-y-4">
             <ToggleControl
-              checked={settings.landmarkOverlayEnabled}
-              onChange={(checked) => updateSettings({ landmarkOverlayEnabled: checked })}
+              checked={settingsDraft.landmarkOverlayEnabled}
+              onChange={(checked) => updateSettingsDraft({ landmarkOverlayEnabled: checked })}
               label="자세 랜드마크 표시 켜기/끄기"
             />
             <ToggleControl
-              checked={settings.smoothingEnabled}
-              onChange={(checked) => updateSettings({ smoothingEnabled: checked })}
+              checked={settingsDraft.smoothingEnabled}
+              onChange={(checked) => updateSettingsDraft({ smoothingEnabled: checked })}
               label="점수 부드럽게 처리 켜기/끄기"
             />
             <label className="block">
               <span className="text-sm font-medium text-gray-700">측면 분석 기준</span>
               <select
-                value={settings.preferredSideMode}
-                onChange={(event) => updateSettings({ preferredSideMode: event.target.value as SideMode })}
+                value={settingsDraft.preferredSideMode}
+                onChange={(event) => updateSettingsDraft({ preferredSideMode: event.target.value as SideMode })}
                 className="mt-2 w-full rounded-lg border border-gray-300 bg-white px-3 py-2"
               >
                 <option value="auto">자동</option>
@@ -3521,8 +4006,8 @@ export function PostureCoachApp() {
           {selectedStretch && activeStretchStep && (
             <div className="border border-[#12644C] bg-[#18755B] p-6 text-white">
               <div className="flex items-start gap-3">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center bg-white/20">
-                  <Activity className="h-5 w-5" />
+                <div className="flex h-16 w-16 shrink-0 items-center justify-center bg-white/15 text-white">
+                  {getStretchStepPictogram(activeStretchStep.checkType, "h-14 w-14")}
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
@@ -3536,6 +4021,16 @@ export function PostureCoachApp() {
                       </span>
                     )}
                   </div>
+                  <label className="mt-3 inline-flex cursor-pointer items-center gap-2 border border-white/20 bg-white/15 px-2.5 py-1 text-xs font-bold text-blue-50">
+                    <input
+                      type="checkbox"
+                      checked={stretchBeepEnabled && isStretchBeepSupported}
+                      disabled={!isStretchBeepSupported}
+                      onChange={(event) => updateStretchBeepEnabled(event.target.checked)}
+                      className="h-4 w-4"
+                    />
+                    <span>소리 안내</span>
+                  </label>
                   <p className="mt-3 text-sm font-bold text-blue-50">{activeStretchStep.title}</p>
                   <p className="mt-1 text-base leading-7 text-blue-50">{activeStretchStep.instruction}</p>
                   {isDynamicStretchStep(activeStretchStep) && (
@@ -3641,6 +4136,11 @@ export function PostureCoachApp() {
                   {selectedStretch.steps.map((step, index) => {
                     const isCurrent = index === activeStretchStepIndex;
                     const isDone = completedStretchSteps.includes(index);
+                    const pictogramBoxClassName = isCurrent
+                      ? "bg-[#E7FFF7] text-[#18755B]"
+                      : isDone
+                        ? "bg-green-100 text-green-700"
+                        : "bg-gray-50 text-gray-400";
                     return (
                       <button
                         key={step.id}
@@ -3648,6 +4148,9 @@ export function PostureCoachApp() {
                         onClick={() => {
                           activeStretchStepIndexRef.current = index;
                           setActiveStretchStepIndex(index);
+                          if (appModeRef.current === "stretching") {
+                            playStretchBeep(1, `step-start:${selectedStretch.id}:${index}`);
+                          }
                           resetDynamicStretchRuntime();
                           stretchHoldStartedAtRef.current = null;
                           lastStretchFeedbackUpdateAtRef.current = 0;
@@ -3681,7 +4184,10 @@ export function PostureCoachApp() {
                           >
                             {isDone ? <CheckCircle className="h-4 w-4" /> : index + 1}
                           </div>
-                          <div className="min-w-0">
+                          <div className={`flex h-10 w-10 shrink-0 items-center justify-center ${pictogramBoxClassName}`}>
+                            {getStretchStepPictogram(step.checkType, "h-8 w-8")}
+                          </div>
+                          <div className="min-w-0 flex-1">
                             <div className="flex flex-wrap items-center gap-2">
                               <p className="font-bold text-gray-900">{step.title}</p>
                               {isCurrent && (
@@ -3815,6 +4321,7 @@ export function PostureCoachApp() {
               {selectedHistoryGroup.sessions.map((session) => {
                 const areaScores = getHistoryAreaScores(session.postureAreaStats);
                 const weakestArea = getHistoryWeakestArea(session.postureAreaStats);
+                const historyReportComment = getHistoryReportComment(areaScores);
                 const isImagesExpanded = expandedHistoryImageSessions.has(session.sessionId);
 
                   return (
@@ -3851,25 +4358,30 @@ export function PostureCoachApp() {
                             <span>{weakestArea ? `${weakestArea.label} ${weakestArea.score}` : "--"}</span>
                           </strong>
                         </div>
-                        <div className="grid gap-2 text-sm">
-                          {areaScores.map((area) => (
-                            <div key={area.area} className="flex min-w-0 items-center gap-3 leading-5">
-                              <span
-                                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border text-sm font-bold tabular-nums text-[#001A12]"
-                                style={getScoreIndicatorStyle(area.score)}
-                              >
-                                {area.score ?? "--"}
-                              </span>
-                              <span className="inline-flex min-w-0 items-center gap-1.5 text-gray-500">
-                                <span
-                                  className="inline-flex shrink-0 text-[#18755B]"
-                                >
-                                  {getPostureAreaIcon(area.area, "h-3.5 w-3.5")}
+                        <div className="grid gap-3 sm:grid-cols-[minmax(0,170px)_minmax(0,1fr)] sm:items-end">
+                          <div className="grid grid-cols-2 gap-3 text-sm">
+                            {areaScores.map((area) => (
+                              <div key={area.area} className="grid min-w-0 justify-items-start gap-1.5 leading-5">
+                                <span className="inline-flex min-w-0 items-center gap-1.5 text-gray-500">
+                                  <span
+                                    className="inline-flex shrink-0 text-[#18755B]"
+                                  >
+                                    {getPostureAreaIcon(area.area, "h-3.5 w-3.5")}
+                                  </span>
+                                  <span>{area.label}</span>
                                 </span>
-                                <span>{area.label}</span>
-                              </span>
-                            </div>
-                          ))}
+                                <span
+                                  className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border text-sm font-bold tabular-nums text-[#001A12] lg:h-[52px] lg:w-[52px]"
+                                  style={getScoreIndicatorStyle(area.score)}
+                                >
+                                  {area.score ?? "--"}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                          <p className="max-w-[260px] text-sm leading-6 text-gray-600">
+                            {historyReportComment}
+                          </p>
                         </div>
                       </div>
 
@@ -4262,12 +4774,13 @@ export function PostureCoachApp() {
         {activeTab === "settings" && renderSettings()}
       </main>
 
-      <nav className="fixed inset-x-0 bottom-0 z-50 bg-transparent px-4 pb-[calc(0.5rem+env(safe-area-inset-bottom))]" aria-label="하단 내비게이션">
-        <div className="mx-auto grid max-w-[560px] grid-cols-4 border border-[#12644C]/20 bg-white px-2 pt-1">
+      <nav className="fixed inset-x-0 bottom-0 z-50 bg-white pb-[calc(0.5rem+env(safe-area-inset-bottom))]" aria-label="하단 내비게이션">
+        <div className="w-full border-t border-[#12644C]/20 px-2 pt-1">
+          <div className="mx-auto grid max-w-[560px] grid-cols-4">
           {[
             { id: "home" as Tab, label: "홈", icon: <House className="h-5 w-5" /> },
             { id: "analysis" as Tab, label: "자세 분석", icon: <Video className="h-5 w-5" /> },
-            { id: "stretching" as Tab, label: "스트레칭 분석", icon: <StretchHorizontal className="h-5 w-5" /> },
+            { id: "stretching" as Tab, label: "스트레칭 분석", icon: <Dumbbell className="h-5 w-5" /> },
             { id: "history" as Tab, label: "기록 보기", icon: <History className="h-5 w-5" /> },
           ].map((tab) => {
             const isActive = activeTab === tab.id;
@@ -4286,6 +4799,7 @@ export function PostureCoachApp() {
               </button>
             );
           })}
+          </div>
         </div>
       </nav>
     </div>
