@@ -2979,21 +2979,21 @@ export function PostureCoachApp() {
               </div>
             </div>
             <div className="grid gap-1.5 text-sm">
-              <div className="grid grid-cols-[92px_minmax(0,220px)] items-center gap-3 border-b border-gray-200 pb-1.5 leading-5">
+              <div className="grid max-w-[300px] grid-cols-[92px_minmax(0,180px)] items-center gap-3 border-b border-gray-200 pb-1.5 leading-5">
                 <span className="text-gray-500">카메라 상태</span>
                 <strong className="inline-flex items-center justify-end gap-2 text-right font-bold text-gray-900">
                   <span className="app-status-dot text-[#18755B]" />
                   {cameraText}
                 </strong>
               </div>
-              <div className="grid grid-cols-[92px_minmax(0,220px)] items-center gap-3 border-b border-gray-200 pb-1.5 leading-5">
+              <div className="grid max-w-[300px] grid-cols-[92px_minmax(0,180px)] items-center gap-3 border-b border-gray-200 pb-1.5 leading-5">
                 <span className="text-gray-500">분석 상태</span>
                 <strong className="inline-flex items-center justify-end gap-2 text-right font-bold text-gray-900">
                   <span className={`app-status-dot ${isRunning ? "text-[#18755B]" : "text-gray-400"}`} />
                   {isRunning ? "분석 중" : "분석 대기"}
                 </strong>
               </div>
-              <div className="grid grid-cols-[92px_minmax(0,220px)] items-center gap-3 leading-5">
+              <div className="grid max-w-[300px] grid-cols-[92px_minmax(0,180px)] items-center gap-3 leading-5">
                 <span className="text-gray-500">최근 측정</span>
                 <strong className="text-right font-bold tabular-nums text-gray-900">
                   {homeScoreInsight.latestMeasuredAt ? formatTime(homeScoreInsight.latestMeasuredAt) : "--"}
@@ -3058,6 +3058,7 @@ export function PostureCoachApp() {
         </div>
       </section>
 
+      <div className="grid gap-5 xl:grid-cols-[440px_minmax(0,1fr)]">
       <section className="app-surface p-5">
         <div className="mb-4 flex items-center gap-3">
           <div className="flex h-9 w-9 items-center justify-center bg-[#C4F6E8] text-[#18755B]">
@@ -3068,8 +3069,8 @@ export function PostureCoachApp() {
             <p className="text-sm text-gray-500">지난 24시간</p>
           </div>
         </div>
-        <div className="grid gap-5 lg:grid-cols-[minmax(0,0.8fr)_minmax(260px,1fr)] lg:items-start">
-          <div>
+        <div className="grid gap-5 sm:grid-cols-[140px_240px] sm:items-end">
+          <div className="min-w-0">
             <div className="flex items-end gap-3 text-gray-900">
               <span className="text-3xl font-black leading-none">
                 {recentSummary?.averageScore === null || recentSummary?.averageScore === undefined ? "--" : `${recentSummary.averageScore}`}
@@ -3090,8 +3091,8 @@ export function PostureCoachApp() {
                 : `7일 평균보다 ${homeScoreInsight.trend >= 0 ? "+" : ""}${homeScoreInsight.trend}`}
             </p>
           </div>
-          <div className="grid gap-2 text-sm">
-            <div className="flex items-center justify-between gap-4 border-b border-gray-200 pb-2 leading-5">
+          <div className="grid max-w-[240px] gap-2 text-sm">
+            <div className="grid max-w-[240px] grid-cols-[76px_minmax(0,120px)] items-center gap-3 border-b border-gray-200 pb-2 leading-5">
               <span className="text-gray-500">주의 부위</span>
               <strong className="text-right tabular-nums text-gray-900">
                 {homeScoreInsight.weakestAreaLabel
@@ -3099,7 +3100,7 @@ export function PostureCoachApp() {
                   : "--"}
               </strong>
             </div>
-            <div className="flex items-center justify-between gap-4 border-b border-gray-200 pb-2 leading-5">
+            <div className="grid max-w-[240px] grid-cols-[76px_minmax(0,120px)] items-center gap-3 border-b border-gray-200 pb-2 leading-5">
               <span className="text-gray-500">최고 / 최저</span>
               <strong className="text-right tabular-nums text-gray-900">
                 {homeScoreInsight.bestScore !== null || homeScoreInsight.worstScore !== null
@@ -3129,15 +3130,16 @@ export function PostureCoachApp() {
           </div>
         )}
         <div className="mt-4 grid gap-2 border-t border-gray-200 pt-3 text-sm sm:grid-cols-2">
-          <div className="flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
             <span className="text-gray-500">사용 시간</span>
-            <strong className="text-right tabular-nums text-gray-900">{formatMinutes(recentSummary?.totalUsageMinutes ?? 0)}</strong>
+            <strong className="tabular-nums text-gray-900">{formatMinutes(recentSummary?.totalUsageMinutes ?? 0)}</strong>
           </div>
-          <div className="flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
             <span className="text-gray-500">알림 횟수</span>
-            <strong className="text-right tabular-nums text-gray-900">{recentSummary?.alertCount ?? 0}</strong>
+            <strong className="tabular-nums text-gray-900">{recentSummary?.alertCount ?? 0}</strong>
           </div>
         </div>
+      </div>
       </div>
     </div>
   );
