@@ -347,6 +347,23 @@ function getHistoryWeakestArea(postureAreaStats?: PostureAreaStats) {
     .sort((left, right) => left.score - right.score)[0] ?? null;
 }
 
+function getScoreIndicatorStyle(score: number | null) {
+  if (score === null) {
+    return {
+      background: "#ffffff",
+      borderColor: "rgba(18, 100, 76, 0.22)",
+    };
+  }
+
+  const fill = score >= 85 ? 270 : score >= 70 ? 210 : score >= 55 ? 150 : 90;
+  const color = score < 60 ? "#EAB308" : "#39AF8E";
+
+  return {
+    background: `conic-gradient(${color} 0deg ${fill}deg, #D6F3EB ${fill}deg 360deg)`,
+    borderColor: "rgba(18, 100, 76, 0.22)",
+  };
+}
+
 function recordPostureAreaStats(stats: PostureAreaStats, posture: PostureResult) {
   if (!posture.isTracking || !posture.metrics) {
     return;
@@ -1210,6 +1227,7 @@ export function PostureCoachApp() {
   const [recentSummary, setRecentSummary] = useState<RecentSummary | null>(null);
   const [historyGroups, setHistoryGroups] = useState<HistoryGroup[]>([]);
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+  const [selectedHistoryDateKey, setSelectedHistoryDateKey] = useState<string | null>(null);
   const [storageText, setStorageText] = useState("Firebase 확인 중");
   const [storageTone, setStorageTone] = useState<"good" | "warn" | "danger">("warn");
   const [cameraText, setCameraText] = useState("카메라 대기");
@@ -1381,6 +1399,10 @@ export function PostureCoachApp() {
   }, [personalizedStretchRecommendations, recommendedStretches]);
   const selectedStretch = useMemo(() => getStretchById(activeStretchId), [activeStretchId]);
   const activeStretchStep = selectedStretch?.steps[activeStretchStepIndex] ?? null;
+  const selectedHistoryGroup = useMemo(
+    () => historyGroups.find((group) => group.dateKey === selectedHistoryDateKey) ?? historyGroups[0] ?? null,
+    [historyGroups, selectedHistoryDateKey]
+  );
   const isSelectedStretchComplete = Boolean(
     selectedStretch && completedStretchSteps.length >= selectedStretch.steps.length
   );
@@ -2883,6 +2905,19 @@ export function PostureCoachApp() {
   }, [activeTab]);
 
   useEffect(() => {
+    if (historyGroups.length === 0) {
+      if (selectedHistoryDateKey !== null) {
+        setSelectedHistoryDateKey(null);
+      }
+      return;
+    }
+
+    if (!selectedHistoryDateKey || !historyGroups.some((group) => group.dateKey === selectedHistoryDateKey)) {
+      setSelectedHistoryDateKey(historyGroups[0].dateKey);
+    }
+  }, [historyGroups, selectedHistoryDateKey]);
+
+  useEffect(() => {
     appModeRef.current = appMode;
   }, [appMode]);
 
@@ -2944,21 +2979,21 @@ export function PostureCoachApp() {
               </div>
             </div>
             <div className="grid gap-1.5 text-sm">
-              <div className="flex items-center justify-between gap-4 border-b border-gray-200 pb-1.5 leading-5">
+              <div className="grid grid-cols-[92px_minmax(0,220px)] items-center gap-3 border-b border-gray-200 pb-1.5 leading-5">
                 <span className="text-gray-500">카메라 상태</span>
-                <strong className="inline-flex items-center gap-2 text-right font-bold text-gray-900">
+                <strong className="inline-flex items-center justify-end gap-2 text-right font-bold text-gray-900">
                   <span className="app-status-dot text-[#18755B]" />
                   {cameraText}
                 </strong>
               </div>
-              <div className="flex items-center justify-between gap-4 border-b border-gray-200 pb-1.5 leading-5">
+              <div className="grid grid-cols-[92px_minmax(0,220px)] items-center gap-3 border-b border-gray-200 pb-1.5 leading-5">
                 <span className="text-gray-500">분석 상태</span>
-                <strong className="inline-flex items-center gap-2 text-right font-bold text-gray-900">
+                <strong className="inline-flex items-center justify-end gap-2 text-right font-bold text-gray-900">
                   <span className={`app-status-dot ${isRunning ? "text-[#18755B]" : "text-gray-400"}`} />
                   {isRunning ? "분석 중" : "분석 대기"}
                 </strong>
               </div>
-              <div className="flex items-center justify-between gap-4 leading-5">
+              <div className="grid grid-cols-[92px_minmax(0,220px)] items-center gap-3 leading-5">
                 <span className="text-gray-500">최근 측정</span>
                 <strong className="text-right font-bold tabular-nums text-gray-900">
                   {homeScoreInsight.latestMeasuredAt ? formatTime(homeScoreInsight.latestMeasuredAt) : "--"}
@@ -2967,7 +3002,7 @@ export function PostureCoachApp() {
             </div>
             <div className="mt-4 border-t border-gray-200 pt-3">
               <div className="grid gap-2 text-sm sm:grid-cols-[minmax(160px,0.7fr)_minmax(0,1fr)] sm:items-start">
-                <div className="flex items-center justify-between gap-4 border-b border-gray-200 pb-1.5 leading-5">
+                <div className="grid grid-cols-[76px_minmax(0,160px)] items-center gap-3 border-b border-gray-200 pb-1.5 leading-5">
                   <span className="font-bold text-gray-900">주의 부위</span>
                   <strong className="inline-flex items-center justify-end gap-1.5 text-right tabular-nums text-[#18755B]">
                     {homeScoreInsight.weakestArea ? getPostureAreaIcon(homeScoreInsight.weakestArea) : null}
@@ -3723,36 +3758,62 @@ export function PostureCoachApp() {
         <div className="app-surface p-6 text-gray-600">
           아직 기록이 없습니다. 분석을 시작하면 세션 기록이 표시됩니다.
         </div>
-      ) : (
+      ) : selectedHistoryGroup ? (
         <div className="space-y-4">
-          {historyGroups.map((day) => (
-            <div key={day.dateKey} className="app-surface p-6">
-              <div className="mb-4 flex flex-col justify-between gap-3 border-b border-gray-200 pb-4 md:flex-row md:items-center">
+          <section className="app-surface p-5">
+            <div className="flex gap-2 overflow-x-auto pb-1">
+              {historyGroups.map((day) => {
+                const isSelected = selectedHistoryGroup.dateKey === day.dateKey;
+                return (
+                  <button
+                    key={day.dateKey}
+                    type="button"
+                    onClick={() => setSelectedHistoryDateKey(day.dateKey)}
+                    className={`shrink-0 border px-4 py-2 text-left text-sm ${
+                      isSelected ? "border-[#18755B] bg-[#C4F6E8] text-[#18755B]" : "border-gray-200 bg-white text-gray-600"
+                    }`}
+                  >
+                    <span className="block font-bold">{formatDateKey(day.dateKey)}</span>
+                    <span className="mt-1 block text-xs">
+                      {day.sessionCount}회 · 평균 {day.averageScore ?? "--"}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </section>
+
+          <div className="app-surface p-6">
+            <div className="mb-4 border-b border-gray-200 pb-4">
+              <div className="mb-3">
+                <h3 className="text-lg font-bold text-gray-900">{formatDateKey(selectedHistoryGroup.dateKey)}</h3>
+                <p className="text-sm text-gray-500">선택한 날짜의 자세 기록</p>
+              </div>
+              <div className="grid gap-2 text-sm sm:grid-cols-2 lg:grid-cols-4">
                 <div>
-                  <h3 className="text-lg font-bold text-gray-900">{formatDateKey(day.dateKey)}</h3>
-                  <p className="text-sm text-gray-500">총 {day.sessionCount}회 측정</p>
+                  <span className="text-gray-600">총 측정:</span>
+                  <span className="ml-2 font-bold text-gray-900">{selectedHistoryGroup.sessionCount}회</span>
                 </div>
-                <div className="flex flex-wrap gap-6 text-sm">
-                  <div>
-                    <span className="text-gray-600">평균 점수:</span>
-                    <span className="ml-2 font-bold text-gray-900">{day.averageScore ?? "--"}</span>
-                  </div>
-                  <div>
-                    <span className="text-gray-600">사용 시간:</span>
-                    <span className="ml-2 font-bold text-gray-900">{formatMinutes(day.totalUsageMinutes)}</span>
-                  </div>
-                  <div>
-                    <span className="text-gray-600">알림:</span>
-                    <span className="ml-2 font-bold text-orange-600">{day.alertCount}회</span>
-                  </div>
+                <div>
+                  <span className="text-gray-600">평균:</span>
+                  <span className="ml-2 font-bold text-gray-900">{selectedHistoryGroup.averageScore ?? "--"}</span>
+                </div>
+                <div>
+                  <span className="text-gray-600">사용 시간:</span>
+                  <span className="ml-2 font-bold text-gray-900">{formatMinutes(selectedHistoryGroup.totalUsageMinutes)}</span>
+                </div>
+                <div>
+                  <span className="text-gray-600">알림:</span>
+                  <span className="ml-2 font-bold text-orange-600">{selectedHistoryGroup.alertCount}회</span>
                 </div>
               </div>
+            </div>
 
-              <div className="space-y-3">
-                {day.sessions.map((session) => {
-                  const areaScores = getHistoryAreaScores(session.postureAreaStats);
-                  const weakestArea = getHistoryWeakestArea(session.postureAreaStats);
-                  const isImagesExpanded = expandedHistoryImageSessions.has(session.sessionId);
+            <div className="space-y-3">
+              {selectedHistoryGroup.sessions.map((session) => {
+                const areaScores = getHistoryAreaScores(session.postureAreaStats);
+                const weakestArea = getHistoryWeakestArea(session.postureAreaStats);
+                const isImagesExpanded = expandedHistoryImageSessions.has(session.sessionId);
 
                   return (
                     <div key={session.sessionId} className="border border-gray-100 bg-[rgba(196,246,232,0.24)] p-4">
@@ -3781,7 +3842,7 @@ export function PostureCoachApp() {
                       </div>
 
                       <div className="mb-4 border-y border-gray-200 py-3">
-                        <div className="mb-2 flex items-center justify-between gap-4 text-sm leading-5">
+                        <div className="mb-2 grid grid-cols-[76px_minmax(0,160px)] items-center gap-3 text-sm leading-5">
                           <span className="font-bold text-gray-900">주의 부위</span>
                           <strong className="inline-flex items-center justify-end gap-1.5 text-right tabular-nums text-[#18755B]">
                             {weakestArea ? getPostureAreaIcon(weakestArea.area, "h-3.5 w-3.5") : null}
@@ -3790,18 +3851,21 @@ export function PostureCoachApp() {
                         </div>
                         <div className="grid gap-2 text-sm">
                           {areaScores.map((area) => (
-                            <div key={area.area} className="grid grid-cols-[56px_minmax(0,1fr)_44px] items-center gap-3 leading-5">
-                              <span className="inline-flex items-center gap-1.5 text-gray-500">
-                                {getPostureAreaIcon(area.area, "h-3.5 w-3.5")}
-                                {area.label}
+                            <div key={area.area} className="flex min-w-0 items-center gap-3 leading-5">
+                              <span
+                                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border text-sm font-bold tabular-nums text-[#001A12]"
+                                style={getScoreIndicatorStyle(area.score)}
+                              >
+                                {area.score ?? "--"}
                               </span>
-                              <div className="h-1.5 bg-[#D6F3EB]">
-                                <div
-                                  className="block h-full bg-[#39AF8E]"
-                                  style={{ width: `${area.score ?? 0}%` }}
-                                />
-                              </div>
-                              <strong className="text-right tabular-nums text-gray-900">{area.score ?? "--"}</strong>
+                              <span className="inline-flex min-w-0 items-center gap-1.5 text-gray-500">
+                                <span
+                                  className="inline-flex shrink-0 text-[#18755B]"
+                                >
+                                  {getPostureAreaIcon(area.area, "h-3.5 w-3.5")}
+                                </span>
+                                <span>{area.label}</span>
+                              </span>
                             </div>
                           ))}
                         </div>
@@ -3854,10 +3918,13 @@ export function PostureCoachApp() {
                       )}
                     </div>
                   );
-                })}
-              </div>
+              })}
             </div>
-          ))}
+          </div>
+        </div>
+      ) : (
+        <div className="app-surface p-6 text-gray-600">
+          기록을 불러오는 중입니다...
         </div>
       )}
     </div>
