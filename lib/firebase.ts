@@ -199,6 +199,13 @@ function settingsDoc(uid: string) {
   return db ? doc(db, "users", uid, "settings", SETTINGS_DOC_ID) : null;
 }
 
+function normalizeSideMode(value: unknown, fallback: SideMode = "left"): SideMode {
+  if (value === "left" || value === "right") {
+    return value;
+  }
+  return fallback;
+}
+
 function normalizeSettings(raw: Partial<Settings>, defaults: Settings): Settings {
   return {
     ...defaults,
@@ -230,15 +237,12 @@ function normalizeSettings(raw: Partial<Settings>, defaults: Settings): Settings
       typeof raw.landmarkOverlayEnabled === "boolean"
         ? raw.landmarkOverlayEnabled
         : defaults.landmarkOverlayEnabled,
-    smoothingEnabled: typeof raw.smoothingEnabled === "boolean" ? raw.smoothingEnabled : defaults.smoothingEnabled,
+    smoothingEnabled: true,
     realtimeScoreIntervalSeconds:
       typeof raw.realtimeScoreIntervalSeconds === "number"
         ? Math.min(Math.max(Math.round(raw.realtimeScoreIntervalSeconds), 1), 5)
         : defaults.realtimeScoreIntervalSeconds,
-    preferredSideMode:
-      raw.preferredSideMode === "left" || raw.preferredSideMode === "right" || raw.preferredSideMode === "auto"
-        ? raw.preferredSideMode
-        : defaults.preferredSideMode,
+    preferredSideMode: normalizeSideMode(raw.preferredSideMode, defaults.preferredSideMode),
   };
 }
 
@@ -252,7 +256,7 @@ function toFirestoreSettings(settings: Settings): FirestoreSettings {
     stretchReminderIntervalMinutes: settings.stretchReminderIntervalMinutes,
     stretchReminderTestAlertEnabled: settings.stretchReminderTestAlertEnabled,
     landmarkOverlayEnabled: settings.landmarkOverlayEnabled,
-    smoothingEnabled: settings.smoothingEnabled,
+    smoothingEnabled: true,
     realtimeScoreIntervalSeconds: settings.realtimeScoreIntervalSeconds,
     preferredSideMode: settings.preferredSideMode,
   };
@@ -374,7 +378,7 @@ export async function createSession(
   uid: string,
   sessionId: string,
   startedAt: string,
-  preferredSideMode: SideMode = "auto"
+  preferredSideMode: SideMode = "left"
 ) {
   const ref = sessionDoc(uid, sessionId);
   if (!ref) {
@@ -433,7 +437,7 @@ export async function finalizeSessionSummary(
       worstScore: summary.worstScore,
       bestImageUrl: summary.bestImageUrl,
       worstImageUrl: summary.worstImageUrl,
-      preferredSideMode: summary.preferredSideMode ?? "auto",
+      preferredSideMode: normalizeSideMode(summary.preferredSideMode),
       ...(summary.postureAreaStats ? { postureAreaStats: summary.postureAreaStats } : {}),
     });
     return true;
@@ -573,7 +577,7 @@ function normalizeSession(raw: Partial<SessionSummary>, sessionId: string): Sess
     alertCount: typeof raw.alertCount === "number" ? raw.alertCount : 0,
     durationMinutes,
     postureAreaStats: normalizePostureAreaStats(raw.postureAreaStats),
-    preferredSideMode: raw.preferredSideMode ?? "auto",
+    preferredSideMode: normalizeSideMode(raw.preferredSideMode),
     createdAt: raw.createdAt,
     customTitle: typeof raw.customTitle === "string" ? raw.customTitle : null,
     sessionTitleKey: typeof raw.sessionTitleKey === "string" ? raw.sessionTitleKey : undefined,

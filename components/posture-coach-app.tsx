@@ -220,7 +220,7 @@ const DEFAULT_SETTINGS: Settings = {
   landmarkOverlayEnabled: true,
   smoothingEnabled: true,
   realtimeScoreIntervalSeconds: 1,
-  preferredSideMode: "auto",
+  preferredSideMode: "left",
   notificationPermissionStatus: "default",
 };
 
@@ -287,6 +287,10 @@ function createDefaultSettings(): Settings {
     ...DEFAULT_SETTINGS,
     notificationPermissionStatus: getNotificationPermissionStatus(),
   };
+}
+
+function normalizeSideMode(value: unknown): SideMode {
+  return value === "right" ? "right" : "left";
 }
 
 function getRealtimeScoreIntervalMs(settings: Settings) {
@@ -973,10 +977,7 @@ function getSideModeLabel(mode: SideMode) {
   if (mode === "left") {
     return "왼쪽 옆모습 고정";
   }
-  if (mode === "right") {
-    return "오른쪽 옆모습 고정";
-  }
-  return "자동";
+  return "오른쪽 옆모습 고정";
 }
 
 function getAnalysisSideLabel(posture: PostureResult, preferredSideMode: SideMode) {
@@ -985,9 +986,6 @@ function getAnalysisSideLabel(posture: PostureResult, preferredSideMode: SideMod
   }
 
   const sideLabel = posture.analysisSide === "left" ? "왼쪽 옆모습" : "오른쪽 옆모습";
-  if (preferredSideMode === "auto") {
-    return `현재 분석 기준: 자동 · ${sideLabel}`;
-  }
   return `현재 분석 기준: ${sideLabel} 고정`;
 }
 
@@ -2718,20 +2716,11 @@ export function PostureCoachApp() {
       worstSnapshotRef.current = { score: posture.score, imageUrl: null };
     }
 
-    const displayScore = settingsRef.current.smoothingEnabled ? cumulativeAverage : posture.score;
     const averagePosture: PostureResult = {
       ...posture,
-      score: displayScore,
-      isBadPosture: displayScore <= settingsRef.current.warningScoreThreshold,
+      score: cumulativeAverage,
+      isBadPosture: cumulativeAverage <= settingsRef.current.warningScoreThreshold,
     };
-
-    if (!settingsRef.current.smoothingEnabled) {
-      if (now - lastRealtimeScoreUpdateAtRef.current >= getRealtimeScoreIntervalMs(settingsRef.current)) {
-        setLatestPosture(averagePosture);
-        lastRealtimeScoreUpdateAtRef.current = now;
-      }
-      return averagePosture;
-    }
 
     realtimeScoreWindowRef.current.push(posture.score);
     if (!lastRealtimeScoreUpdateAtRef.current) {
@@ -2867,7 +2856,7 @@ export function PostureCoachApp() {
     });
     pose.setOptions({
       modelComplexity: 1,
-      smoothLandmarks: settingsRef.current.smoothingEnabled,
+      smoothLandmarks: true,
       enableSegmentation: false,
       minDetectionConfidence: 0.55,
       minTrackingConfidence: 0.55,
@@ -3387,6 +3376,7 @@ export function PostureCoachApp() {
 
     const nextSettings = {
       ...settingsDraft,
+      smoothingEnabled: true,
       badPostureDurationMinutes,
       notificationPermissionStatus: getNotificationPermissionStatus(),
     };
@@ -3395,7 +3385,7 @@ export function PostureCoachApp() {
     setBadPostureDurationMinutesInput(String(nextSettings.badPostureDurationMinutes));
     settingsRef.current = nextSettings;
     analyzerRef.current.setPreferredSideMode(nextSettings.preferredSideMode);
-    detectorRef.current?.setOptions({ smoothLandmarks: nextSettings.smoothingEnabled });
+    detectorRef.current?.setOptions({ smoothLandmarks: true });
     void persistSettings(nextSettings);
   }, [badPostureDurationMinutesInput, persistSettings, settingsDraft]);
 
@@ -3403,7 +3393,7 @@ export function PostureCoachApp() {
     const nextSettings = {
       ...settings,
       landmarkOverlayEnabled: settingsDraft.landmarkOverlayEnabled,
-      smoothingEnabled: settingsDraft.smoothingEnabled,
+      smoothingEnabled: true,
       preferredSideMode: settingsDraft.preferredSideMode,
       notificationPermissionStatus: getNotificationPermissionStatus(),
     };
@@ -3411,15 +3401,15 @@ export function PostureCoachApp() {
     setSettingsDraft((current) => ({
       ...current,
       landmarkOverlayEnabled: nextSettings.landmarkOverlayEnabled,
-      smoothingEnabled: nextSettings.smoothingEnabled,
+      smoothingEnabled: true,
       preferredSideMode: nextSettings.preferredSideMode,
       notificationPermissionStatus: nextSettings.notificationPermissionStatus,
     }));
     settingsRef.current = nextSettings;
     analyzerRef.current.setPreferredSideMode(nextSettings.preferredSideMode);
-    detectorRef.current?.setOptions({ smoothLandmarks: nextSettings.smoothingEnabled });
+    detectorRef.current?.setOptions({ smoothLandmarks: true });
     void persistSettings(nextSettings);
-  }, [persistSettings, settings, settingsDraft.landmarkOverlayEnabled, settingsDraft.preferredSideMode, settingsDraft.smoothingEnabled]);
+  }, [persistSettings, settings, settingsDraft.landmarkOverlayEnabled, settingsDraft.preferredSideMode]);
 
   const handleResetSettings = useCallback(() => {
     const nextSettings = createDefaultSettings();
@@ -3524,6 +3514,8 @@ export function PostureCoachApp() {
           }
           const nextSettings = {
             ...loadedSettings,
+            smoothingEnabled: true,
+            preferredSideMode: normalizeSideMode(loadedSettings.preferredSideMode),
             notificationPermissionStatus: getNotificationPermissionStatus(),
           };
           setSettings(nextSettings);
@@ -3531,7 +3523,7 @@ export function PostureCoachApp() {
           setBadPostureDurationMinutesInput(String(nextSettings.badPostureDurationMinutes));
           settingsRef.current = nextSettings;
           analyzerRef.current.setPreferredSideMode(nextSettings.preferredSideMode);
-          detectorRef.current?.setOptions({ smoothLandmarks: nextSettings.smoothingEnabled });
+          detectorRef.current?.setOptions({ smoothLandmarks: true });
         });
       } else {
         const nextSettings = createDefaultSettings();
@@ -3540,7 +3532,7 @@ export function PostureCoachApp() {
         setBadPostureDurationMinutesInput(String(nextSettings.badPostureDurationMinutes));
         settingsRef.current = nextSettings;
         analyzerRef.current.setPreferredSideMode(nextSettings.preferredSideMode);
-        detectorRef.current?.setOptions({ smoothLandmarks: nextSettings.smoothingEnabled });
+        detectorRef.current?.setOptions({ smoothLandmarks: true });
         void refreshHistory(null);
       }
     });
@@ -3562,7 +3554,7 @@ export function PostureCoachApp() {
   useEffect(() => {
     settingsRef.current = settings;
     analyzerRef.current.setPreferredSideMode(settings.preferredSideMode);
-    detectorRef.current?.setOptions({ smoothLandmarks: settings.smoothingEnabled });
+    detectorRef.current?.setOptions({ smoothLandmarks: true });
   }, [settings]);
 
   useEffect(() => {
@@ -3649,7 +3641,7 @@ export function PostureCoachApp() {
                 <span className="text-gray-500">주의 부위</span>
                 <strong className="inline-flex items-center justify-end gap-1.5 text-right font-bold tabular-nums text-[#18755B]">
                   {homePostureSummary.weakestArea ? getPostureAreaIcon(homePostureSummary.weakestArea, "h-3.5 w-3.5") : null}
-                  <span>{homePostureSummary.attentionText}</span>
+                  <span className="bg-amber-100 px-1.5 py-0.5 text-amber-800">{homePostureSummary.attentionText}</span>
                 </strong>
               </div>
               <p className="pt-1 text-sm font-medium leading-6 text-gray-600">{homePostureSummary.statusText}</p>
@@ -3882,24 +3874,18 @@ export function PostureCoachApp() {
               onChange={(checked) => updateSettingsDraft({ landmarkOverlayEnabled: checked })}
               label="자세 랜드마크 표시 켜기/끄기"
             />
-            <ToggleControl
-              checked={settingsDraft.smoothingEnabled}
-              onChange={(checked) => updateSettingsDraft({ smoothingEnabled: checked })}
-              label="점수 부드럽게 처리 켜기/끄기"
-            />
             <label className="block">
               <span className="text-sm font-medium text-gray-700">측면 분석 기준</span>
               <select
                 value={settingsDraft.preferredSideMode}
                 onChange={(event) => updateSettingsDraft({ preferredSideMode: event.target.value as SideMode })}
-                className="mt-2 w-full rounded-lg border border-gray-300 bg-white px-3 py-2"
+                className="mt-2 w-full border border-gray-300 bg-white px-3 py-2"
               >
-                <option value="auto">자동</option>
                 <option value="left">왼쪽 옆모습 고정</option>
                 <option value="right">오른쪽 옆모습 고정</option>
               </select>
               <p className="mt-2 text-xs leading-5 text-gray-500">
-                자동은 더 잘 보이는 옆모습을 사용하고, 고정 모드는 선택한 방향만 분석합니다.
+                선택한 방향의 귀, 어깨, 엉덩이 랜드마크만 사용해 분석합니다.
               </p>
             </label>
           </div>

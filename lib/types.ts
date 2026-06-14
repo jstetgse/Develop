@@ -2,7 +2,7 @@ export type TabId = "home" | "analysis" | "stretch" | "history" | "settings";
 
 export type Tone = "neutral" | "good" | "warn" | "danger";
 
-export type SideMode = "auto" | "left" | "right";
+export type SideMode = "left" | "right";
 
 export type SelectedSide = "left" | "right";
 

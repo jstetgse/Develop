@@ -208,7 +208,7 @@ export class PostureAnalyzer {
   private metricHistory: PostureMetrics[] = [];
   private motionHistory: number[] = [];
   private previousCenter: { x: number; y: number } | null = null;
-  private preferredSideMode: SideMode = "auto";
+  private preferredSideMode: SideMode = "left";
   private lastSelectedSide: SelectedSide | null = null;
 
   setPreferredSideMode(mode: SideMode) {
@@ -321,10 +321,7 @@ export class PostureAnalyzer {
     if (preferredSideMode === "right") {
       return rightScore > 0 ? "right" : null;
     }
-    if (leftScore === 0 && rightScore === 0) {
-      return null;
-    }
-    return leftScore >= rightScore ? "left" : "right";
+    return null;
   }
 
   private createUnavailableResult(message: string): PostureResult {
