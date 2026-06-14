@@ -9,6 +9,7 @@ import {
   limit,
   orderBy,
   query,
+  serverTimestamp,
   setDoc,
   updateDoc,
   where,
@@ -37,6 +38,7 @@ import type {
   SessionSummary,
   SideMode,
 } from "@/lib/types";
+import { getSessionTitleKey, normalizeSessionTitle } from "@/lib/session-title";
 
 let firebaseApp: FirebaseApp | null = null;
 let firestoreInstance: Firestore | null = null;
@@ -160,9 +162,19 @@ function sessionsCollection(uid: string) {
   return db ? collection(db, "users", uid, "sessions") : null;
 }
 
+function sessionTitlesCollection(uid: string) {
+  const db = getDb();
+  return db ? collection(db, "users", uid, "sessionTitles") : null;
+}
+
 function sessionDoc(uid: string, sessionId: string) {
   const db = getDb();
   return db ? doc(db, "users", uid, "sessions", sessionId) : null;
+}
+
+function sessionTitleDoc(uid: string, sessionTitleKey: string) {
+  const db = getDb();
+  return db ? doc(db, "users", uid, "sessionTitles", sessionTitleKey) : null;
 }
 
 const SETTINGS_DOC_ID = "app";
@@ -293,7 +305,11 @@ export async function clearUserMeasurementHistory(uid: string) {
   }
 
   try {
-    const snapshot = await getDocs(sessions);
+    const titles = sessionTitlesCollection(uid);
+    const [snapshot, titleSnapshot] = await Promise.all([
+      getDocs(sessions),
+      titles ? getDocs(titles) : Promise.resolve(null),
+    ]);
     await Promise.all(
       snapshot.docs.map(async (session) => {
         const sessionRef = doc(sessions, session.id);
@@ -306,9 +322,50 @@ export async function clearUserMeasurementHistory(uid: string) {
         await deleteDoc(sessionRef);
       })
     );
+    if (titleSnapshot) {
+      await Promise.all(titleSnapshot.docs.map((title) => deleteDoc(title.ref)));
+    }
     return true;
   } catch (error) {
     console.error("Failed to clear measurement history:", error);
+    return false;
+  }
+}
+
+export async function saveSessionTitle(
+  uid: string,
+  sessionTitleKey: string,
+  title: string,
+  dateKey: string,
+  sessionId?: string | null
+) {
+  const ref = sessionTitleDoc(uid, sessionTitleKey);
+  if (!ref) {
+    return false;
+  }
+
+  const normalizedTitle = normalizeSessionTitle(title);
+
+  try {
+    if (!normalizedTitle) {
+      await deleteDoc(ref);
+      return true;
+    }
+
+    await setDoc(
+      ref,
+      {
+        sessionId: sessionId ?? sessionTitleKey,
+        sessionTitleKey,
+        title: normalizedTitle,
+        dateKey,
+        updatedAt: serverTimestamp(),
+      },
+      { merge: true }
+    );
+    return true;
+  } catch (error) {
+    console.error("Failed to save session title:", error);
     return false;
   }
 }
@@ -518,7 +575,29 @@ function normalizeSession(raw: Partial<SessionSummary>, sessionId: string): Sess
     postureAreaStats: normalizePostureAreaStats(raw.postureAreaStats),
     preferredSideMode: raw.preferredSideMode ?? "auto",
     createdAt: raw.createdAt,
+    customTitle: typeof raw.customTitle === "string" ? raw.customTitle : null,
+    sessionTitleKey: typeof raw.sessionTitleKey === "string" ? raw.sessionTitleKey : undefined,
   };
+}
+
+async function loadSessionTitleMap(uid: string) {
+  const titles = sessionTitlesCollection(uid);
+  const titleMap = new Map<string, string>();
+  if (!titles) {
+    return titleMap;
+  }
+
+  const snapshot = await getDocs(titles);
+  snapshot.docs.forEach((entry) => {
+    const data = entry.data() as { title?: unknown; sessionTitleKey?: unknown };
+    const title = typeof data.title === "string" ? normalizeSessionTitle(data.title) : "";
+    if (!title) {
+      return;
+    }
+    const key = typeof data.sessionTitleKey === "string" ? data.sessionTitleKey : entry.id;
+    titleMap.set(key, title);
+  });
+  return titleMap;
 }
 
 export async function getRecent24hSummary(uid: string): Promise<RecentSummary | null> {
@@ -558,14 +637,23 @@ export async function getHistoryByDate(uid: string): Promise<HistoryGroup[] | nu
   }
 
   try {
-    const snapshot = await getDocs(query(sessions, orderBy("startedAt", "desc"), limit(180)));
+    const [snapshot, titleMap] = await Promise.all([
+      getDocs(query(sessions, orderBy("startedAt", "desc"), limit(180))),
+      loadSessionTitleMap(uid),
+    ]);
     const items = snapshot.docs.map((entry) => normalizeSession(entry.data() as Partial<SessionSummary>, entry.id));
     const groups = new Map<string, SessionSummary[]>();
 
     items.forEach((session) => {
       const dateKey = getDateKey(session.startedAt);
+      const sessionTitleKey = getSessionTitleKey(session, dateKey);
+      const titledSession = {
+        ...session,
+        sessionTitleKey,
+        customTitle: titleMap.get(sessionTitleKey) ?? null,
+      };
       const bucket = groups.get(dateKey) ?? [];
-      bucket.push(session);
+      bucket.push(titledSession);
       groups.set(dateKey, bucket);
     });
 

@@ -140,6 +140,8 @@ export interface LowScoreCaptureEvent {
 
 export interface SessionSummary {
   sessionId: string;
+  sessionTitleKey?: string;
+  customTitle?: string | null;
   startedAt: string;
   endedAt: string | null;
   averageScore: number | null;

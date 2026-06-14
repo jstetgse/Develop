@@ -15,6 +15,7 @@ import {
   History,
   House,
   LogOut,
+  Pencil,
   PersonStanding,
   RotateCcw,
   ShieldCheck,
@@ -43,6 +44,7 @@ import {
   initFirebase,
   saveAlertLog,
   saveSnapshot,
+  saveSessionTitle,
   saveStretchLog,
   saveUserSettings,
   signInWithGoogle,
@@ -81,15 +83,23 @@ import type {
   PostureResult,
   RecentSummary,
   Settings,
+  SessionSummary,
   SideMode,
   StretchCoachingResult,
   StretchDefinition,
   StretchStep,
 } from "@/lib/types";
+import { getSessionTitleKey, normalizeSessionTitle, SESSION_TITLE_MAX_LENGTH } from "@/lib/session-title";
 
 type Tab = "home" | "analysis" | "stretching" | "history" | "settings";
 type AuthPage = "login" | "signup";
 type SettingsSaveStatus = "idle" | "saving" | "saved" | "error";
+type PendingTitleSession = {
+  sessionId: string;
+  sessionTitleKey: string;
+  dateKey: string;
+  startedAt: string;
+};
 
 type Landmark = {
   x: number;
@@ -726,6 +736,30 @@ function getHistoryReportComment(areaScores: ReturnType<typeof getHistoryAreaSco
   }
 
   return "목과 허리 균형이 안정적으로 기록되었습니다.";
+}
+
+function getHistorySessionDisplayTitle(session: SessionSummary, weakestArea: ReturnType<typeof getHistoryWeakestArea>) {
+  if (session.customTitle?.trim()) {
+    return session.customTitle;
+  }
+
+  if (session.averageScore === null) {
+    return "짧은 측정 기록";
+  }
+
+  if (session.alertCount >= 3) {
+    return "알림이 많았던 기록";
+  }
+
+  if (weakestArea?.area === "neck") {
+    return "목 점검 기록";
+  }
+
+  if (weakestArea?.area === "torso") {
+    return "허리 점검 기록";
+  }
+
+  return "자세 분석 기록";
 }
 
 function getScoreIndicatorStyle(score: number | null) {
@@ -1624,6 +1658,14 @@ export function PostureCoachApp() {
   const [liveScorePoints, setLiveScorePoints] = useState<ScorePoint[]>([]);
   const [sessionAverageScore, setSessionAverageScore] = useState<number | null>(null);
   const [expandedHistoryImageSessions, setExpandedHistoryImageSessions] = useState<Set<string>>(() => new Set());
+  const [editingSessionTitleKey, setEditingSessionTitleKey] = useState<string | null>(null);
+  const [sessionTitleDraft, setSessionTitleDraft] = useState("");
+  const [savingSessionTitleKey, setSavingSessionTitleKey] = useState<string | null>(null);
+  const [sessionTitleErrors, setSessionTitleErrors] = useState<Record<string, string>>({});
+  const [pendingTitleSession, setPendingTitleSession] = useState<PendingTitleSession | null>(null);
+  const [pendingTitleDraft, setPendingTitleDraft] = useState("");
+  const [pendingTitleSaving, setPendingTitleSaving] = useState(false);
+  const [pendingTitleError, setPendingTitleError] = useState<string | null>(null);
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -1959,6 +2001,94 @@ export function PostureCoachApp() {
       setIsLoadingHistory(false);
     }
   }, []);
+
+  const updateLocalSessionTitle = useCallback((sessionTitleKey: string, title: string | null) => {
+    setHistoryGroups((currentGroups) =>
+      currentGroups.map((group) => ({
+        ...group,
+        sessions: group.sessions.map((session) => {
+          const key = session.sessionTitleKey ?? getSessionTitleKey(session, group.dateKey);
+          return key === sessionTitleKey
+            ? {
+                ...session,
+                sessionTitleKey,
+                customTitle: title,
+              }
+            : session;
+        }),
+      }))
+    );
+  }, []);
+
+  const handleSaveHistorySessionTitle = useCallback(
+    async (session: SessionSummary, dateKey: string) => {
+      const uid = uidRef.current;
+      const sessionTitleKey = session.sessionTitleKey ?? getSessionTitleKey(session, dateKey);
+      const normalizedTitle = normalizeSessionTitle(sessionTitleDraft);
+      if (!uid || savingSessionTitleKey) {
+        return;
+      }
+
+      setSavingSessionTitleKey(sessionTitleKey);
+      setSessionTitleErrors((current) => {
+        const next = { ...current };
+        delete next[sessionTitleKey];
+        return next;
+      });
+
+      const saved = await saveSessionTitle(uid, sessionTitleKey, normalizedTitle, dateKey, session.sessionId);
+      setSavingSessionTitleKey(null);
+
+      if (!saved) {
+        setSessionTitleErrors((current) => ({
+          ...current,
+          [sessionTitleKey]: "제목을 저장하지 못했습니다.",
+        }));
+        return;
+      }
+
+      updateLocalSessionTitle(sessionTitleKey, normalizedTitle || null);
+      setEditingSessionTitleKey(null);
+      setSessionTitleDraft("");
+    },
+    [savingSessionTitleKey, sessionTitleDraft, updateLocalSessionTitle]
+  );
+
+  const handleSavePendingSessionTitle = useCallback(async () => {
+    const uid = uidRef.current;
+    if (!uid || !pendingTitleSession || pendingTitleSaving) {
+      return;
+    }
+
+    const normalizedTitle = normalizeSessionTitle(pendingTitleDraft);
+    if (!normalizedTitle) {
+      setPendingTitleSession(null);
+      setPendingTitleDraft("");
+      setPendingTitleError(null);
+      return;
+    }
+
+    setPendingTitleSaving(true);
+    setPendingTitleError(null);
+    const saved = await saveSessionTitle(
+      uid,
+      pendingTitleSession.sessionTitleKey,
+      normalizedTitle,
+      pendingTitleSession.dateKey,
+      pendingTitleSession.sessionId
+    );
+    setPendingTitleSaving(false);
+
+    if (!saved) {
+      setPendingTitleError("제목을 저장하지 못했습니다.");
+      return;
+    }
+
+    updateLocalSessionTitle(pendingTitleSession.sessionTitleKey, normalizedTitle);
+    setPendingTitleSession(null);
+    setPendingTitleDraft("");
+    setPendingTitleError(null);
+  }, [pendingTitleDraft, pendingTitleSaving, pendingTitleSession, updateLocalSessionTitle]);
 
   const ensureMediaPipe = useCallback(async () => {
     const mediaPipeWindow = window as MediaPipeWindow;
@@ -2780,6 +2910,7 @@ export function PostureCoachApp() {
     const postureAreaStats = hasPostureAreaStats(postureAreaStatsRef.current)
       ? postureAreaStatsRef.current
       : undefined;
+    let finalizedSessionForTitle: PendingTitleSession | null = null;
     const activePausedMs =
       posturePausedStartedAtRef.current === null ? 0 : Date.now() - posturePausedStartedAtRef.current;
     if (uid && sessionId && startedAt) {
@@ -2790,7 +2921,7 @@ export function PostureCoachApp() {
       );
       const durationMinutes = Math.max(1, Math.round(postureDurationMs / 60000));
 
-      await finalizeSessionSummary(uid, sessionId, {
+      const finalized = await finalizeSessionSummary(uid, sessionId, {
         endedAt,
         averageScore: finalAverageScore,
         durationMinutes,
@@ -2802,6 +2933,15 @@ export function PostureCoachApp() {
         preferredSideMode: settingsRef.current.preferredSideMode,
         postureAreaStats,
       });
+      if (finalized) {
+        const dateKey = getKoreaDateKey(new Date(startedAt));
+        finalizedSessionForTitle = {
+          sessionId,
+          sessionTitleKey: getSessionTitleKey({ sessionId, startedAt }, dateKey),
+          dateKey,
+          startedAt,
+        };
+      }
     }
 
     sessionIdRef.current = null;
@@ -2856,6 +2996,11 @@ export function PostureCoachApp() {
     setAlertMessage(null);
 
     await refreshHistory(uid);
+    if (finalizedSessionForTitle) {
+      setPendingTitleSession(finalizedSessionForTitle);
+      setPendingTitleDraft("");
+      setPendingTitleError(null);
+    }
     setLiveScorePoints([]);
   }, [refreshHistory, resetStretchCalibration]);
 
@@ -3310,6 +3455,13 @@ export function PostureCoachApp() {
         setLiveScorePoints([]);
         setRecentSummary(null);
         setHistoryGroups([]);
+        setEditingSessionTitleKey(null);
+        setSessionTitleDraft("");
+        setSavingSessionTitleKey(null);
+        setSessionTitleErrors({});
+        setPendingTitleSession(null);
+        setPendingTitleDraft("");
+        setPendingTitleError(null);
         await refreshHistory(uid);
       }
     } finally {
@@ -4391,16 +4543,91 @@ export function PostureCoachApp() {
                 const sessionAverageScore = session.averageScore;
                 const hasAverage = sessionAverageScore !== null;
                 const sessionDuration = formatMinutes(session.durationMinutes ?? 0);
+                const sessionTitleKey = session.sessionTitleKey ?? getSessionTitleKey(session, selectedHistoryGroup.dateKey);
+                const displayTitle = getHistorySessionDisplayTitle(session, weakestArea);
+                const isEditingTitle = editingSessionTitleKey === sessionTitleKey;
+                const isSavingTitle = savingSessionTitleKey === sessionTitleKey;
+                const titleError = sessionTitleErrors[sessionTitleKey];
 
                 return (
                   <article key={session.sessionId} className="app-surface p-5">
                     <div className="flex flex-col justify-between gap-3 border-b border-[rgba(18,100,76,0.16)] pb-4 md:flex-row md:items-start">
-                      <div>
-                        <p className="text-base font-bold text-gray-900">
+                      <div className="min-w-0 flex-1">
+                        {isEditingTitle ? (
+                          <form
+                            className="grid gap-2"
+                            onSubmit={(event) => {
+                              event.preventDefault();
+                              void handleSaveHistorySessionTitle(session, selectedHistoryGroup.dateKey);
+                            }}
+                          >
+                            <input
+                              value={sessionTitleDraft}
+                              onChange={(event) => setSessionTitleDraft(event.target.value)}
+                              onKeyDown={(event) => {
+                                if (event.key === "Escape") {
+                                  setEditingSessionTitleKey(null);
+                                  setSessionTitleDraft("");
+                                }
+                              }}
+                              maxLength={SESSION_TITLE_MAX_LENGTH}
+                              autoFocus
+                              className="min-h-10 w-full border border-[rgba(18,100,76,0.35)] bg-white px-3 py-2 text-base font-bold text-gray-900"
+                              placeholder="예: 공부 시간, 발표 연습"
+                            />
+                            <div className="flex flex-wrap items-center gap-2 text-xs text-gray-500">
+                              <span>최대 {SESSION_TITLE_MAX_LENGTH}자</span>
+                              {titleError && <span className="font-bold text-red-600">{titleError}</span>}
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                              <button
+                                type="submit"
+                                disabled={isSavingTitle}
+                                className="min-h-9 border border-[#18755B] bg-[#18755B] px-3 py-1.5 text-sm font-bold text-white disabled:opacity-60"
+                              >
+                                {isSavingTitle ? "저장 중..." : "저장"}
+                              </button>
+                              <button
+                                type="button"
+                                disabled={isSavingTitle}
+                                onClick={() => {
+                                  setEditingSessionTitleKey(null);
+                                  setSessionTitleDraft("");
+                                }}
+                                className="min-h-9 border border-gray-300 bg-white px-3 py-1.5 text-sm font-bold text-gray-700 disabled:opacity-60"
+                              >
+                                취소
+                              </button>
+                            </div>
+                          </form>
+                        ) : (
+                          <>
+                            <div className="flex min-w-0 items-start gap-2">
+                              <p className="min-w-0 truncate text-lg font-bold text-gray-900">{displayTitle}</p>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setEditingSessionTitleKey(sessionTitleKey);
+                                  setSessionTitleDraft(session.customTitle ?? "");
+                                  setSessionTitleErrors((current) => {
+                                    const next = { ...current };
+                                    delete next[sessionTitleKey];
+                                    return next;
+                                  });
+                                }}
+                                className="inline-flex h-8 w-8 shrink-0 items-center justify-center border border-gray-200 bg-white text-gray-600"
+                                aria-label="세션 제목 수정"
+                              >
+                                <Pencil className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
+                            {titleError && <p className="mt-1 text-xs font-bold text-red-600">{titleError}</p>}
+                          </>
+                        )}
+                        <p className="mt-1 text-sm text-gray-500">
                           {formatTime(session.startedAt)}
-                          {session.endedAt ? ` - ${formatTime(session.endedAt)}` : ""}
+                          {session.endedAt ? ` - ${formatTime(session.endedAt)}` : ""} · 사용 {sessionDuration}
                         </p>
-                        <p className="mt-1 text-sm text-gray-500">사용 시간 {sessionDuration}</p>
                       </div>
                       <div className="flex items-center gap-3 md:justify-end">
                         <div className="text-right">
@@ -4774,8 +5001,68 @@ export function PostureCoachApp() {
     </div>
   );
 
+  const renderPendingTitlePrompt = () => {
+    if (!pendingTitleSession) {
+      return null;
+    }
+
+    return (
+      <div className="fixed inset-0 z-[70] flex items-end bg-black/35 px-4 py-6 sm:items-center sm:justify-center">
+        <section className="w-full max-w-md border border-[rgba(18,100,76,0.24)] bg-white p-5 shadow-xl">
+          <div className="mb-4">
+            <p className="text-lg font-bold text-gray-900">기록이 저장되었습니다</p>
+            <p className="mt-1 text-sm text-gray-600">이 세션에 제목을 붙여보세요.</p>
+          </div>
+          <form
+            className="grid gap-3"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void handleSavePendingSessionTitle();
+            }}
+          >
+            <label className="grid gap-1.5">
+              <span className="text-xs font-bold text-gray-500">세션 제목</span>
+              <input
+                value={pendingTitleDraft}
+                onChange={(event) => setPendingTitleDraft(event.target.value)}
+                maxLength={SESSION_TITLE_MAX_LENGTH}
+                autoFocus
+                className="min-h-11 border border-[rgba(18,100,76,0.35)] px-3 py-2 text-base font-bold text-gray-900"
+                placeholder="예: 공부 시간, 발표 연습, 수업 중 자세"
+              />
+              <span className="text-xs text-gray-500">최대 {SESSION_TITLE_MAX_LENGTH}자</span>
+            </label>
+            {pendingTitleError && <p className="text-sm font-bold text-red-600">{pendingTitleError}</p>}
+            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                disabled={pendingTitleSaving}
+                onClick={() => {
+                  setPendingTitleSession(null);
+                  setPendingTitleDraft("");
+                  setPendingTitleError(null);
+                }}
+                className="min-h-11 border border-gray-300 bg-white px-4 py-2 text-sm font-bold text-gray-700 disabled:opacity-60"
+              >
+                건너뛰기
+              </button>
+              <button
+                type="submit"
+                disabled={pendingTitleSaving}
+                className="min-h-11 border border-[#18755B] bg-[#18755B] px-4 py-2 text-sm font-bold text-white disabled:opacity-60"
+              >
+                {pendingTitleSaving ? "저장 중..." : "저장"}
+              </button>
+            </div>
+          </form>
+        </section>
+      </div>
+    );
+  };
+
   return (
     <div className="app-shell min-h-screen">
+      {renderPendingTitlePrompt()}
       <nav className="sticky top-0 z-50 border-b border-[#12644C]/20 bg-[#C4F6E8]">
         <div className="mx-auto max-w-[1100px] px-6">
           <div className="flex flex-col gap-1.5 py-2">
