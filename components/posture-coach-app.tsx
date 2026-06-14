@@ -714,7 +714,7 @@ function getHistoryReportComment(areaScores: ReturnType<typeof getHistoryAreaSco
   const weakest = validScores[0];
 
   if (!weakest) {
-    return "부위별 기록이 아직 충분하지 않습니다.";
+    return "측정 시간이 짧아 부위별 점수를 계산하지 못했어요.";
   }
 
   if (weakest.score < 60) {
@@ -1761,6 +1761,36 @@ export function PostureCoachApp() {
       latestMeasuredAt: mostRecentSession?.startedAt ?? null,
     };
   }, [historyGroups, recentSummary?.averageScore]);
+  const homePostureSummary = useMemo(() => {
+    const validAreaScores = homeScoreInsight.areaScores.filter(
+      (item): item is { area: PostureRecommendationArea; label: string; score: number } => item.score !== null
+    );
+    const isStable =
+      validAreaScores.length > 0 &&
+      validAreaScores.every((item) => item.score >= getPostureAreaThreshold(item.area));
+
+    if (validAreaScores.length === 0 || !homeScoreInsight.weakestAreaLabel) {
+      return {
+        attentionText: "--",
+        statusText: "분석 기록이 아직 없습니다",
+        weakestArea: null,
+      };
+    }
+
+    if (isStable) {
+      return {
+        attentionText: "안정",
+        statusText: "최근 자세가 안정적입니다",
+        weakestArea: null,
+      };
+    }
+
+    return {
+      attentionText: `${homeScoreInsight.weakestAreaLabel} ${homeScoreInsight.weakestAreaScore ?? "--"}`,
+      statusText: `${homeScoreInsight.weakestAreaLabel} 점수가 가장 낮습니다`,
+      weakestArea: homeScoreInsight.weakestArea,
+    };
+  }, [homeScoreInsight]);
   const combinedScorePoints = useMemo(
     () =>
       [...todaySavedScorePoints, ...liveScorePoints]
@@ -3450,45 +3480,22 @@ export function PostureCoachApp() {
                 <Activity className="h-5 w-5" />
               </div>
               <div>
-                <h2 className="text-lg font-bold text-gray-900">현재 상태</h2>
-                <p className="text-sm text-gray-500">측정 준비 상태를 확인하세요</p>
+                <h2 className="text-lg font-bold text-gray-900">오늘의 자세 요약</h2>
+                <p className="text-sm text-gray-500">최근 기록으로 몸 상태를 확인하세요</p>
               </div>
             </div>
             <div className="grid gap-4 text-sm sm:grid-cols-[300px_minmax(0,1fr)] sm:items-start">
-              <div className="grid gap-1.5">
-              <div className="grid max-w-[300px] grid-cols-[92px_minmax(0,180px)] items-center gap-3 border-b border-gray-200 pb-1.5 leading-5">
-                <span className="text-gray-500">카메라 상태</span>
-                <strong className="inline-flex items-center justify-end gap-2 text-right font-bold text-gray-900">
-                  <span className="app-status-dot text-[#18755B]" />
-                  {cameraText}
+              <div className="grid max-w-[300px] gap-1.5">
+              <div className="grid grid-cols-[76px_minmax(0,170px)] items-center gap-3 border-b border-gray-200 pb-1.5 leading-5">
+                <span className="text-gray-500">주의 부위</span>
+                <strong className="inline-flex items-center justify-end gap-1.5 text-right font-bold tabular-nums text-[#18755B]">
+                  {homePostureSummary.weakestArea ? getPostureAreaIcon(homePostureSummary.weakestArea, "h-3.5 w-3.5") : null}
+                  <span>{homePostureSummary.attentionText}</span>
                 </strong>
               </div>
-              <div className="grid max-w-[300px] grid-cols-[92px_minmax(0,180px)] items-center gap-3 border-b border-gray-200 pb-1.5 leading-5">
-                <span className="text-gray-500">분석 상태</span>
-                <strong className="inline-flex items-center justify-end gap-2 text-right font-bold text-gray-900">
-                  <span className={`app-status-dot ${isRunning ? "text-[#18755B]" : "text-gray-400"}`} />
-                  {isRunning ? "분석 중" : "분석 대기"}
-                </strong>
-              </div>
-              <div className="grid max-w-[300px] grid-cols-[92px_minmax(0,180px)] items-center gap-3 leading-5">
-                <span className="text-gray-500">최근 측정</span>
-                <strong className="text-right font-bold tabular-nums text-gray-900">
-                  {homeScoreInsight.latestMeasuredAt ? formatTime(homeScoreInsight.latestMeasuredAt) : "--"}
-                </strong>
-              </div>
+              <p className="pt-1 text-sm font-medium leading-6 text-gray-600">{homePostureSummary.statusText}</p>
               </div>
               <div className="grid max-w-[560px] gap-2">
-                <div className="grid max-w-[280px] grid-cols-[76px_minmax(0,160px)] items-center gap-3 border-b border-gray-200 pb-1.5 leading-5">
-                  <span className="font-bold text-gray-900">주의 부위</span>
-                  <strong className="inline-flex items-center justify-end gap-1.5 text-right tabular-nums text-[#18755B]">
-                    {homeScoreInsight.weakestArea ? getPostureAreaIcon(homeScoreInsight.weakestArea) : null}
-                    <span>
-                      {homeScoreInsight.weakestAreaLabel
-                        ? `${homeScoreInsight.weakestAreaLabel} ${homeScoreInsight.weakestAreaScore ?? "--"}`
-                        : "--"}
-                    </span>
-                  </strong>
-                </div>
                 <div className="grid gap-2">
                   {homeScoreInsight.areaScores.map((area) => (
                     <div key={area.area} className="grid grid-cols-[56px_minmax(0,1fr)_44px] items-center gap-3 leading-5">
@@ -3534,9 +3541,9 @@ export function PostureCoachApp() {
         </div>
       </section>
 
-      <div className="grid items-start gap-5 xl:grid-cols-[380px_minmax(0,1fr)]">
-      <section className="app-surface self-start px-4 py-3 xl:self-center">
-        <div className="mb-2 flex items-center gap-3">
+      <div className="grid items-stretch gap-5 xl:grid-cols-[380px_minmax(0,1fr)]">
+      <section className="app-surface flex h-full flex-col justify-between px-4 py-6">
+        <div className="mb-5 flex items-center gap-3">
           <div className="flex h-8 w-8 items-center justify-center bg-[#C4F6E8] text-[#18755B]">
             <CheckCircle className="h-4 w-4" />
           </div>
@@ -3545,46 +3552,52 @@ export function PostureCoachApp() {
             <p className="text-sm text-gray-500">지난 24시간</p>
           </div>
         </div>
-        <div className="grid gap-3 sm:grid-cols-[120px_220px] sm:items-end">
-          <div className="min-w-0">
-            <div className="flex items-end gap-3 text-gray-900">
-              <span className="text-2xl font-black leading-none">
-                {recentSummary?.averageScore === null || recentSummary?.averageScore === undefined ? "--" : `${recentSummary.averageScore}`}
-              </span>
-              <span className="mb-1 text-sm font-bold text-gray-500">/100</span>
-            </div>
-            <p
-              className={`mt-1 inline-flex border px-2 py-0.5 text-sm font-bold ${
+        <div className="grid max-w-[280px] gap-1.5 text-sm">
+          <div className="grid grid-cols-[76px_minmax(0,150px)] items-center gap-3 border-b border-gray-200 pb-1.5 leading-5">
+            <span className="text-gray-500">평균 점수</span>
+            <strong className="text-right tabular-nums text-gray-900">
+              {recentSummary?.averageScore === null || recentSummary?.averageScore === undefined ? "--" : recentSummary.averageScore}
+              <span className="ml-1 text-xs font-bold text-gray-500">/100</span>
+            </strong>
+          </div>
+          <div className="grid grid-cols-[76px_minmax(0,150px)] items-center gap-3 border-b border-gray-200 pb-1.5 leading-5">
+            <span className="text-gray-500">7일 비교</span>
+            <strong
+              className={`text-right tabular-nums ${
                 homeScoreInsight.trend === null
-                  ? "border-gray-200 bg-white text-gray-500"
+                  ? "text-gray-700"
                   : homeScoreInsight.trend >= 0
-                    ? "border-[#70E5C4] bg-[#C4F6E8] text-[#18755B]"
-                    : "border-yellow-200 bg-yellow-50 text-yellow-800"
+                    ? "text-[#18755B]"
+                    : "text-yellow-800"
               }`}
             >
-              {homeScoreInsight.trend === null
-                ? "7일 평균 --"
-                : `7일 평균보다 ${homeScoreInsight.trend >= 0 ? "+" : ""}${homeScoreInsight.trend}`}
-            </p>
+              {homeScoreInsight.trend === null ? "--" : `${homeScoreInsight.trend >= 0 ? "+" : ""}${homeScoreInsight.trend}`}
+            </strong>
           </div>
-          <div className="grid max-w-[220px] gap-1 text-sm">
-            <div className="grid max-w-[220px] grid-cols-[76px_minmax(0,100px)] items-center gap-3 border-b border-gray-200 pb-1 leading-5">
-              <span className="text-gray-500">주의 부위</span>
-              <strong className="text-right tabular-nums text-gray-900">
-                {homeScoreInsight.weakestAreaLabel
-                  ? `${homeScoreInsight.weakestAreaLabel} ${homeScoreInsight.weakestAreaScore ?? "--"}`
-                  : "--"}
-              </strong>
-            </div>
-            <div className="grid max-w-[220px] grid-cols-[76px_minmax(0,100px)] items-center gap-3 border-b border-gray-200 pb-1 leading-5">
-              <span className="text-gray-500">최고 / 최저</span>
-              <strong className="text-right tabular-nums text-gray-900">
-                {homeScoreInsight.bestScore !== null || homeScoreInsight.worstScore !== null
-                  ? `${homeScoreInsight.bestScore ?? "--"} / ${homeScoreInsight.worstScore ?? "--"}`
-                  : "--"}
-              </strong>
-            </div>
+          <div className="grid grid-cols-[76px_minmax(0,150px)] items-center gap-3 border-b border-gray-200 pb-1.5 leading-5">
+            <span className="text-gray-500">최고 / 최저</span>
+            <strong className="text-right tabular-nums text-gray-900">
+              {homeScoreInsight.bestScore !== null || homeScoreInsight.worstScore !== null
+                ? `${homeScoreInsight.bestScore ?? "--"} / ${homeScoreInsight.worstScore ?? "--"}`
+                : "--"}
+            </strong>
           </div>
+        </div>
+        <div className="mt-5 flex flex-wrap gap-x-5 gap-y-1 border-t border-gray-200 pt-3 text-xs leading-5 text-gray-500">
+          <span className="inline-flex items-center gap-1.5">
+            <span>최근 측정</span>
+            <span className="tabular-nums text-gray-700">
+              {homeScoreInsight.latestMeasuredAt ? formatTime(homeScoreInsight.latestMeasuredAt) : "--"}
+            </span>
+          </span>
+          <span className="inline-flex items-center gap-1.5">
+            <span>사용 시간</span>
+            <span className="tabular-nums text-gray-700">{formatMinutes(recentSummary?.totalUsageMinutes ?? 0)}</span>
+          </span>
+          <span className="inline-flex items-center gap-1.5">
+            <span>알림 횟수</span>
+            <span className="tabular-nums text-gray-700">{recentSummary?.alertCount ?? 0}</span>
+          </span>
         </div>
       </section>
 
@@ -3605,16 +3618,6 @@ export function PostureCoachApp() {
             오늘 분석 기록이 아직 없습니다
           </div>
         )}
-        <div className="mt-4 grid gap-2 border-t border-gray-200 pt-3 text-sm sm:grid-cols-2">
-          <div className="flex items-center gap-3">
-            <span className="text-gray-500">사용 시간</span>
-            <strong className="tabular-nums text-gray-900">{formatMinutes(recentSummary?.totalUsageMinutes ?? 0)}</strong>
-          </div>
-          <div className="flex items-center gap-3">
-            <span className="text-gray-500">알림 횟수</span>
-            <strong className="tabular-nums text-gray-900">{recentSummary?.alertCount ?? 0}</strong>
-          </div>
-        </div>
       </div>
       </div>
     </div>
@@ -4251,198 +4254,287 @@ export function PostureCoachApp() {
     </div>
   );
 
-  const renderHistory = () => (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold text-gray-900">기록</h1>
-        <p className="mt-1 text-gray-600">자세 분석 기록을 확인하세요</p>
-      </div>
+  const renderHistory = () => {
+    const missingScoreBadge = (
+      <span className="inline-flex items-center border border-gray-200 bg-white px-2 py-0.5 text-[11px] font-bold text-gray-500">
+        측정 부족
+      </span>
+    );
 
-      {isLoadingHistory ? (
-        <div className="app-surface p-6 text-gray-600">
-          기록을 불러오는 중입니다...
+    const renderStatCard = (
+      label: string,
+      value: ReactNode,
+      icon: ReactNode,
+      options?: { tone?: "neutral" | "warning"; badge?: ReactNode }
+    ) => {
+      const isWarning = options?.tone === "warning";
+      return (
+        <div
+          className={`border px-4 py-3 ${
+            isWarning ? "border-orange-200 bg-orange-50 text-orange-800" : "border-[rgba(18,100,76,0.2)] bg-white text-gray-900"
+          }`}
+        >
+          <div className="mb-2 flex items-center justify-between gap-2 text-xs font-bold text-gray-500">
+            <span>{label}</span>
+            <span className={isWarning ? "text-orange-600" : "text-[#18755B]"}>{icon}</span>
+          </div>
+          <div className="flex items-end justify-between gap-2">
+            <strong className="text-xl leading-none tabular-nums">{value}</strong>
+            {options?.badge}
+          </div>
         </div>
-      ) : historyGroups.length === 0 ? (
-        <div className="app-surface p-6 text-gray-600">
-          아직 기록이 없습니다. 분석을 시작하면 세션 기록이 표시됩니다.
+      );
+    };
+
+    const renderDateItem = (day: HistoryGroup, layout: "desktop" | "mobile") => {
+      const isSelected = selectedHistoryGroup?.dateKey === day.dateKey;
+      const hasAverage = day.averageScore !== null;
+      const layoutClass =
+        layout === "mobile"
+          ? "min-w-[72vw] shrink-0 sm:min-w-[260px]"
+          : "w-full border-l-4";
+
+      return (
+        <button
+          key={`${layout}-${day.dateKey}`}
+          type="button"
+          onClick={() => setSelectedHistoryDateKey(day.dateKey)}
+          className={`grid gap-2 border px-4 py-3 text-left text-sm transition-colors ${layoutClass} ${
+            isSelected
+              ? "border-[#18755B] bg-[#C4F6E8] text-[#001A12] shadow-sm"
+              : "border-[rgba(18,100,76,0.2)] bg-white text-gray-700 hover:border-[#18755B]"
+          }`}
+        >
+          <span className="font-bold leading-snug">{formatDateKey(day.dateKey)}</span>
+          <span className="flex items-center justify-between gap-2 text-xs">
+            <span className="text-gray-500">측정 {day.sessionCount}회</span>
+            <span className="font-bold tabular-nums text-[#18755B]">평균 {day.averageScore ?? "--"}</span>
+          </span>
+          {!hasAverage && missingScoreBadge}
+        </button>
+      );
+    };
+
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900">기록</h1>
+          <p className="mt-1 text-gray-600">자세 분석 기록을 확인하세요</p>
         </div>
-      ) : selectedHistoryGroup ? (
-        <div className="space-y-4">
-          <section className="app-surface p-5">
-            <div className="flex gap-2 overflow-x-auto pb-1">
-              {historyGroups.map((day) => {
-                const isSelected = selectedHistoryGroup.dateKey === day.dateKey;
-                return (
-                  <button
-                    key={day.dateKey}
-                    type="button"
-                    onClick={() => setSelectedHistoryDateKey(day.dateKey)}
-                    className={`shrink-0 border px-4 py-2 text-left text-sm ${
-                      isSelected ? "border-[#18755B] bg-[#C4F6E8] text-[#18755B]" : "border-gray-200 bg-white text-gray-600"
-                    }`}
-                  >
-                    <span className="block font-bold">{formatDateKey(day.dateKey)}</span>
-                    <span className="mt-1 block text-xs">
-                      {day.sessionCount}회 · 평균 {day.averageScore ?? "--"}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          </section>
 
-          <div className="app-surface p-6">
-            <div className="mb-4 border-b border-gray-200 pb-4">
-              <div className="mb-3">
-                <h3 className="text-lg font-bold text-gray-900">{formatDateKey(selectedHistoryGroup.dateKey)}</h3>
-                <p className="text-sm text-gray-500">선택한 날짜의 자세 기록</p>
+        {isLoadingHistory ? (
+          <div className="app-surface p-6 text-gray-600">
+            기록을 불러오는 중입니다...
+          </div>
+        ) : historyGroups.length === 0 ? (
+          <div className="app-surface border-l-4 border-l-[#18755B] p-6">
+            <p className="font-bold text-gray-900">아직 기록이 없습니다</p>
+            <p className="mt-1 text-sm text-gray-600">분석을 시작하면 날짜별 기록과 세션 요약이 여기에 표시됩니다.</p>
+          </div>
+        ) : selectedHistoryGroup ? (
+          <div className="grid gap-4 lg:grid-cols-[minmax(280px,340px)_minmax(0,1fr)] lg:items-start">
+            <section className="app-surface p-5 lg:sticky lg:top-4 lg:max-h-[calc(100vh-8rem)] lg:overflow-hidden">
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <h2 className="text-base font-bold text-gray-900">날짜별 기록</h2>
+                <span className="text-xs font-medium text-gray-500">{historyGroups.length}일</span>
               </div>
-              <div className="grid gap-2 text-sm sm:grid-cols-2 lg:grid-cols-4">
-                <div>
-                  <span className="text-gray-600">총 측정:</span>
-                  <span className="ml-2 font-bold text-gray-900">{selectedHistoryGroup.sessionCount}회</span>
-                </div>
-                <div>
-                  <span className="text-gray-600">평균:</span>
-                  <span className="ml-2 font-bold text-gray-900">{selectedHistoryGroup.averageScore ?? "--"}</span>
-                </div>
-                <div>
-                  <span className="text-gray-600">사용 시간:</span>
-                  <span className="ml-2 font-bold text-gray-900">{formatMinutes(selectedHistoryGroup.totalUsageMinutes)}</span>
-                </div>
-                <div>
-                  <span className="text-gray-600">알림:</span>
-                  <span className="ml-2 font-bold text-orange-600">{selectedHistoryGroup.alertCount}회</span>
-                </div>
+              <div className="flex gap-3 overflow-x-auto pb-1 lg:hidden">
+                {historyGroups.map((day) => renderDateItem(day, "mobile"))}
               </div>
-            </div>
+              <div className="hidden gap-2 overflow-y-auto pr-1 lg:grid lg:max-h-[calc(100vh-14rem)]">
+                {historyGroups.map((day) => renderDateItem(day, "desktop"))}
+              </div>
+            </section>
 
-            <div className="space-y-3">
+            <div className="min-w-0 space-y-4">
+              <section className="app-surface p-6">
+                <div className="mb-4">
+                  <h3 className="text-lg font-bold text-gray-900">{formatDateKey(selectedHistoryGroup.dateKey)}</h3>
+                  <p className="text-sm text-gray-500">선택한 날짜의 자세 기록</p>
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                  {renderStatCard("총 측정", `${selectedHistoryGroup.sessionCount}회`, <Activity className="h-4 w-4" />)}
+                  {renderStatCard(
+                    "평균",
+                    selectedHistoryGroup.averageScore ?? "--",
+                    <CheckCircle className="h-4 w-4" />,
+                    { badge: selectedHistoryGroup.averageScore === null ? missingScoreBadge : null }
+                  )}
+                  {renderStatCard("사용 시간", formatMinutes(selectedHistoryGroup.totalUsageMinutes), <Clock className="h-4 w-4" />)}
+                  {renderStatCard(
+                    "알림",
+                    `${selectedHistoryGroup.alertCount}회`,
+                    <Bell className="h-4 w-4" />,
+                    { tone: selectedHistoryGroup.alertCount > 0 ? "warning" : "neutral" }
+                  )}
+                </div>
+              </section>
+
+            <section className="space-y-3">
+              <div className="flex items-center justify-between gap-3">
+                <h2 className="text-base font-bold text-gray-900">세션 기록</h2>
+                <span className="text-xs font-medium text-gray-500">{selectedHistoryGroup.sessions.length}개 세션</span>
+              </div>
+
               {selectedHistoryGroup.sessions.map((session) => {
                 const areaScores = getHistoryAreaScores(session.postureAreaStats);
                 const weakestArea = getHistoryWeakestArea(session.postureAreaStats);
                 const historyReportComment = getHistoryReportComment(areaScores);
                 const isImagesExpanded = expandedHistoryImageSessions.has(session.sessionId);
+                const sessionAverageScore = session.averageScore;
+                const hasAverage = sessionAverageScore !== null;
+                const sessionDuration = formatMinutes(session.durationMinutes ?? 0);
 
-                  return (
-                    <div key={session.sessionId} className="border border-gray-100 bg-[rgba(196,246,232,0.24)] p-4">
-                      <div className="mb-4 flex flex-col justify-between gap-2 md:flex-row md:items-start">
-                        <div>
-                          <p className="font-medium text-gray-900">
-                            {formatTime(session.startedAt)}
-                            {session.endedAt ? ` - ${formatTime(session.endedAt)}` : ""}
-                          </p>
-                          <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-sm text-gray-600">
-                            <span>최고: {session.bestScore ?? "--"}</span>
-                            <span>최저: {session.worstScore ?? "--"}</span>
-                            <span>알림: {session.alertCount}</span>
-                            <span>사용: {formatMinutes(session.durationMinutes ?? 0)}</span>
-                          </div>
+                return (
+                  <article key={session.sessionId} className="app-surface p-5">
+                    <div className="flex flex-col justify-between gap-3 border-b border-[rgba(18,100,76,0.16)] pb-4 md:flex-row md:items-start">
+                      <div>
+                        <p className="text-base font-bold text-gray-900">
+                          {formatTime(session.startedAt)}
+                          {session.endedAt ? ` - ${formatTime(session.endedAt)}` : ""}
+                        </p>
+                        <p className="mt-1 text-sm text-gray-500">사용 시간 {sessionDuration}</p>
+                      </div>
+                      <div className="flex items-center gap-3 md:justify-end">
+                        <div className="text-right">
+                          <p className="text-xs font-bold text-gray-500">평균</p>
+                          <p className="text-2xl font-bold leading-none tabular-nums text-[#18755B]">{sessionAverageScore ?? "--"}</p>
                         </div>
-                        <div className="flex items-center gap-2 text-sm font-bold text-gray-900">
-                          <span>평균</span>
-                          <span className="tabular-nums text-[#18755B]">{session.averageScore ?? "--"}</span>
-                          {session.averageScore !== null && session.averageScore >= 80 ? (
-                            <CheckCircle className="h-4 w-4 text-green-600" />
+                        {hasAverage ? (
+                          sessionAverageScore >= 80 ? (
+                            <CheckCircle className="h-5 w-5 text-green-600" />
                           ) : (
-                            <AlertTriangle className="h-4 w-4 text-yellow-600" />
-                          )}
-                        </div>
+                            <AlertTriangle className="h-5 w-5 text-yellow-600" />
+                          )
+                        ) : (
+                          missingScoreBadge
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="grid gap-2 border-b border-[rgba(18,100,76,0.16)] py-4 text-sm sm:grid-cols-4">
+                      <div>
+                        <span className="block text-xs font-bold text-gray-500">최고</span>
+                        <strong className="tabular-nums text-gray-900">{session.bestScore ?? "--"}</strong>
+                      </div>
+                      <div>
+                        <span className="block text-xs font-bold text-gray-500">최저</span>
+                        <strong className="tabular-nums text-gray-900">{session.worstScore ?? "--"}</strong>
+                      </div>
+                      <div>
+                        <span className="block text-xs font-bold text-gray-500">알림</span>
+                        <strong className={session.alertCount > 0 ? "tabular-nums text-orange-700" : "tabular-nums text-gray-900"}>
+                          {session.alertCount}회
+                        </strong>
+                      </div>
+                      <div>
+                        <span className="block text-xs font-bold text-gray-500">사용</span>
+                        <strong className="tabular-nums text-gray-900">{sessionDuration}</strong>
+                      </div>
+                    </div>
+
+                    <div className="py-4">
+                      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+                        <span className="text-sm font-bold text-gray-900">주의 부위</span>
+                        {weakestArea ? (
+                          <strong className="inline-flex items-center gap-1.5 text-sm tabular-nums text-[#18755B]">
+                            {getPostureAreaIcon(weakestArea.area, "h-3.5 w-3.5")}
+                            <span>{weakestArea.label} {weakestArea.score}</span>
+                          </strong>
+                        ) : (
+                          missingScoreBadge
+                        )}
                       </div>
 
-                      <div className="mb-4 border-y border-gray-200 py-3">
-                        <div className="mb-2 grid grid-cols-[76px_minmax(0,160px)] items-center gap-3 text-sm leading-5">
-                          <span className="font-bold text-gray-900">주의 부위</span>
-                          <strong className="inline-flex items-center justify-end gap-1.5 text-right tabular-nums text-[#18755B]">
-                            {weakestArea ? getPostureAreaIcon(weakestArea.area, "h-3.5 w-3.5") : null}
-                            <span>{weakestArea ? `${weakestArea.label} ${weakestArea.score}` : "--"}</span>
-                          </strong>
-                        </div>
-                        <div className="grid gap-3 sm:grid-cols-[minmax(0,170px)_minmax(0,1fr)] sm:items-end">
-                          <div className="grid grid-cols-2 gap-3 text-sm">
-                            {areaScores.map((area) => (
-                              <div key={area.area} className="grid min-w-0 justify-items-start gap-1.5 leading-5">
-                                <span className="inline-flex min-w-0 items-center gap-1.5 text-gray-500">
-                                  <span
-                                    className="inline-flex shrink-0 text-[#18755B]"
-                                  >
-                                    {getPostureAreaIcon(area.area, "h-3.5 w-3.5")}
-                                  </span>
-                                  <span>{area.label}</span>
+                      <div className="grid gap-4 md:grid-cols-[minmax(0,230px)_minmax(0,1fr)] md:items-center">
+                        <div className="grid grid-cols-2 gap-3">
+                          {areaScores.map((area) => (
+                            <div key={area.area} className="min-w-0">
+                              <span className="mb-2 inline-flex min-w-0 items-center gap-1.5 text-sm font-bold text-gray-700">
+                                <span className="inline-flex shrink-0 text-[#18755B]">
+                                  {getPostureAreaIcon(area.area, "h-3.5 w-3.5")}
                                 </span>
+                                <span>{area.label}</span>
+                              </span>
+                              <div className="flex items-center gap-3">
                                 <span
-                                  className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border text-sm font-bold tabular-nums text-[#001A12] lg:h-[52px] lg:w-[52px]"
+                                  className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border text-sm font-bold tabular-nums text-[#001A12]"
                                   style={getScoreIndicatorStyle(area.score)}
                                 >
                                   {area.score ?? "--"}
                                 </span>
+                                <span className="min-w-0 text-xs font-bold text-gray-500">
+                                  {area.score === null ? "측정 부족" : area.score >= 75 ? "안정" : "확인 필요"}
+                                </span>
                               </div>
-                            ))}
+                            </div>
+                          ))}
+                        </div>
+                        <p className="text-sm leading-6 text-gray-600">
+                          {historyReportComment}
+                        </p>
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setExpandedHistoryImageSessions((current) => {
+                          const next = new Set(current);
+                          if (next.has(session.sessionId)) {
+                            next.delete(session.sessionId);
+                          } else {
+                            next.add(session.sessionId);
+                          }
+                          return next;
+                        })
+                      }
+                      className="inline-flex min-h-10 items-center justify-center gap-2 border border-[rgba(18,100,76,0.3)] bg-white px-4 py-2 text-sm font-bold text-gray-700"
+                    >
+                      <span>{isImagesExpanded ? "자세 이미지 닫기" : "자세 이미지 보기"}</span>
+                      <ChevronRight className={`h-4 w-4 transition-transform ${isImagesExpanded ? "rotate-90" : ""}`} />
+                    </button>
+
+                    {isImagesExpanded && (
+                      <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
+                        <div className="overflow-hidden border border-gray-200 bg-white">
+                          {session.bestImageUrl ? (
+                            <img src={session.bestImageUrl} alt="최고 자세" className="aspect-video w-full object-cover" />
+                          ) : (
+                            <div className="flex aspect-video items-center justify-center text-sm text-gray-400">
+                              최고 자세 이미지 없음
+                            </div>
+                          )}
+                          <div className="p-3 text-sm font-medium text-gray-900">최고 점수: {session.bestScore ?? "--"}</div>
+                        </div>
+                        <div className="overflow-hidden border border-gray-200 bg-white">
+                          {session.worstImageUrl ? (
+                            <img src={session.worstImageUrl} alt="최저 자세" className="aspect-video w-full object-cover" />
+                          ) : (
+                            <div className="flex aspect-video items-center justify-center text-sm text-gray-400">
+                              최저 자세 이미지 없음
+                            </div>
+                          )}
+                          <div className="p-3 text-sm font-medium text-gray-900">
+                            최저 점수: {session.worstScore ?? "--"}
                           </div>
-                          <p className="max-w-[260px] text-sm leading-6 text-gray-600">
-                            {historyReportComment}
-                          </p>
                         </div>
                       </div>
-
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setExpandedHistoryImageSessions((current) => {
-                            const next = new Set(current);
-                            if (next.has(session.sessionId)) {
-                              next.delete(session.sessionId);
-                            } else {
-                              next.add(session.sessionId);
-                            }
-                            return next;
-                          })
-                        }
-                        className="inline-flex min-h-10 items-center justify-center gap-2 border border-gray-300 bg-white px-4 py-2 text-sm font-bold text-gray-700"
-                      >
-                        <span>{isImagesExpanded ? "자세 이미지 닫기" : "자세 이미지 보기"}</span>
-                        <ChevronRight className="h-4 w-4" />
-                      </button>
-
-                      {isImagesExpanded && (
-                        <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
-                          <div className="overflow-hidden border border-gray-200 bg-white">
-                            {session.bestImageUrl ? (
-                              <img src={session.bestImageUrl} alt="최고 자세" className="aspect-video w-full object-cover" />
-                            ) : (
-                              <div className="flex aspect-video items-center justify-center text-sm text-gray-400">
-                                최고 자세 이미지 없음
-                              </div>
-                            )}
-                            <div className="p-3 text-sm font-medium text-gray-900">최고 점수: {session.bestScore ?? "--"}</div>
-                          </div>
-                          <div className="overflow-hidden border border-gray-200 bg-white">
-                            {session.worstImageUrl ? (
-                              <img src={session.worstImageUrl} alt="최저 자세" className="aspect-video w-full object-cover" />
-                            ) : (
-                              <div className="flex aspect-video items-center justify-center text-sm text-gray-400">
-                                최저 자세 이미지 없음
-                              </div>
-                            )}
-                            <div className="p-3 text-sm font-medium text-gray-900">
-                              최저 점수: {session.worstScore ?? "--"}
-                            </div>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  );
+                    )}
+                  </article>
+                );
               })}
+            </section>
             </div>
           </div>
-        </div>
-      ) : (
-        <div className="app-surface p-6 text-gray-600">
-          기록을 불러오는 중입니다...
-        </div>
-      )}
-    </div>
-  );
+        ) : (
+          <div className="app-surface p-6 text-gray-600">
+            기록을 불러오는 중입니다...
+          </div>
+        )}
+      </div>
+    );
+  };
 
   const settingsStatusText =
     settingsSaveStatus === "saving"
