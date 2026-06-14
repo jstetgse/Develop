@@ -1397,7 +1397,7 @@ function AuthScreen({
             <Activity className="h-10 w-10 text-blue-600" />
             <span className="text-3xl font-bold text-gray-900">Posture Analyzer</span>
           </div>
-          <p className="text-gray-600">AI 기반 자세 분석 서비스</p>
+          <p className="text-gray-600">웹캠 기반 자세 분석 서비스</p>
         </div>
 
         <div className="app-surface p-8">
@@ -1772,7 +1772,7 @@ export function PostureCoachApp() {
     if (validAreaScores.length === 0 || !homeScoreInsight.weakestAreaLabel) {
       return {
         attentionText: "--",
-        statusText: "분석 기록이 아직 없습니다",
+        statusText: "분석을 시작하면 자세 요약이 표시됩니다",
         weakestArea: null,
       };
     }
@@ -1780,14 +1780,21 @@ export function PostureCoachApp() {
     if (isStable) {
       return {
         attentionText: "안정",
-        statusText: "최근 자세가 안정적입니다",
+        statusText: "최근 자세 흐름이 안정적입니다",
         weakestArea: null,
       };
     }
 
+    const statusText =
+      homeScoreInsight.weakestArea === "neck"
+        ? "목 정렬을 먼저 확인해보세요"
+        : homeScoreInsight.weakestArea === "torso"
+          ? "허리 균형을 먼저 확인해보세요"
+          : "자세 안정성을 먼저 확인해보세요";
+
     return {
       attentionText: `${homeScoreInsight.weakestAreaLabel} ${homeScoreInsight.weakestAreaScore ?? "--"}`,
-      statusText: `${homeScoreInsight.weakestAreaLabel} 점수가 가장 낮습니다`,
+      statusText,
       weakestArea: homeScoreInsight.weakestArea,
     };
   }, [homeScoreInsight]);
