@@ -352,8 +352,7 @@ export async function saveSessionTitle(
 
   try {
     if (!normalizedTitle) {
-      await deleteDoc(ref);
-      return true;
+      return false;
     }
 
     await setDoc(

@@ -9,6 +9,7 @@ import {
   Bone,
   Calendar,
   CheckCircle,
+  ChevronLeft,
   ChevronRight,
   Clock,
   Dumbbell,
@@ -91,9 +92,10 @@ import type {
 } from "@/lib/types";
 import { getSessionTitleKey, normalizeSessionTitle, SESSION_TITLE_MAX_LENGTH } from "@/lib/session-title";
 
-type Tab = "home" | "analysis" | "stretching" | "history" | "settings";
+type Tab = "home" | "analysis" | "stretching" | "history";
 type AuthPage = "login" | "signup";
 type SettingsSaveStatus = "idle" | "saving" | "saved" | "error";
+type AnalysisSettingsPanel = "analysis-options" | "posture-alerts" | "stretch-alerts";
 type PendingTitleSession = {
   sessionId: string;
   sessionTitleKey: string;
@@ -742,28 +744,12 @@ function getHistoryReportComment(areaScores: ReturnType<typeof getHistoryAreaSco
   return "목과 허리 균형이 안정적으로 기록되었습니다.";
 }
 
-function getHistorySessionDisplayTitle(session: SessionSummary, weakestArea: ReturnType<typeof getHistoryWeakestArea>) {
+function getHistorySessionDisplayTitle(session: SessionSummary) {
   if (session.customTitle?.trim()) {
     return session.customTitle;
   }
 
-  if (session.averageScore === null) {
-    return "짧은 측정 기록";
-  }
-
-  if (session.alertCount >= 3) {
-    return "알림이 많았던 기록";
-  }
-
-  if (weakestArea?.area === "neck") {
-    return "목 점검 기록";
-  }
-
-  if (weakestArea?.area === "torso") {
-    return "허리 점검 기록";
-  }
-
-  return "자세 분석 기록";
+  return "제목을 입력해주세요";
 }
 
 function getScoreIndicatorStyle(score: number | null) {
@@ -774,8 +760,16 @@ function getScoreIndicatorStyle(score: number | null) {
     };
   }
 
-  const fill = score >= 85 ? 270 : score >= 70 ? 210 : score >= 55 ? 150 : 90;
+  const normalizedScore = Math.min(Math.max(score, 0), 100);
+  const fill = Math.round(normalizedScore * 3.6);
   const color = score < 60 ? "#EAB308" : "#39AF8E";
+
+  if (fill >= 360) {
+    return {
+      background: color,
+      borderColor: "rgba(18, 100, 76, 0.22)",
+    };
+  }
 
   return {
     background: `conic-gradient(${color} 0deg ${fill}deg, #D6F3EB ${fill}deg 360deg)`,
@@ -1623,6 +1617,9 @@ export function PostureCoachApp() {
     String(DEFAULT_SETTINGS.badPostureDurationMinutes)
   );
   const [settingsSaveStatus, setSettingsSaveStatus] = useState<SettingsSaveStatus>("idle");
+  const [activeAnalysisSettingsPanel, setActiveAnalysisSettingsPanel] =
+    useState<AnalysisSettingsPanel>("analysis-options");
+  const [isAnalysisSettingsOpen, setIsAnalysisSettingsOpen] = useState(false);
   const [isClearingHistory, setIsClearingHistory] = useState(false);
   const [isRunning, setIsRunning] = useState(false);
   const [pendingCameraStart, setPendingCameraStart] = useState(false);
@@ -1647,6 +1644,7 @@ export function PostureCoachApp() {
   const [historyGroups, setHistoryGroups] = useState<HistoryGroup[]>([]);
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
   const [selectedHistoryDateKey, setSelectedHistoryDateKey] = useState<string | null>(null);
+  const [historySessionPage, setHistorySessionPage] = useState(0);
   const [storageText, setStorageText] = useState("Firebase 확인 중");
   const [storageTone, setStorageTone] = useState<"good" | "warn" | "danger">("warn");
   const [cameraText, setCameraText] = useState("카메라 대기");
@@ -2027,6 +2025,14 @@ export function PostureCoachApp() {
         return;
       }
 
+      if (!normalizedTitle) {
+        setSessionTitleErrors((current) => ({
+          ...current,
+          [sessionTitleKey]: "제목을 입력해주세요.",
+        }));
+        return;
+      }
+
       setSavingSessionTitleKey(sessionTitleKey);
       setSessionTitleErrors((current) => {
         const next = { ...current };
@@ -2045,7 +2051,7 @@ export function PostureCoachApp() {
         return;
       }
 
-      updateLocalSessionTitle(sessionTitleKey, normalizedTitle || null);
+      updateLocalSessionTitle(sessionTitleKey, normalizedTitle);
       setEditingSessionTitleKey(null);
       setSessionTitleDraft("");
     },
@@ -2060,9 +2066,7 @@ export function PostureCoachApp() {
 
     const normalizedTitle = normalizeSessionTitle(pendingTitleDraft);
     if (!normalizedTitle) {
-      setPendingTitleSession(null);
-      setPendingTitleDraft("");
-      setPendingTitleError(null);
+      setPendingTitleError("제목을 입력해주세요.");
       return;
     }
 
@@ -3389,28 +3393,6 @@ export function PostureCoachApp() {
     void persistSettings(nextSettings);
   }, [badPostureDurationMinutesInput, persistSettings, settingsDraft]);
 
-  const handleApplyAnalysisSettings = useCallback(() => {
-    const nextSettings = {
-      ...settings,
-      landmarkOverlayEnabled: settingsDraft.landmarkOverlayEnabled,
-      smoothingEnabled: true,
-      preferredSideMode: settingsDraft.preferredSideMode,
-      notificationPermissionStatus: getNotificationPermissionStatus(),
-    };
-    setSettings(nextSettings);
-    setSettingsDraft((current) => ({
-      ...current,
-      landmarkOverlayEnabled: nextSettings.landmarkOverlayEnabled,
-      smoothingEnabled: true,
-      preferredSideMode: nextSettings.preferredSideMode,
-      notificationPermissionStatus: nextSettings.notificationPermissionStatus,
-    }));
-    settingsRef.current = nextSettings;
-    analyzerRef.current.setPreferredSideMode(nextSettings.preferredSideMode);
-    detectorRef.current?.setOptions({ smoothLandmarks: true });
-    void persistSettings(nextSettings);
-  }, [persistSettings, settings, settingsDraft.landmarkOverlayEnabled, settingsDraft.preferredSideMode]);
-
   const handleResetSettings = useCallback(() => {
     const nextSettings = createDefaultSettings();
     setSettingsDraft(nextSettings);
@@ -3575,6 +3557,10 @@ export function PostureCoachApp() {
   }, [historyGroups, selectedHistoryDateKey]);
 
   useEffect(() => {
+    setHistorySessionPage(0);
+  }, [selectedHistoryDateKey]);
+
+  useEffect(() => {
     appModeRef.current = appMode;
   }, [appMode]);
 
@@ -3615,6 +3601,31 @@ export function PostureCoachApp() {
       />
     );
   }
+
+  const analysisSettingsPanels: Array<{ id: AnalysisSettingsPanel; title: string; icon: ReactNode }> = [
+    { id: "analysis-options", title: "분석 옵션", icon: <SlidersHorizontal className="h-5 w-5 text-blue-600" /> },
+    { id: "posture-alerts", title: "자세 경고 알림", icon: <Bell className="h-5 w-5 text-blue-600" /> },
+    { id: "stretch-alerts", title: "스트레칭 알림", icon: <Clock className="h-5 w-5 text-blue-600" /> },
+  ];
+  const activeAnalysisSettingsPanelIndex = Math.max(
+    0,
+    analysisSettingsPanels.findIndex((panel) => panel.id === activeAnalysisSettingsPanel)
+  );
+  const currentAnalysisSettingsPanel = analysisSettingsPanels[activeAnalysisSettingsPanelIndex];
+  const showPreviousAnalysisSettingsPanel = () => {
+    setActiveAnalysisSettingsPanel((current) => {
+      const currentIndex = analysisSettingsPanels.findIndex((panel) => panel.id === current);
+      const nextIndex = (currentIndex - 1 + analysisSettingsPanels.length) % analysisSettingsPanels.length;
+      return analysisSettingsPanels[nextIndex].id;
+    });
+  };
+  const showNextAnalysisSettingsPanel = () => {
+    setActiveAnalysisSettingsPanel((current) => {
+      const currentIndex = analysisSettingsPanels.findIndex((panel) => panel.id === current);
+      const nextIndex = (currentIndex + 1) % analysisSettingsPanels.length;
+      return analysisSettingsPanels[nextIndex].id;
+    });
+  };
 
   const renderHome = () => (
     <div className="space-y-6">
@@ -3780,7 +3791,17 @@ export function PostureCoachApp() {
         <div className="mb-4 flex flex-col justify-between gap-3 sm:flex-row sm:items-start">
           <div>
             <p className="mb-1 text-xs font-bold uppercase tracking-[0.18em] text-blue-600">실시간 카메라</p>
-            <h2 className="text-2xl font-bold text-gray-900">측면 자세 분석</h2>
+            <div className="flex items-center gap-2">
+              <h2 className="text-2xl font-bold text-gray-900">측면 자세 분석</h2>
+              <button
+                type="button"
+                onClick={() => setIsAnalysisSettingsOpen(true)}
+                className="flex h-8 w-8 items-center justify-center border border-[rgba(18,100,76,0.24)] bg-white text-[#18755B]"
+                aria-label="분석 설정 열기"
+              >
+                <SlidersHorizontal className="h-4 w-4" />
+              </button>
+            </div>
             <p className="mt-2 text-sm leading-6 text-gray-600">
               카메라가 사용자의 옆모습을 볼 수 있도록 앉아주세요.
             </p>
@@ -3843,53 +3864,6 @@ export function PostureCoachApp() {
           </button>
         </div>
 
-        <div className="app-surface-muted mt-5 p-4">
-          <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
-            <div className="flex items-center gap-3">
-              <SlidersHorizontal className="h-5 w-5 text-blue-600" />
-              <h3 className="text-lg font-bold text-gray-900">분석 옵션</h3>
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              {settingsStatusText && (
-                <span
-                  className={`border px-3 py-1 text-xs font-medium ${
-                    settingsSaveStatus === "error" ? "bg-red-100 text-red-700" : "bg-blue-50 text-blue-700"
-                  }`}
-                >
-                  {settingsStatusText}
-                </span>
-              )}
-              <button
-                type="button"
-                onClick={handleApplyAnalysisSettings}
-                className="bg-blue-600 px-4 py-2 text-sm font-bold text-white"
-              >
-                적용하기
-              </button>
-            </div>
-          </div>
-          <div className="space-y-4">
-            <ToggleControl
-              checked={settingsDraft.landmarkOverlayEnabled}
-              onChange={(checked) => updateSettingsDraft({ landmarkOverlayEnabled: checked })}
-              label="자세 랜드마크 표시 켜기/끄기"
-            />
-            <label className="block">
-              <span className="text-sm font-medium text-gray-700">측면 분석 기준</span>
-              <select
-                value={settingsDraft.preferredSideMode}
-                onChange={(event) => updateSettingsDraft({ preferredSideMode: event.target.value as SideMode })}
-                className="mt-2 w-full border border-gray-300 bg-white px-3 py-2"
-              >
-                <option value="left">왼쪽 옆모습 고정</option>
-                <option value="right">오른쪽 옆모습 고정</option>
-              </select>
-              <p className="mt-2 text-xs leading-5 text-gray-500">
-                선택한 방향의 귀, 어깨, 엉덩이 랜드마크만 사용해 분석합니다.
-              </p>
-            </label>
-          </div>
-        </div>
       </section>
 
       <div className="space-y-4">
@@ -4460,6 +4434,20 @@ export function PostureCoachApp() {
       );
     };
 
+    const historySessionsPerPage = 3;
+    const historySessionTotalPages = selectedHistoryGroup
+      ? Math.max(1, Math.ceil(selectedHistoryGroup.sessions.length / historySessionsPerPage))
+      : 1;
+    const currentHistorySessionPage = Math.min(historySessionPage, historySessionTotalPages - 1);
+    const visibleHistorySessions = selectedHistoryGroup
+      ? selectedHistoryGroup.sessions.slice(
+          currentHistorySessionPage * historySessionsPerPage,
+          currentHistorySessionPage * historySessionsPerPage + historySessionsPerPage
+        )
+      : [];
+    const canGoPreviousHistoryPage = currentHistorySessionPage > 0;
+    const canGoNextHistoryPage = currentHistorySessionPage < historySessionTotalPages - 1;
+
     return (
       <div className="space-y-6">
         <div>
@@ -4515,13 +4503,55 @@ export function PostureCoachApp() {
                 </div>
               </section>
 
+              <section className="app-surface p-4">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <h2 className="text-base font-bold text-gray-900">데이터 관리</h2>
+                    <p className="mt-1 text-sm text-gray-500">저장된 자세 분석 기록을 초기화할 수 있습니다.</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => void handleClearHistory()}
+                    disabled={isClearingHistory}
+                    className="inline-flex min-h-10 items-center justify-center gap-2 border border-red-200 px-4 py-2 text-sm font-bold text-red-700 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                    {isClearingHistory ? "기록 초기화 중..." : "기록 초기화"}
+                  </button>
+                </div>
+              </section>
+
             <section className="space-y-3">
-              <div className="flex items-center justify-between gap-3">
-                <h2 className="text-base font-bold text-gray-900">세션 기록</h2>
-                <span className="text-xs font-medium text-gray-500">{selectedHistoryGroup.sessions.length}개 세션</span>
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <h2 className="text-base font-bold text-gray-900">세션 기록</h2>
+                  <p className="mt-1 text-xs font-medium text-gray-500">
+                    {selectedHistoryGroup.sessions.length}개 세션 · {currentHistorySessionPage + 1} / {historySessionTotalPages}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setHistorySessionPage((current) => Math.max(0, current - 1))}
+                    disabled={!canGoPreviousHistoryPage}
+                    className="flex h-9 w-9 items-center justify-center border border-gray-300 bg-white text-gray-700 disabled:cursor-not-allowed disabled:opacity-40"
+                    aria-label="이전 세션 페이지"
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setHistorySessionPage((current) => Math.min(historySessionTotalPages - 1, current + 1))}
+                    disabled={!canGoNextHistoryPage}
+                    className="flex h-9 w-9 items-center justify-center border border-gray-300 bg-white text-gray-700 disabled:cursor-not-allowed disabled:opacity-40"
+                    aria-label="다음 세션 페이지"
+                  >
+                    <ChevronRight className="h-4 w-4" />
+                  </button>
+                </div>
               </div>
 
-              {selectedHistoryGroup.sessions.map((session) => {
+              {visibleHistorySessions.map((session) => {
                 const areaScores = getHistoryAreaScores(session.postureAreaStats);
                 const weakestArea = getHistoryWeakestArea(session.postureAreaStats);
                 const historyReportComment = getHistoryReportComment(areaScores);
@@ -4530,7 +4560,8 @@ export function PostureCoachApp() {
                 const hasAverage = sessionAverageScore !== null;
                 const sessionDuration = formatMinutes(session.durationMinutes ?? 0);
                 const sessionTitleKey = session.sessionTitleKey ?? getSessionTitleKey(session, selectedHistoryGroup.dateKey);
-                const displayTitle = getHistorySessionDisplayTitle(session, weakestArea);
+                const displayTitle = getHistorySessionDisplayTitle(session);
+                const hasCustomTitle = Boolean(session.customTitle?.trim());
                 const isEditingTitle = editingSessionTitleKey === sessionTitleKey;
                 const isSavingTitle = savingSessionTitleKey === sessionTitleKey;
                 const titleError = sessionTitleErrors[sessionTitleKey];
@@ -4559,7 +4590,7 @@ export function PostureCoachApp() {
                               maxLength={SESSION_TITLE_MAX_LENGTH}
                               autoFocus
                               className="min-h-10 w-full border border-[rgba(18,100,76,0.35)] bg-white px-3 py-2 text-base font-bold text-gray-900"
-                              placeholder="예: 공부 시간, 발표 연습"
+                              placeholder="제목을 입력해주세요"
                             />
                             <div className="flex flex-wrap items-center gap-2 text-xs text-gray-500">
                               <span>최대 {SESSION_TITLE_MAX_LENGTH}자</span>
@@ -4589,7 +4620,9 @@ export function PostureCoachApp() {
                         ) : (
                           <>
                             <div className="flex min-w-0 items-start gap-2">
-                              <p className="min-w-0 truncate text-lg font-bold text-gray-900">{displayTitle}</p>
+                              <p className={`min-w-0 truncate text-lg font-bold ${hasCustomTitle ? "text-gray-900" : "text-gray-500"}`}>
+                                {displayTitle}
+                              </p>
                               <button
                                 type="button"
                                 onClick={() => {
@@ -4794,198 +4827,251 @@ export function PostureCoachApp() {
     </label>
   );
 
-  const renderSettings = () => (
-    <div className="space-y-6">
-      <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">설정</h1>
-          <p className="mt-1 text-gray-600">알림과 분석 방식을 원하는 대로 조정하세요.</p>
-        </div>
-        <div className="flex flex-wrap items-center gap-3">
-          {settingsStatusText && (
-            <span
-                className={`border px-3 py-1 text-sm font-medium ${
-                  settingsSaveStatus === "error" ? "bg-red-100 text-red-700" : "bg-blue-50 text-blue-700"
-                }`}
-            >
-              {settingsStatusText}
-            </span>
-          )}
-          <button
-            type="button"
-            onClick={handleApplySettings}
-            disabled={!canApplySettings}
-            className="inline-flex min-h-11 items-center justify-center bg-blue-600 px-5 py-2 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            적용하기
-          </button>
-        </div>
-      </div>
+  const renderAnalysisSettingsModal = () => {
+    if (!isAnalysisSettingsOpen) {
+      return null;
+    }
 
-      <section className="app-surface p-6">
-        <div className="mb-5 flex items-center gap-3">
-          <Bell className="h-5 w-5 text-blue-600" />
-          <h2 className="text-xl font-bold text-gray-900">자세 경고 알림</h2>
-        </div>
-        <div className="space-y-4">
-          <ToggleControl
-            checked={settingsDraft.warningAlertEnabled}
-            onChange={(checked) => updateSettingsDraft({ warningAlertEnabled: checked })}
-            label="자세 경고 알림 켜기/끄기"
-          />
-          <label className="block">
-            <span className="text-sm font-medium text-gray-700">
-              {settingsDraft.warningScoreThreshold}점 이하일 때 경고
-            </span>
-            <input
-              type="range"
-              min="40"
-              max="90"
-              step="5"
-              value={settingsDraft.warningScoreThreshold}
-              onChange={(event) => updateSettingsDraft({ warningScoreThreshold: Number(event.target.value) })}
-              className="mt-3 w-full"
-            />
-          </label>
-          <ToggleControl
-            checked={settingsDraft.badPostureTestAlertEnabled}
-            onChange={(checked) => updateSettingsDraft({ badPostureTestAlertEnabled: checked })}
-            label="테스트 모드: 나쁜 자세가 1초 이상 지속되면 알림"
-          />
-          <div className="border border-gray-100 bg-[rgba(196,246,232,0.24)] p-4">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <p className="font-medium text-gray-900">Windows 알림</p>
-                <p className="mt-1 text-sm text-gray-600">
-                  현재 상태:{" "}
-                  {settingsDraft.notificationPermissionStatus === "granted"
-                    ? "허용됨"
-                    : settingsDraft.notificationPermissionStatus === "denied"
-                      ? "차단됨"
-                      : settingsDraft.notificationPermissionStatus === "unsupported"
-                        ? "지원 안 됨"
-                        : "권한 필요"}
-                </p>
+    return (
+      <div className="fixed inset-0 z-[70] flex items-end bg-black/35 px-4 py-6 sm:items-center sm:justify-center">
+        <section className="flex max-h-[88vh] w-full max-w-2xl flex-col border border-[rgba(18,100,76,0.24)] bg-white">
+          <div className="flex items-start justify-between gap-4 border-b border-[rgba(18,100,76,0.16)] p-5">
+            <div>
+              <p className="text-lg font-bold text-gray-900">분석 설정</p>
+              <p className="mt-1 text-sm text-gray-600">분석 옵션과 알림 기준을 조정하세요.</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setIsAnalysisSettingsOpen(false)}
+              className="flex h-8 w-8 shrink-0 items-center justify-center border border-gray-300 bg-white text-gray-700"
+              aria-label="분석 설정 닫기"
+            >
+              X
+            </button>
+          </div>
+
+          <div className="min-h-0 flex-1 overflow-y-auto p-5">
+            <div className="mb-5 flex min-w-0 items-center gap-3">
+              <button
+                type="button"
+                onClick={showPreviousAnalysisSettingsPanel}
+                className="flex h-9 w-9 shrink-0 items-center justify-center border border-gray-300 bg-white text-gray-700"
+                aria-label="이전 설정"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </button>
+              <div className="flex min-w-0 flex-1 items-center gap-3">
+                {currentAnalysisSettingsPanel.icon}
+                <div className="min-w-0">
+                  <h3 className="truncate text-lg font-bold text-gray-900">{currentAnalysisSettingsPanel.title}</h3>
+                  <p className="text-xs font-medium text-gray-500">
+                    {activeAnalysisSettingsPanelIndex + 1} / {analysisSettingsPanels.length}
+                  </p>
+                </div>
               </div>
               <button
                 type="button"
-                onClick={() => void handleRequestNotificationPermission()}
-                disabled={
-                  settingsDraft.notificationPermissionStatus === "granted" ||
-                  settingsDraft.notificationPermissionStatus === "unsupported"
-                }
-                className="inline-flex min-h-10 items-center justify-center border border-blue-200 bg-white px-4 py-2 text-sm font-bold text-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+                onClick={showNextAnalysisSettingsPanel}
+                className="flex h-9 w-9 shrink-0 items-center justify-center border border-gray-300 bg-white text-gray-700"
+                aria-label="다음 설정"
               >
-                Windows 알림 허용
+                <ChevronRight className="h-4 w-4" />
               </button>
             </div>
-            {settingsDraft.notificationPermissionStatus === "denied" && (
-              <p className="mt-3 text-sm leading-6 text-red-600">
-                브라우저에서 알림이 차단되어 있습니다. 주소창 왼쪽 사이트 설정에서 알림 권한을 허용해주세요.
-              </p>
+
+            {activeAnalysisSettingsPanel === "analysis-options" && (
+              <div className="space-y-4">
+                <ToggleControl
+                  checked={settingsDraft.landmarkOverlayEnabled}
+                  onChange={(checked) => updateSettingsDraft({ landmarkOverlayEnabled: checked })}
+                  label="자세 랜드마크 표시 켜기/끄기"
+                />
+                <label className="block">
+                  <span className="text-sm font-medium text-gray-700">측면 분석 기준</span>
+                  <select
+                    value={settingsDraft.preferredSideMode}
+                    onChange={(event) => updateSettingsDraft({ preferredSideMode: event.target.value as SideMode })}
+                    className="mt-2 w-full border border-gray-300 bg-white px-3 py-2"
+                  >
+                    <option value="left">왼쪽 옆모습 고정</option>
+                    <option value="right">오른쪽 옆모습 고정</option>
+                  </select>
+                  <p className="mt-2 text-xs leading-5 text-gray-500">
+                    선택한 방향의 귀, 어깨, 엉덩이 랜드마크만 사용해 분석합니다.
+                  </p>
+                </label>
+              </div>
+            )}
+
+            {activeAnalysisSettingsPanel === "posture-alerts" && (
+              <div className="space-y-4">
+                <ToggleControl
+                  checked={settingsDraft.warningAlertEnabled}
+                  onChange={(checked) => updateSettingsDraft({ warningAlertEnabled: checked })}
+                  label="자세 경고 알림 켜기/끄기"
+                />
+                <label className="block">
+                  <span className="text-sm font-medium text-gray-700">
+                    {settingsDraft.warningScoreThreshold}점 이하일 때 경고
+                  </span>
+                  <input
+                    type="range"
+                    min="40"
+                    max="90"
+                    step="5"
+                    value={settingsDraft.warningScoreThreshold}
+                    onChange={(event) => updateSettingsDraft({ warningScoreThreshold: Number(event.target.value) })}
+                    className="mt-3 w-full"
+                  />
+                </label>
+                <ToggleControl
+                  checked={settingsDraft.badPostureTestAlertEnabled}
+                  onChange={(checked) => updateSettingsDraft({ badPostureTestAlertEnabled: checked })}
+                  label="테스트 모드: 나쁜 자세가 1초 이상 지속되면 알림"
+                />
+                <div className="border border-gray-100 bg-[rgba(196,246,232,0.24)] p-4">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <p className="font-medium text-gray-900">Windows 알림</p>
+                      <p className="mt-1 text-sm text-gray-600">
+                        현재 상태:{" "}
+                        {settingsDraft.notificationPermissionStatus === "granted"
+                          ? "허용됨"
+                          : settingsDraft.notificationPermissionStatus === "denied"
+                            ? "차단됨"
+                            : settingsDraft.notificationPermissionStatus === "unsupported"
+                              ? "지원 안 됨"
+                              : "권한 필요"}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => void handleRequestNotificationPermission()}
+                      disabled={
+                        settingsDraft.notificationPermissionStatus === "granted" ||
+                        settingsDraft.notificationPermissionStatus === "unsupported"
+                      }
+                      className="inline-flex min-h-10 items-center justify-center border border-blue-200 bg-white px-4 py-2 text-sm font-bold text-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      Windows 알림 허용
+                    </button>
+                  </div>
+                  {settingsDraft.notificationPermissionStatus === "denied" && (
+                    <p className="mt-3 text-sm leading-6 text-red-600">
+                      브라우저에서 알림이 차단되어 있습니다. 주소창 왼쪽 사이트 설정에서 알림 권한을 허용해주세요.
+                    </p>
+                  )}
+                </div>
+                <label className="block">
+                  <span className="text-sm font-medium text-gray-700">
+                    나쁜 자세가 {badPostureDurationMinutesInput || "?"}분 이상 지속되면 알림
+                  </span>
+                  <select
+                    value={badPostureDurationMinutesInput}
+                    onChange={(event) => {
+                      setBadPostureDurationMinutesInput(event.target.value);
+                      setSettingsSaveStatus("idle");
+                    }}
+                    className={`mt-2 w-full border px-3 py-2 ${
+                      badPostureDurationError ? "border-red-300 bg-red-50" : "border-gray-300"
+                    }`}
+                  >
+                    {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((minutes) => (
+                      <option key={minutes} value={minutes}>
+                        {minutes}분
+                      </option>
+                    ))}
+                  </select>
+                  {badPostureDurationError && (
+                    <p className="mt-2 text-sm font-medium text-red-600">{badPostureDurationError}</p>
+                  )}
+                </label>
+                <label className="block">
+                  <span className="text-sm font-medium text-gray-700">
+                    실시간 자세 점수 갱신: {settingsDraft.realtimeScoreIntervalSeconds}초마다
+                  </span>
+                  <select
+                    value={settingsDraft.realtimeScoreIntervalSeconds}
+                    onChange={(event) => updateSettingsDraft({ realtimeScoreIntervalSeconds: Number(event.target.value) })}
+                    className="mt-2 w-full border border-gray-300 px-3 py-2"
+                  >
+                    {[1, 2, 3, 4, 5].map((seconds) => (
+                      <option key={seconds} value={seconds}>
+                        {seconds}초
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+            )}
+
+            {activeAnalysisSettingsPanel === "stretch-alerts" && (
+              <div className="space-y-4">
+                <ToggleControl
+                  checked={settingsDraft.stretchReminderEnabled}
+                  onChange={(checked) => updateSettingsDraft({ stretchReminderEnabled: checked })}
+                  label="스트레칭 알림 켜기/끄기"
+                />
+                <ToggleControl
+                  checked={settingsDraft.stretchReminderTestAlertEnabled}
+                  onChange={(checked) => updateSettingsDraft({ stretchReminderTestAlertEnabled: checked })}
+                  label="테스트 모드: 20초 이상 측정하면 Windows 스트레칭 알림"
+                />
+                <label className="block">
+                  <span className="text-sm font-medium text-gray-700">
+                    {settingsDraft.stretchReminderIntervalMinutes}분마다 스트레칭 알림
+                  </span>
+                  <select
+                    value={settingsDraft.stretchReminderIntervalMinutes}
+                    onChange={(event) => updateSettingsDraft({ stretchReminderIntervalMinutes: Number(event.target.value) })}
+                    className="mt-2 w-full border border-gray-300 px-3 py-2"
+                  >
+                    {[10, 20, 30, 40, 50, 60].map((minutes) => (
+                      <option key={minutes} value={minutes}>
+                        {minutes}분
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
             )}
           </div>
-          <label className="block">
-            <span className="text-sm font-medium text-gray-700">
-              나쁜 자세가 {badPostureDurationMinutesInput || "?"}분 이상 지속되면 알림
-            </span>
-            <input
-              type="text"
-              inputMode="numeric"
-              pattern="[0-9]*"
-              value={badPostureDurationMinutesInput}
-              onChange={(event) => {
-                setBadPostureDurationMinutesInput(event.target.value.replace(/\D/g, ""));
-                setSettingsSaveStatus("idle");
-              }}
-              className={`mt-2 w-full border px-3 py-2 ${
-                badPostureDurationError ? "border-red-300 bg-red-50" : "border-gray-300"
-              }`}
-            />
-            {badPostureDurationError && (
-              <p className="mt-2 text-sm font-medium text-red-600">{badPostureDurationError}</p>
-            )}
-          </label>
-          <label className="block">
-            <span className="text-sm font-medium text-gray-700">
-              실시간 자세 점수 갱신: {settingsDraft.realtimeScoreIntervalSeconds}초마다
-            </span>
-            <select
-              value={settingsDraft.realtimeScoreIntervalSeconds}
-              onChange={(event) => updateSettingsDraft({ realtimeScoreIntervalSeconds: Number(event.target.value) })}
-              className="mt-2 w-full border border-gray-300 px-3 py-2"
-            >
-              {[1, 2, 3, 4, 5].map((seconds) => (
-                <option key={seconds} value={seconds}>
-                  {seconds}초
-                </option>
-              ))}
-            </select>
-          </label>
-        </div>
-      </section>
 
-      <section className="app-surface p-6">
-        <div className="mb-5 flex items-center gap-3">
-          <Clock className="h-5 w-5 text-blue-600" />
-          <h2 className="text-xl font-bold text-gray-900">스트레칭 알림</h2>
-        </div>
-        <div className="space-y-4">
-          <ToggleControl
-            checked={settingsDraft.stretchReminderEnabled}
-            onChange={(checked) => updateSettingsDraft({ stretchReminderEnabled: checked })}
-            label="스트레칭 알림 켜기/끄기"
-          />
-          <ToggleControl
-            checked={settingsDraft.stretchReminderTestAlertEnabled}
-            onChange={(checked) => updateSettingsDraft({ stretchReminderTestAlertEnabled: checked })}
-            label="테스트 모드: 20초 이상 측정하면 Windows 스트레칭 알림"
-          />
-          <label className="block">
-            <span className="text-sm font-medium text-gray-700">
-              {settingsDraft.stretchReminderIntervalMinutes}분마다 스트레칭 알림
-            </span>
-            <select
-              value={settingsDraft.stretchReminderIntervalMinutes}
-              onChange={(event) => updateSettingsDraft({ stretchReminderIntervalMinutes: Number(event.target.value) })}
-              className="mt-2 w-full border border-gray-300 px-3 py-2"
-            >
-              {[10, 20, 30, 40, 50, 60].map((minutes) => (
-                <option key={minutes} value={minutes}>
-                  {minutes}분
-                </option>
-              ))}
-            </select>
-          </label>
-        </div>
-      </section>
-
-      <section className="app-surface p-6">
-        <div className="mb-5 flex items-center gap-3">
-          <h2 className="text-xl font-bold text-gray-900">데이터 설정</h2>
-        </div>
-        <div className="flex flex-col gap-3 sm:flex-row">
-          <button
-            type="button"
-            onClick={() => void handleClearHistory()}
-            disabled={isClearingHistory}
-            className="inline-flex min-h-11 items-center justify-center gap-2 border border-red-200 px-4 py-2 font-medium text-red-700 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            <Trash2 className="h-4 w-4" />
-            {isClearingHistory ? "기록 초기화 중..." : "기록 초기화"}
-          </button>
-          <button
-            type="button"
-            onClick={handleResetSettings}
-            className="inline-flex min-h-11 items-center justify-center gap-2 border border-gray-300 px-4 py-2 font-medium text-gray-700"
-          >
-            <RotateCcw className="h-4 w-4" />
-            기본 설정으로 되돌리기
-          </button>
-        </div>
-      </section>
-    </div>
-  );
+          <div className="flex flex-col gap-3 border-t border-[rgba(18,100,76,0.16)] p-5 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              {settingsStatusText && (
+                <span
+                  className={`border px-3 py-1 text-xs font-medium ${
+                    settingsSaveStatus === "error" ? "bg-red-100 text-red-700" : "bg-blue-50 text-blue-700"
+                  }`}
+                >
+                  {settingsStatusText}
+                </span>
+              )}
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={handleApplySettings}
+                disabled={!canApplySettings}
+                className="bg-blue-600 px-4 py-2 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                적용하기
+              </button>
+              <button
+                type="button"
+                onClick={handleResetSettings}
+                className="inline-flex min-h-9 items-center justify-center gap-2 border border-gray-300 bg-white px-3 py-2 text-sm font-bold text-gray-700"
+              >
+                <RotateCcw className="h-4 w-4" />
+                기본 설정으로 되돌리기
+              </button>
+            </div>
+          </div>
+        </section>
+      </div>
+    );
+  };
 
   const renderPendingTitlePrompt = () => {
     if (!pendingTitleSession) {
@@ -5014,24 +5100,12 @@ export function PostureCoachApp() {
                 maxLength={SESSION_TITLE_MAX_LENGTH}
                 autoFocus
                 className="min-h-11 border border-[rgba(18,100,76,0.35)] px-3 py-2 text-base font-bold text-gray-900"
-                placeholder="예: 공부 시간, 발표 연습, 수업 중 자세"
+                placeholder="제목을 입력해주세요"
               />
               <span className="text-xs text-gray-500">최대 {SESSION_TITLE_MAX_LENGTH}자</span>
             </label>
             {pendingTitleError && <p className="text-sm font-bold text-red-600">{pendingTitleError}</p>}
-            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-              <button
-                type="button"
-                disabled={pendingTitleSaving}
-                onClick={() => {
-                  setPendingTitleSession(null);
-                  setPendingTitleDraft("");
-                  setPendingTitleError(null);
-                }}
-                className="min-h-11 border border-gray-300 bg-white px-4 py-2 text-sm font-bold text-gray-700 disabled:opacity-60"
-              >
-                건너뛰기
-              </button>
+            <div className="flex justify-end">
               <button
                 type="submit"
                 disabled={pendingTitleSaving}
@@ -5048,6 +5122,7 @@ export function PostureCoachApp() {
 
   return (
     <div className="app-shell min-h-screen">
+      {renderAnalysisSettingsModal()}
       {renderPendingTitlePrompt()}
       <nav className="sticky top-0 z-50 border-b border-[#12644C]/20 bg-[#C4F6E8]">
         <div className="mx-auto max-w-[1100px] px-6">
@@ -5086,35 +5161,20 @@ export function PostureCoachApp() {
                 </span>
               </div>
               <div className="flex flex-wrap items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setActiveTab("settings")}
-                  className={`flex max-w-full items-center gap-2 border px-2 py-1 text-gray-700 ${
-                    activeTab === "settings"
-                      ? "border-[#18755B] text-[#18755B]"
-                      : "border-gray-200 text-gray-700"
-                  }`}
-                  aria-label="설정으로 이동"
-                >
+                <div className="flex max-w-full items-center gap-2 border border-gray-200 px-2 py-1 text-gray-700">
                   {authUser.photoURL ? (
                     <img
                       src={authUser.photoURL}
                       alt=""
-                      className={`h-7 w-7 rounded-full border object-cover ${
-                        activeTab === "settings" ? "border-[#18755B]" : "border-white"
-                      }`}
+                      className="h-7 w-7 rounded-full border border-white object-cover"
                     />
                   ) : (
-                    <span
-                      className={`flex h-7 w-7 items-center justify-center rounded-full border ${
-                        activeTab === "settings" ? "border-[#18755B] bg-white" : "border-gray-200 bg-gray-50"
-                      }`}
-                    >
+                    <span className="flex h-7 w-7 items-center justify-center rounded-full border border-gray-200 bg-gray-50">
                       <User className="h-4 w-4 text-gray-600" />
                     </span>
                   )}
                   <span className="max-w-[180px] truncate text-sm">{authUser.displayName ?? authUser.email}</span>
-                </button>
+                </div>
                 <button
                   type="button"
                   onClick={() => void handleLogout()}
@@ -5143,7 +5203,6 @@ export function PostureCoachApp() {
         {activeTab === "analysis" && renderAnalysis()}
         {activeTab === "stretching" && renderStretching()}
         {activeTab === "history" && renderHistory()}
-        {activeTab === "settings" && renderSettings()}
       </main>
 
       <nav className="fixed inset-x-0 bottom-0 z-50 bg-white pb-[calc(0.5rem+env(safe-area-inset-bottom))]" aria-label="하단 내비게이션">
