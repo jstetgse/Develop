@@ -4128,8 +4128,8 @@ export function PostureCoachApp() {
           {selectedStretch && activeStretchStep && (
             <div className="border border-[#12644C] bg-[#18755B] p-6 text-white">
               <div className="flex items-start gap-3">
-                <div className="flex h-16 w-16 shrink-0 items-center justify-center bg-white/15 text-white">
-                  {getStretchStepPictogram(activeStretchStep.checkType, "h-14 w-14")}
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center bg-white/20">
+                  <Activity className="h-5 w-5" />
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
@@ -4143,18 +4143,25 @@ export function PostureCoachApp() {
                       </span>
                     )}
                   </div>
-                  <label className="mt-3 inline-flex cursor-pointer items-center gap-2 border border-white/20 bg-white/15 px-2.5 py-1 text-xs font-bold text-blue-50">
+                  <label className="mt-2 inline-flex cursor-pointer items-center gap-1.5 text-xs font-medium text-blue-50/80">
                     <input
                       type="checkbox"
                       checked={stretchBeepEnabled && isStretchBeepSupported}
                       disabled={!isStretchBeepSupported}
                       onChange={(event) => updateStretchBeepEnabled(event.target.checked)}
-                      className="h-4 w-4"
+                      className="h-3.5 w-3.5"
                     />
                     <span>소리 안내</span>
                   </label>
-                  <p className="mt-3 text-sm font-bold text-blue-50">{activeStretchStep.title}</p>
-                  <p className="mt-1 text-base leading-7 text-blue-50">{activeStretchStep.instruction}</p>
+                  <div className="mt-3 flex items-start gap-3">
+                    <div className="flex h-12 w-12 shrink-0 items-center justify-center bg-white/15 text-blue-50">
+                      {getStretchStepPictogram(activeStretchStep.checkType, "h-9 w-9")}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-sm font-bold text-blue-50">{activeStretchStep.title}</p>
+                      <p className="mt-1 text-base leading-7 text-blue-50">{activeStretchStep.instruction}</p>
+                    </div>
+                  </div>
                   {isDynamicStretchStep(activeStretchStep) && (
                     <p className="mt-3 border border-yellow-200/50 bg-yellow-300/20 px-3 py-2 text-sm font-bold text-yellow-50">
                       천천히, 통증 없이 가능한 범위에서만 움직이세요.
@@ -4261,8 +4268,8 @@ export function PostureCoachApp() {
                     const pictogramBoxClassName = isCurrent
                       ? "bg-[#E7FFF7] text-[#18755B]"
                       : isDone
-                        ? "bg-green-100 text-green-700"
-                        : "bg-gray-50 text-gray-400";
+                        ? "bg-green-50 text-green-600"
+                        : "bg-transparent text-gray-300";
                     return (
                       <button
                         key={step.id}
@@ -4306,8 +4313,8 @@ export function PostureCoachApp() {
                           >
                             {isDone ? <CheckCircle className="h-4 w-4" /> : index + 1}
                           </div>
-                          <div className={`flex h-10 w-10 shrink-0 items-center justify-center ${pictogramBoxClassName}`}>
-                            {getStretchStepPictogram(step.checkType, "h-8 w-8")}
+                          <div className={`flex h-8 w-8 shrink-0 items-center justify-center ${pictogramBoxClassName}`}>
+                            {getStretchStepPictogram(step.checkType, "h-5 w-5")}
                           </div>
                           <div className="min-w-0 flex-1">
                             <div className="flex flex-wrap items-center gap-2">
@@ -4332,14 +4339,6 @@ export function PostureCoachApp() {
                 </div>
               </div>
 
-              <div className="border border-green-200 bg-green-50 p-4">
-                <p className="mb-2 text-sm font-medium text-green-900">진행 방법</p>
-                <ul className="space-y-1 text-sm text-green-800">
-                  <li>현재 단계 안내를 보고 자세를 맞추세요.</li>
-                  <li>좋은 자세를 5초 유지하면 단계가 완료됩니다.</li>
-                  <li>필요하면 다음 단계 버튼으로 직접 이동할 수 있습니다.</li>
-                </ul>
-              </div>
             </>
           ) : (
             <div className="space-y-3">
@@ -4962,46 +4961,48 @@ export function PostureCoachApp() {
                     </p>
                   )}
                 </div>
-                <label className="block">
-                  <span className="text-sm font-medium text-gray-700">
-                    나쁜 자세가 {badPostureDurationMinutesInput || "?"}분 이상 지속되면 알림
-                  </span>
-                  <select
-                    value={badPostureDurationMinutesInput}
-                    onChange={(event) => {
-                      setBadPostureDurationMinutesInput(event.target.value);
-                      setSettingsSaveStatus("idle");
-                    }}
-                    className={`mt-2 w-full border px-3 py-2 ${
-                      badPostureDurationError ? "border-red-300 bg-red-50" : "border-gray-300"
-                    }`}
-                  >
-                    {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((minutes) => (
-                      <option key={minutes} value={minutes}>
-                        {minutes}분
-                      </option>
-                    ))}
-                  </select>
-                  {badPostureDurationError && (
-                    <p className="mt-2 text-sm font-medium text-red-600">{badPostureDurationError}</p>
-                  )}
-                </label>
-                <label className="block">
-                  <span className="text-sm font-medium text-gray-700">
-                    실시간 자세 점수 갱신: {settingsDraft.realtimeScoreIntervalSeconds}초마다
-                  </span>
-                  <select
-                    value={settingsDraft.realtimeScoreIntervalSeconds}
-                    onChange={(event) => updateSettingsDraft({ realtimeScoreIntervalSeconds: Number(event.target.value) })}
-                    className="mt-2 w-full border border-gray-300 px-3 py-2"
-                  >
-                    {[1, 2, 3, 4, 5].map((seconds) => (
-                      <option key={seconds} value={seconds}>
-                        {seconds}초
-                      </option>
-                    ))}
-                  </select>
-                </label>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <label className="block">
+                    <span className="text-sm font-medium text-gray-700">
+                      나쁜 자세가 {badPostureDurationMinutesInput || "?"}분 이상 지속되면 알림
+                    </span>
+                    <select
+                      value={badPostureDurationMinutesInput}
+                      onChange={(event) => {
+                        setBadPostureDurationMinutesInput(event.target.value);
+                        setSettingsSaveStatus("idle");
+                      }}
+                      className={`mt-2 w-full border px-3 py-2 ${
+                        badPostureDurationError ? "border-red-300 bg-red-50" : "border-gray-300"
+                      }`}
+                    >
+                      {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((minutes) => (
+                        <option key={minutes} value={minutes}>
+                          {minutes}분
+                        </option>
+                      ))}
+                    </select>
+                    {badPostureDurationError && (
+                      <p className="mt-2 text-sm font-medium text-red-600">{badPostureDurationError}</p>
+                    )}
+                  </label>
+                  <label className="block">
+                    <span className="text-sm font-medium text-gray-700">
+                      실시간 자세 점수 갱신: {settingsDraft.realtimeScoreIntervalSeconds}초마다
+                    </span>
+                    <select
+                      value={settingsDraft.realtimeScoreIntervalSeconds}
+                      onChange={(event) => updateSettingsDraft({ realtimeScoreIntervalSeconds: Number(event.target.value) })}
+                      className="mt-2 w-full border border-gray-300 px-3 py-2"
+                    >
+                      {[1, 2, 3, 4, 5].map((seconds) => (
+                        <option key={seconds} value={seconds}>
+                          {seconds}초
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
               </div>
             )}
 
