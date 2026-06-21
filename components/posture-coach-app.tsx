@@ -705,6 +705,7 @@ function getStretchStepPictogram(checkType: StretchStep["checkType"], className 
 }
 
 const HISTORY_REPORT_AREAS: PostureRecommendationArea[] = ["neck", "torso"];
+const SCORE_INDICATOR_BORDER_WIDTH = 3;
 
 function getHistoryAreaScores(postureAreaStats?: PostureAreaStats) {
   return HISTORY_REPORT_AREAS.map((area) => {
@@ -757,23 +758,32 @@ function getScoreIndicatorStyle(score: number | null) {
     return {
       background: "#ffffff",
       borderColor: "rgba(18, 100, 76, 0.22)",
+      outline: `${SCORE_INDICATOR_BORDER_WIDTH}px solid rgba(107, 114, 128, 0.34)`,
+      outlineOffset: "0px",
     };
   }
 
   const normalizedScore = Math.min(Math.max(score, 0), 100);
   const fill = Math.round(normalizedScore * 3.6);
-  const color = score < 60 ? "#EAB308" : "#39AF8E";
+  const color = score >= 80 ? "#39AF8E" : score >= 60 ? "#EAB308" : "#DC2626";
+  const emptyColor = score >= 80 ? "#D6F3EB" : score >= 60 ? "#FEF3C7" : "#FEE2E2";
+  const outlineColor =
+    score >= 80 ? "rgba(57, 175, 142, 0.72)" : score >= 60 ? "rgba(234, 179, 8, 0.72)" : "rgba(220, 38, 38, 0.72)";
 
   if (fill >= 360) {
     return {
       background: color,
       borderColor: "rgba(18, 100, 76, 0.22)",
+      outline: `${SCORE_INDICATOR_BORDER_WIDTH}px solid ${outlineColor}`,
+      outlineOffset: "0px",
     };
   }
 
   return {
-    background: `conic-gradient(${color} 0deg ${fill}deg, #D6F3EB ${fill}deg 360deg)`,
+    background: `conic-gradient(${color} 0deg ${fill}deg, ${emptyColor} ${fill}deg 360deg)`,
     borderColor: "rgba(18, 100, 76, 0.22)",
+    outline: `${SCORE_INDICATOR_BORDER_WIDTH}px solid ${outlineColor}`,
+    outlineOffset: "0px",
   };
 }
 
@@ -928,6 +938,40 @@ function getStatusLabel(score: number | null) {
     return "위험";
   }
   return "대기";
+}
+
+function getHomeScoreTone(score: number | null) {
+  const status = getStatusFromScore(score);
+
+  if (status === "good") {
+    return {
+      badgeClass: "bg-[#C4F6E8] text-[#18755B]",
+      barClass: "bg-[#39AF8E]",
+      trackClass: "bg-[#D6F3EB]",
+    };
+  }
+
+  if (status === "warning") {
+    return {
+      badgeClass: "bg-amber-100 text-amber-800",
+      barClass: "bg-amber-500",
+      trackClass: "bg-amber-100",
+    };
+  }
+
+  if (status === "danger") {
+    return {
+      badgeClass: "bg-red-100 text-red-700",
+      barClass: "bg-red-600",
+      trackClass: "bg-red-100",
+    };
+  }
+
+  return {
+    badgeClass: "bg-gray-100 text-gray-500",
+    barClass: "bg-gray-300",
+    trackClass: "bg-[#D6F3EB]",
+  };
 }
 
 function getIssueText(posture: PostureResult) {
@@ -1621,6 +1665,7 @@ export function PostureCoachApp() {
     useState<AnalysisSettingsPanel>("analysis-options");
   const [isAnalysisSettingsOpen, setIsAnalysisSettingsOpen] = useState(false);
   const [isClearingHistory, setIsClearingHistory] = useState(false);
+  const [isClearHistoryConfirmOpen, setIsClearHistoryConfirmOpen] = useState(false);
   const [isRunning, setIsRunning] = useState(false);
   const [pendingCameraStart, setPendingCameraStart] = useState(false);
   const [appMode, setAppMode] = useState<AppMode>("paused");
@@ -1836,6 +1881,9 @@ export function PostureCoachApp() {
       weakestArea: homeScoreInsight.weakestArea,
     };
   }, [homeScoreInsight]);
+  const homeAttentionTone = getHomeScoreTone(
+    homePostureSummary.attentionText === "안정" ? 100 : homeScoreInsight.weakestAreaScore
+  );
   const combinedScorePoints = useMemo(
     () =>
       [...todaySavedScorePoints, ...liveScorePoints]
@@ -3423,6 +3471,7 @@ export function PostureCoachApp() {
     try {
       const cleared = await clearUserMeasurementHistory(uid);
       if (cleared) {
+        setIsClearHistoryConfirmOpen(false);
         setTodaySavedScorePoints([]);
         setLiveScorePoints([]);
         setRecentSummary(null);
@@ -3652,7 +3701,7 @@ export function PostureCoachApp() {
                 <span className="text-gray-500">주의 부위</span>
                 <strong className="inline-flex items-center justify-end gap-1.5 text-right font-bold tabular-nums text-[#18755B]">
                   {homePostureSummary.weakestArea ? getPostureAreaIcon(homePostureSummary.weakestArea, "h-3.5 w-3.5") : null}
-                  <span className="bg-amber-100 px-1.5 py-0.5 text-amber-800">{homePostureSummary.attentionText}</span>
+                  <span className={`${homeAttentionTone.badgeClass} px-1.5 py-0.5`}>{homePostureSummary.attentionText}</span>
                 </strong>
               </div>
               <p className="pt-1 text-sm font-medium leading-6 text-gray-600">{homePostureSummary.statusText}</p>
@@ -3660,19 +3709,24 @@ export function PostureCoachApp() {
               <div className="grid max-w-[560px] gap-2">
                 <div className="grid gap-2">
                   {homeScoreInsight.areaScores.map((area) => (
-                    <div key={area.area} className="grid grid-cols-[56px_minmax(0,1fr)_44px] items-center gap-3 leading-5">
-                      <span className="inline-flex items-center gap-1.5 text-gray-500">
-                        {getPostureAreaIcon(area.area, "h-3.5 w-3.5")}
-                        {area.label}
-                      </span>
-                      <div className="h-1.5 bg-[#D6F3EB]">
-                        <div
-                          className="block h-full bg-[#39AF8E]"
-                          style={{ width: `${area.score ?? 0}%` }}
-                        />
-                      </div>
-                      <strong className="text-right tabular-nums text-gray-900">{area.score ?? "--"}</strong>
-                    </div>
+                    (() => {
+                      const areaTone = getHomeScoreTone(area.score);
+                      return (
+                        <div key={area.area} className="grid grid-cols-[56px_minmax(0,1fr)_44px] items-center gap-3 leading-5">
+                          <span className="inline-flex items-center gap-1.5 text-gray-500">
+                            {getPostureAreaIcon(area.area, "h-3.5 w-3.5")}
+                            {area.label}
+                          </span>
+                          <div className={`h-1.5 ${areaTone.trackClass}`}>
+                            <div
+                              className={`block h-full ${areaTone.barClass}`}
+                              style={{ width: `${area.score ?? 0}%` }}
+                            />
+                          </div>
+                          <strong className="text-right tabular-nums text-gray-900">{area.score ?? "--"}</strong>
+                        </div>
+                      );
+                    })()
                   ))}
                 </div>
               </div>
@@ -3704,7 +3758,7 @@ export function PostureCoachApp() {
       </section>
 
       <div className="grid items-stretch gap-5 xl:grid-cols-[380px_minmax(0,1fr)]">
-      <section className="app-surface flex h-full flex-col justify-between px-4 py-6">
+      <section className="app-surface flex h-full flex-col justify-between p-6">
         <div className="mb-5 flex items-center gap-3">
           <div className="flex h-8 w-8 items-center justify-center bg-[#C4F6E8] text-[#18755B]">
             <CheckCircle className="h-4 w-4" />
@@ -3714,15 +3768,15 @@ export function PostureCoachApp() {
             <p className="text-sm text-gray-500">지난 24시간</p>
           </div>
         </div>
-        <div className="grid max-w-[280px] gap-1.5 text-sm">
-          <div className="grid grid-cols-[76px_minmax(0,150px)] items-center gap-3 border-b border-gray-200 pb-1.5 leading-5">
+        <div className="grid w-full gap-1.5 text-sm">
+          <div className="grid grid-cols-[88px_minmax(0,1fr)] items-center gap-3 border-b border-gray-200 pb-1.5 leading-5">
             <span className="text-gray-500">평균 점수</span>
             <strong className="text-right tabular-nums text-gray-900">
               {recentSummary?.averageScore === null || recentSummary?.averageScore === undefined ? "--" : recentSummary.averageScore}
               <span className="ml-1 text-xs font-bold text-gray-500">/100</span>
             </strong>
           </div>
-          <div className="grid grid-cols-[76px_minmax(0,150px)] items-center gap-3 border-b border-gray-200 pb-1.5 leading-5">
+          <div className="grid grid-cols-[88px_minmax(0,1fr)] items-center gap-3 border-b border-gray-200 pb-1.5 leading-5">
             <span className="text-gray-500">7일 비교</span>
             <strong
               className={`text-right tabular-nums ${
@@ -3736,7 +3790,7 @@ export function PostureCoachApp() {
               {homeScoreInsight.trend === null ? "--" : `${homeScoreInsight.trend >= 0 ? "+" : ""}${homeScoreInsight.trend}`}
             </strong>
           </div>
-          <div className="grid grid-cols-[76px_minmax(0,150px)] items-center gap-3 border-b border-gray-200 pb-1.5 leading-5">
+          <div className="grid grid-cols-[88px_minmax(0,1fr)] items-center gap-3 border-b border-gray-200 pb-1.5 leading-5">
             <span className="text-gray-500">최고 / 최저</span>
             <strong className="text-right tabular-nums text-gray-900">
               {homeScoreInsight.bestScore !== null || homeScoreInsight.worstScore !== null
@@ -3745,20 +3799,20 @@ export function PostureCoachApp() {
             </strong>
           </div>
         </div>
-        <div className="mt-5 flex flex-wrap gap-x-5 gap-y-1 border-t border-gray-200 pt-3 text-xs leading-5 text-gray-500">
-          <span className="inline-flex items-center gap-1.5">
+        <div className="mt-5 grid w-full gap-1.5 border-t border-gray-200 pt-3 text-xs leading-5 text-gray-500">
+          <span className="grid grid-cols-[88px_minmax(0,1fr)] items-center gap-3">
             <span>최근 측정</span>
-            <span className="tabular-nums text-gray-700">
+            <span className="text-right tabular-nums text-gray-700">
               {homeScoreInsight.latestMeasuredAt ? formatTime(homeScoreInsight.latestMeasuredAt) : "--"}
             </span>
           </span>
-          <span className="inline-flex items-center gap-1.5">
+          <span className="grid grid-cols-[88px_minmax(0,1fr)] items-center gap-3">
             <span>사용 시간</span>
-            <span className="tabular-nums text-gray-700">{formatMinutes(recentSummary?.totalUsageMinutes ?? 0)}</span>
+            <span className="text-right tabular-nums text-gray-700">{formatMinutes(recentSummary?.totalUsageMinutes ?? 0)}</span>
           </span>
-          <span className="inline-flex items-center gap-1.5">
+          <span className="grid grid-cols-[88px_minmax(0,1fr)] items-center gap-3">
             <span>알림 횟수</span>
-            <span className="tabular-nums text-gray-700">{recentSummary?.alertCount ?? 0}</span>
+            <span className="text-right tabular-nums text-gray-700">{recentSummary?.alertCount ?? 0}</span>
           </span>
         </div>
       </section>
@@ -3786,8 +3840,8 @@ export function PostureCoachApp() {
   );
 
   const renderAnalysis = () => (
-    <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(320px,1fr)]">
-      <section className="app-surface p-6">
+    <div className="grid grid-cols-1 items-stretch gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(320px,1fr)]">
+      <section className="app-surface flex h-full flex-col p-6">
         <div className="mb-4 flex flex-col justify-between gap-3 sm:flex-row sm:items-start">
           <div>
             <p className="mb-1 text-xs font-bold uppercase tracking-[0.18em] text-blue-600">실시간 카메라</p>
@@ -3796,10 +3850,11 @@ export function PostureCoachApp() {
               <button
                 type="button"
                 onClick={() => setIsAnalysisSettingsOpen(true)}
-                className="flex h-8 w-8 items-center justify-center border border-[rgba(18,100,76,0.24)] bg-white text-[#18755B]"
+                className="flex h-8 items-center justify-center gap-1.5 border border-[rgba(18,100,76,0.24)] bg-white px-2.5 text-sm font-bold text-[#18755B]"
                 aria-label="분석 설정 열기"
               >
                 <SlidersHorizontal className="h-4 w-4" />
+                <span>설정</span>
               </button>
             </div>
             <p className="mt-2 text-sm leading-6 text-gray-600">
@@ -3866,8 +3921,8 @@ export function PostureCoachApp() {
 
       </section>
 
-      <div className="space-y-4">
-        <section className="app-surface p-6">
+      <div className="flex h-full flex-col gap-4">
+        <section className="app-surface flex-none p-6">
           <div className="mb-4 flex items-start justify-between gap-3">
             <div>
               <p className="mb-1 text-xs font-bold uppercase tracking-[0.18em] text-blue-600">실시간 자세</p>
@@ -3927,28 +3982,28 @@ export function PostureCoachApp() {
           </p>
         </section>
 
-        <section className="app-surface p-6">
+        <section className="app-surface flex min-h-[280px] flex-1 flex-col p-6">
           <h3 className="mb-4 text-lg font-bold text-gray-900">분석 지표</h3>
-          <div className="space-y-3">
-            <div className="flex items-center justify-between border-t border-gray-100 pt-3 first:border-t-0 first:pt-0">
-              <span className="text-sm text-gray-600">목 점수 / 각도 / 하중</span>
-              <strong className="text-right text-gray-900">
+          <div className="grid flex-1 grid-rows-3 gap-3">
+            <div className="flex min-h-0 flex-col justify-center border-t border-gray-100 pt-3 first:border-t-0 first:pt-0">
+              <span className="text-sm font-medium text-gray-600">목 점수 / 각도 / 하중</span>
+              <strong className="mt-2 break-keep text-right text-xl leading-tight text-gray-900">
                 {latestPosture.metrics
                   ? `${Math.round(latestPosture.metrics.neckScore)}점 · ${latestPosture.metrics.neckAngleDegrees.toFixed(1)}° · ${latestPosture.metrics.estimatedNeckLoadKg.toFixed(1)}kg`
                   : "--"}
               </strong>
             </div>
-            <div className="flex items-center justify-between border-t border-gray-100 pt-3">
-              <span className="text-sm text-gray-600">허리 점수 / 기울기</span>
-              <strong className="text-right text-gray-900">
+            <div className="flex min-h-0 flex-col justify-center border-t border-gray-100 pt-3">
+              <span className="text-sm font-medium text-gray-600">허리 점수 / 기울기</span>
+              <strong className="mt-2 break-keep text-right text-xl leading-tight text-gray-900">
                 {latestPosture.metrics
                   ? `${Math.round(latestPosture.metrics.trunkScore)}점 · ${latestPosture.metrics.trunkLeanDegrees.toFixed(1)}°`
                   : "--"}
               </strong>
             </div>
-            <div className="flex items-center justify-between border-t border-gray-100 pt-3">
-              <span className="text-sm text-gray-600">안정성 점수</span>
-              <strong className="text-right text-gray-900">
+            <div className="flex min-h-0 flex-col justify-center border-t border-gray-100 pt-3">
+              <span className="text-sm font-medium text-gray-600">안정성 점수</span>
+              <strong className="mt-2 break-keep text-right text-xl leading-tight text-gray-900">
                 {latestPosture.metrics ? `${Math.round(latestPosture.metrics.stabilityScore)}점` : "--"}
               </strong>
             </div>
@@ -4008,10 +4063,10 @@ export function PostureCoachApp() {
                     key={recommendation.stretchId}
                     type="button"
                     onClick={() => handleStretchSelection(recommendation.stretchId)}
-                    className={`border p-4 text-left ${
+                    className={`group flex h-full flex-col border p-4 text-left transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#18755B] ${
                       activeStretchId === recommendation.stretchId
-                        ? "border-blue-400 bg-blue-50"
-                        : "border-gray-100 bg-white"
+                        ? "border-[#18755B] bg-[#E7FFF7]"
+                        : "border-gray-200 bg-white hover:border-[#18755B] hover:bg-[#E7FFF7]"
                     }`}
                   >
                     <div className="mb-3 flex items-start justify-between gap-3">
@@ -4027,13 +4082,27 @@ export function PostureCoachApp() {
                         우선순위: {recommendation.priorityLabel}
                       </span>
                     </div>
-                    <div>
+                    <div className="flex-1">
                       <p className="text-sm font-bold text-gray-800">추천 이유:</p>
                       <ul className="mt-1 space-y-1 text-sm leading-6 text-gray-600">
                         {recommendation.reasons.slice(0, 2).map((reason) => (
                           <li key={reason}>- {reason}</li>
                         ))}
                       </ul>
+                    </div>
+                    <div
+                      className={`mt-4 flex items-center justify-between border px-3 py-2 text-sm font-bold ${
+                        activeStretchId === recommendation.stretchId
+                          ? "border-[#18755B] bg-[#18755B] text-white"
+                          : "border-[#18755B]/25 bg-white text-[#18755B] group-hover:border-[#18755B]"
+                      }`}
+                    >
+                      <span>{activeStretchId === recommendation.stretchId ? "선택됨" : "이 스트레칭 선택하기"}</span>
+                      {activeStretchId === recommendation.stretchId ? (
+                        <CheckCircle className="h-4 w-4 shrink-0" />
+                      ) : (
+                        <ChevronRight className="h-4 w-4 shrink-0" />
+                      )}
                     </div>
                   </button>
                 );
@@ -4063,10 +4132,10 @@ export function PostureCoachApp() {
                     key={stretch.id}
                     type="button"
                     onClick={() => handleStretchSelection(stretch.id)}
-                    className={`border p-4 text-left ${
+                    className={`group flex h-full flex-col border p-4 text-left transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#18755B] ${
                       activeStretchId === stretch.id
-                        ? "border-blue-400 bg-blue-50"
-                        : "border-gray-100 bg-gray-50"
+                        ? "border-[#18755B] bg-[#E7FFF7]"
+                        : "border-gray-200 bg-gray-50 hover:border-[#18755B] hover:bg-[#E7FFF7]"
                     }`}
                   >
                     <div className="mb-2 flex items-start justify-between gap-3">
@@ -4074,13 +4143,31 @@ export function PostureCoachApp() {
                         <p className="mb-1 text-xs font-bold text-blue-600">{stretch.targetBodyPart}</p>
                         <h3 className="font-bold text-gray-900">{stretch.name}</h3>
                       </div>
-                      <ChevronRight className="h-5 w-5 shrink-0 text-gray-400" />
+                      {activeStretchId === stretch.id ? (
+                        <CheckCircle className="h-5 w-5 shrink-0 text-[#18755B]" />
+                      ) : (
+                        <ChevronRight className="h-5 w-5 shrink-0 text-gray-400 group-hover:text-[#18755B]" />
+                      )}
                     </div>
                     <p className="text-sm leading-6 text-gray-600">{stretch.shortDescription}</p>
                     <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-gray-500">
                       <Clock className="h-3 w-3" />
                       <span>{stretch.durationSec}초</span>
                       <span>{stretch.steps.length}단계</span>
+                    </div>
+                    <div
+                      className={`mt-4 flex items-center justify-between border px-3 py-2 text-sm font-bold ${
+                        activeStretchId === stretch.id
+                          ? "border-[#18755B] bg-[#18755B] text-white"
+                          : "border-[#18755B]/25 bg-white text-[#18755B] group-hover:border-[#18755B]"
+                      }`}
+                    >
+                      <span>{activeStretchId === stretch.id ? "선택됨" : "선택하기"}</span>
+                      {activeStretchId === stretch.id ? (
+                        <CheckCircle className="h-4 w-4 shrink-0" />
+                      ) : (
+                        <ChevronRight className="h-4 w-4 shrink-0" />
+                      )}
                     </div>
                   </button>
                 ))}
@@ -4510,7 +4597,7 @@ export function PostureCoachApp() {
                   </div>
                   <button
                     type="button"
-                    onClick={() => void handleClearHistory()}
+                    onClick={() => setIsClearHistoryConfirmOpen(true)}
                     disabled={isClearingHistory}
                     className="inline-flex min-h-10 items-center justify-center gap-2 border border-red-200 px-4 py-2 text-sm font-bold text-red-700 disabled:cursor-not-allowed disabled:opacity-60"
                   >
@@ -4716,7 +4803,7 @@ export function PostureCoachApp() {
                                   {area.score ?? "--"}
                                 </span>
                                 <span className="min-w-0 text-xs font-bold text-gray-500">
-                                  {area.score === null ? "측정 부족" : area.score >= 75 ? "안정" : "확인 필요"}
+                                  {area.score === null ? "측정 부족" : getStatusLabel(area.score)}
                                 </span>
                               </div>
                             </div>
@@ -5121,10 +5208,48 @@ export function PostureCoachApp() {
     );
   };
 
+  const renderClearHistoryConfirm = () => {
+    if (!isClearHistoryConfirmOpen) {
+      return null;
+    }
+
+    return (
+      <div className="fixed inset-0 z-[70] flex items-end bg-black/35 px-4 py-6 sm:items-center sm:justify-center">
+        <section className="w-full max-w-md border border-red-200 bg-white p-5 shadow-xl">
+          <div className="mb-4">
+            <p className="text-lg font-bold text-gray-900">기록을 정말 초기화할까요?</p>
+            <p className="mt-2 text-sm leading-6 text-gray-600">
+              저장된 자세 분석 기록, 세션 제목, 자세 이미지 기록이 삭제됩니다. 이 작업은 되돌릴 수 없습니다.
+            </p>
+          </div>
+          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            <button
+              type="button"
+              disabled={isClearingHistory}
+              onClick={() => setIsClearHistoryConfirmOpen(false)}
+              className="min-h-11 border border-gray-300 bg-white px-4 py-2 text-sm font-bold text-gray-700 disabled:opacity-60"
+            >
+              취소
+            </button>
+            <button
+              type="button"
+              disabled={isClearingHistory}
+              onClick={() => void handleClearHistory()}
+              className="min-h-11 border border-red-600 bg-red-600 px-4 py-2 text-sm font-bold text-white disabled:opacity-60"
+            >
+              {isClearingHistory ? "초기화 중..." : "초기화"}
+            </button>
+          </div>
+        </section>
+      </div>
+    );
+  };
+
   return (
     <div className="app-shell min-h-screen">
       {renderAnalysisSettingsModal()}
       {renderPendingTitlePrompt()}
+      {renderClearHistoryConfirm()}
       <nav className="sticky top-0 z-50 border-b border-[#12644C]/20 bg-[#C4F6E8]">
         <div className="mx-auto max-w-[1100px] px-6">
           <div className="flex flex-col gap-1.5 py-2">
@@ -5132,7 +5257,7 @@ export function PostureCoachApp() {
               <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5">
                 <div className="flex items-center gap-2">
                   <Activity className="h-5 w-5 text-blue-600" />
-                  <span className="text-lg font-bold text-gray-900">PostureAI</span>
+                  <span className="text-lg font-bold text-gray-900">Posture Analyzer</span>
                 </div>
                 <span
                   className={`inline-flex items-center gap-1.5 px-1 py-1 text-xs font-medium ${
