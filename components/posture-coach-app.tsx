@@ -4091,7 +4091,7 @@ export function PostureCoachApp() {
       )}
 
       <div className="stretch-analysis-layout">
-        <div className="space-y-4">
+        <div className="flex min-h-0 flex-col gap-4">
           <div className="app-camera-frame relative flex aspect-video items-center justify-center overflow-hidden">
             <video ref={videoRef} className="absolute inset-0 h-full w-full scale-x-[-1] object-cover" playsInline muted />
             <canvas ref={canvasRef} className="absolute inset-0 h-full w-full" />
@@ -4109,14 +4109,14 @@ export function PostureCoachApp() {
               </div>
             )}
             {selectedStretch && activeStretchStep && (
-              <div className="absolute right-4 top-4 flex flex-col items-end gap-2">
-                <span className="border border-white/40 bg-white px-3 py-1.5 text-sm font-bold text-blue-950">
+              <div className="absolute right-4 top-4 flex max-w-[75%] flex-wrap justify-end gap-1.5">
+                <span className="border border-white/40 bg-white/90 px-2.5 py-1 text-xs font-bold text-blue-950">
                   동작 정확도: {stretchCoaching.matchPercentage ?? stretchCoaching.poseScore ?? "--"}%
                 </span>
-                <span className="border border-[#70E5C4]/40 bg-[#18755B] px-3 py-1.5 text-sm font-bold text-white">
+                <span className="border border-[#70E5C4]/40 bg-[#18755B]/90 px-2.5 py-1 text-xs font-bold text-white">
                   {activeStretchStepIndex + 1} / {selectedStretch.steps.length} 단계
                 </span>
-                <span className="border border-yellow-200 bg-yellow-300 px-3 py-1.5 text-sm font-bold text-blue-950">
+                <span className="border border-yellow-200/70 bg-yellow-300/90 px-2.5 py-1 text-xs font-bold text-blue-950">
                   {isDynamicStretchStep(activeStretchStep)
                     ? `반복: ${stretchCoaching.repeatCount ?? 0} / ${stretchCoaching.targetRepeats ?? 3}`
                     : `유지 시간: ${stretchCoaching.holdSeconds ?? 0} / 5초`}
@@ -4126,24 +4126,24 @@ export function PostureCoachApp() {
           </div>
 
           {selectedStretch && activeStretchStep && (
-            <div className="border border-[#12644C] bg-[#18755B] p-6 text-white">
+            <div className="app-surface flex-1 p-5">
               <div className="flex items-start gap-3">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center bg-white/20">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center bg-[#C4F6E8] text-[#18755B]">
                   <Activity className="h-5 w-5" />
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
-                    <p className="text-lg font-bold">{selectedStretch.name}</p>
-                    <span className="border border-white/20 bg-white/20 px-2.5 py-1 text-xs font-bold">
+                    <p className="text-lg font-bold text-gray-900">{selectedStretch.name}</p>
+                    <span className="border border-[#18755B]/20 bg-[#C4F6E8]/55 px-2.5 py-1 text-xs font-bold text-[#18755B]">
                       {activeStretchStepIndex + 1} / {selectedStretch.steps.length} 단계
                     </span>
                     {isSelectedStretchComplete && (
-                      <span className="border border-green-200 bg-green-400 px-2.5 py-1 text-xs font-bold text-green-950">
+                      <span className="border border-green-200 bg-green-50 px-2.5 py-1 text-xs font-bold text-green-700">
                         완료
                       </span>
                     )}
                   </div>
-                  <label className="mt-2 inline-flex cursor-pointer items-center gap-1.5 text-xs font-medium text-blue-50/80">
+                  <label className="mt-2 inline-flex cursor-pointer items-center gap-1.5 text-xs font-medium text-gray-500">
                     <input
                       type="checkbox"
                       checked={stretchBeepEnabled && isStretchBeepSupported}
@@ -4154,23 +4154,23 @@ export function PostureCoachApp() {
                     <span>소리 안내</span>
                   </label>
                   <div className="mt-3 flex items-start gap-3">
-                    <div className="flex h-12 w-12 shrink-0 items-center justify-center bg-white/15 text-blue-50">
+                    <div className="flex h-12 w-12 shrink-0 items-center justify-center bg-[#E7FFF7] text-[#18755B]">
                       {getStretchStepPictogram(activeStretchStep.checkType, "h-9 w-9")}
                     </div>
                     <div className="min-w-0">
-                      <p className="text-sm font-bold text-blue-50">{activeStretchStep.title}</p>
-                      <p className="mt-1 text-base leading-7 text-blue-50">{activeStretchStep.instruction}</p>
+                      <p className="text-sm font-bold text-[#18755B]">{activeStretchStep.title}</p>
+                      <p className="mt-1 text-base leading-7 text-gray-800">{activeStretchStep.instruction}</p>
                     </div>
                   </div>
                   {isDynamicStretchStep(activeStretchStep) && (
-                    <p className="mt-3 border border-yellow-200/50 bg-yellow-300/20 px-3 py-2 text-sm font-bold text-yellow-50">
+                    <p className="mt-3 border border-yellow-200 bg-yellow-50 px-3 py-2 text-sm font-bold text-yellow-800">
                       천천히, 통증 없이 가능한 범위에서만 움직이세요.
                     </p>
                   )}
-                  <div className="mt-4 border border-white/20 bg-white/15 p-4">
-                    <p className="text-sm font-bold text-blue-50">실시간 피드백</p>
-                    <p className="mt-1 text-lg font-bold leading-7">{stretchCoaching.coachingMessage}</p>
-                    <p className="mt-3 text-2xl font-black text-white">
+                  <div className="mt-4 border border-[#18755B]/15 bg-[#E7FFF7]/45 p-4">
+                    <p className="text-sm font-bold text-[#18755B]">실시간 피드백</p>
+                    <p className="mt-1 text-lg font-bold leading-7 text-gray-900">{stretchCoaching.coachingMessage}</p>
+                    <p className="mt-3 text-xl font-black text-[#18755B]">
                       동작 정확도: {stretchCoaching.matchPercentage ?? stretchCoaching.poseScore ?? "--"}%
                     </p>
                     {stretchCoaching.correctionMessages?.length ? (
@@ -4182,7 +4182,7 @@ export function PostureCoachApp() {
                         ))}
                       </div>
                     ) : null}
-                    <div className="mt-3 flex flex-wrap gap-2 text-sm text-blue-50">
+                    <div className="mt-3 flex flex-wrap gap-2 text-sm text-gray-600">
                       <span>점수: {stretchCoaching.poseScore ?? "--"}점</span>
                       <span>
                         {isDynamicStretchStep(activeStretchStep)
@@ -4235,10 +4235,10 @@ export function PostureCoachApp() {
           </div>
         </div>
 
-        <div className="space-y-4">
+        <div className="flex min-h-0 flex-col gap-4">
           {selectedStretch ? (
             <>
-              <div className="app-surface p-6">
+              <div className="app-surface flex-1 p-5">
                 <div className="mb-4 flex items-start justify-between gap-4">
                   <div>
                     <p className="mb-2 text-xs font-bold text-blue-600">{selectedStretch.targetBodyPart}</p>
@@ -4293,9 +4293,9 @@ export function PostureCoachApp() {
                           };
                           setStretchCoaching(latestStretchCoachingRef.current);
                         }}
-                        className={`w-full border p-4 text-left ${
+                        className={`w-full border p-3 text-left ${
                           isCurrent
-                            ? "border-blue-400 bg-blue-50"
+                            ? "border-[#18755B]/45 bg-[#E7FFF7]"
                             : isDone
                               ? "border-green-200 bg-green-50"
                               : "border-gray-200 bg-white"
@@ -4307,7 +4307,7 @@ export function PostureCoachApp() {
                               isDone
                                 ? "bg-green-600 text-white"
                                 : isCurrent
-                                  ? "bg-blue-600 text-white"
+                                  ? "bg-[#18755B] text-white"
                                   : "bg-gray-100 text-gray-600"
                             }`}
                           >
@@ -4320,7 +4320,7 @@ export function PostureCoachApp() {
                             <div className="flex flex-wrap items-center gap-2">
                               <p className="font-bold text-gray-900">{step.title}</p>
                               {isCurrent && (
-                                <span className="border border-blue-100 bg-blue-100 px-2 py-0.5 text-xs font-bold text-blue-700">
+                                <span className="border border-[#18755B]/15 bg-[#C4F6E8]/55 px-2 py-0.5 text-xs font-bold text-[#18755B]">
                                   현재 단계
                                 </span>
                               )}

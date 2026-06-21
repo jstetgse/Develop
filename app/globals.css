@@ -185,7 +185,7 @@ input[type="range"] {
 .stretch-analysis-layout {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(320px, 380px);
-  align-items: start;
+  align-items: stretch;
   gap: 1.5rem;
 }
 
