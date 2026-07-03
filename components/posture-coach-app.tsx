@@ -787,6 +787,19 @@ function getScoreIndicatorStyle(score: number | null) {
   };
 }
 
+function getHistoryCalendarDotClass(score: number | null) {
+  if (score === null) {
+    return "bg-gray-400";
+  }
+  if (score >= 80) {
+    return "bg-[#39AF8E]";
+  }
+  if (score >= 60) {
+    return "bg-[#EAB308]";
+  }
+  return "bg-[#DC2626]";
+}
+
 function recordPostureAreaStats(stats: PostureAreaStats, posture: PostureResult) {
   if (!posture.isTracking || !posture.metrics) {
     return;
@@ -831,6 +844,49 @@ function formatDateKey(dateKey: string) {
     day: "numeric",
     weekday: "long",
   }).format(date);
+}
+
+function getMonthKey(dateKey: string) {
+  return dateKey.slice(0, 7);
+}
+
+function formatHistoryMonthLabel(monthKey: string) {
+  const date = new Date(`${monthKey}-01T00:00:00+09:00`);
+  return new Intl.DateTimeFormat("ko-KR", {
+    year: "numeric",
+    month: "long",
+  }).format(date);
+}
+
+function shiftMonthKey(monthKey: string, offset: number) {
+  const date = new Date(`${monthKey}-01T00:00:00+09:00`);
+  date.setMonth(date.getMonth() + offset);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  return `${year}-${month}`;
+}
+
+function getCalendarDays(monthKey: string) {
+  const firstDay = new Date(`${monthKey}-01T00:00:00+09:00`);
+  const year = firstDay.getFullYear();
+  const month = firstDay.getMonth();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const leadingEmptyDays = firstDay.getDay();
+  const cells: Array<string | null> = [];
+
+  for (let index = 0; index < leadingEmptyDays; index += 1) {
+    cells.push(null);
+  }
+
+  for (let day = 1; day <= daysInMonth; day += 1) {
+    cells.push(`${monthKey}-${String(day).padStart(2, "0")}`);
+  }
+
+  while (cells.length % 7 !== 0) {
+    cells.push(null);
+  }
+
+  return cells;
 }
 
 function formatTime(timestamp: string) {
@@ -1672,8 +1728,10 @@ export function PostureCoachApp() {
   const [modeMessage, setModeMessage] = useState<string | null>(null);
   const [activeStretchId, setActiveStretchId] = useState<string | null>(null);
   const [showAllStretchOptions, setShowAllStretchOptions] = useState(false);
+  const [isStretchDropdownOpen, setIsStretchDropdownOpen] = useState(false);
   const [activeStretchStepIndex, setActiveStretchStepIndex] = useState(0);
   const [completedStretchSteps, setCompletedStretchSteps] = useState<number[]>([]);
+  const [isStretchCompleteModalOpen, setIsStretchCompleteModalOpen] = useState(false);
   const [stretchCalibrationStatus, setStretchCalibrationStatus] = useState<StretchCalibrationStatus>("idle");
   const [stretchCalibrationMessage, setStretchCalibrationMessage] = useState("스트레칭 분석을 시작하면 기준 자세를 측정합니다.");
   const [stretchBeepEnabled, setStretchBeepEnabled] = useState(() => {
@@ -1689,7 +1747,9 @@ export function PostureCoachApp() {
   const [historyGroups, setHistoryGroups] = useState<HistoryGroup[]>([]);
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
   const [selectedHistoryDateKey, setSelectedHistoryDateKey] = useState<string | null>(null);
+  const [visibleHistoryMonthKey, setVisibleHistoryMonthKey] = useState(() => getMonthKey(getKoreaDateKey()));
   const [historySessionPage, setHistorySessionPage] = useState(0);
+  const [selectedHistorySessionKey, setSelectedHistorySessionKey] = useState<string | null>(null);
   const [storageText, setStorageText] = useState("Firebase 확인 중");
   const [storageTone, setStorageTone] = useState<"good" | "warn" | "danger">("warn");
   const [cameraText, setCameraText] = useState("카메라 대기");
@@ -1909,6 +1969,8 @@ export function PostureCoachApp() {
       .filter((stretch): stretch is StretchDefinition => Boolean(stretch));
     return personalized.length > 0 ? personalized : recommendedStretches;
   }, [personalizedStretchRecommendations, recommendedStretches]);
+  const hasPersonalizedStretchChoices =
+    hasCurrentSessionPostureData && personalizedStretchRecommendations.recommendations.length > 0;
   const selectedStretch = useMemo(() => getStretchById(activeStretchId), [activeStretchId]);
   const activeStretchStep = selectedStretch?.steps[activeStretchStepIndex] ?? null;
   const selectedHistoryGroup = useMemo(
@@ -2567,6 +2629,7 @@ export function PostureCoachApp() {
           if (isLastStep) {
             playStretchBeep(3, `stretch-complete:${stretch.id}`);
             setIsStretchingMode(false);
+            setIsStretchCompleteModalOpen(true);
             stableResult = {
               ...stableResult,
               isStepCompleted: true,
@@ -2687,6 +2750,7 @@ export function PostureCoachApp() {
               : stableResult.matchPercentage;
             playStretchBeep(3, `stretch-complete:${stretch.id}`);
             setIsStretchingMode(false);
+            setIsStretchCompleteModalOpen(true);
             stableResult = {
               ...stableResult,
               holdSeconds: STRETCH_HOLD_TARGET_MS / 1000,
@@ -3367,6 +3431,7 @@ export function PostureCoachApp() {
     if (isComplete) {
       playStretchBeep(3, `stretch-complete:${stretch.id}`);
       setIsStretchingMode(false);
+      setIsStretchCompleteModalOpen(true);
       resetStretchCalibration();
     } else if (appModeRef.current === "stretching") {
       playStretchBeep(2, `step-complete:${stretch.id}:${currentStepIndex}`);
@@ -3393,6 +3458,23 @@ export function PostureCoachApp() {
     latestStretchCoachingRef.current = createInitialStretchState();
     setStretchCoaching(latestStretchCoachingRef.current);
   }, [handleStopStretchingMode, isStretchingMode, resetStretchCalibration]);
+
+  const handleCloseStretchCompleteModal = useCallback(() => {
+    setIsStretchCompleteModalOpen(false);
+  }, []);
+
+  const handleReturnToAnalysisAfterStretch = useCallback(() => {
+    setIsStretchCompleteModalOpen(false);
+    if (isStretchingMode) {
+      void handleStopStretchingMode();
+    }
+    setActiveTab("analysis");
+  }, [handleStopStretchingMode, isStretchingMode]);
+
+  const handleDoAnotherStretch = useCallback(() => {
+    setIsStretchCompleteModalOpen(false);
+    handleClearStretchSelection();
+  }, [handleClearStretchSelection]);
 
   const persistSettings = useCallback(async (nextSettings: Settings) => {
     const uid = uidRef.current;
@@ -3607,7 +3689,16 @@ export function PostureCoachApp() {
 
   useEffect(() => {
     setHistorySessionPage(0);
+    setSelectedHistorySessionKey(null);
   }, [selectedHistoryDateKey]);
+
+  useEffect(() => {
+    if (selectedHistoryDateKey) {
+      setVisibleHistoryMonthKey(getMonthKey(selectedHistoryDateKey));
+    } else if (historyGroups[0]) {
+      setVisibleHistoryMonthKey(getMonthKey(historyGroups[0].dateKey));
+    }
+  }, [historyGroups, selectedHistoryDateKey]);
 
   useEffect(() => {
     appModeRef.current = appMode;
@@ -4197,9 +4288,6 @@ export function PostureCoachApp() {
             )}
             {selectedStretch && activeStretchStep && (
               <div className="absolute right-4 top-4 flex max-w-[75%] flex-wrap justify-end gap-1.5">
-                <span className="border border-white/40 bg-white/90 px-2.5 py-1 text-xs font-bold text-blue-950">
-                  동작 정확도: {stretchCoaching.matchPercentage ?? stretchCoaching.poseScore ?? "--"}%
-                </span>
                 <span className="border border-[#70E5C4]/40 bg-[#18755B]/90 px-2.5 py-1 text-xs font-bold text-white">
                   {activeStretchStepIndex + 1} / {selectedStretch.steps.length} 단계
                 </span>
@@ -4213,72 +4301,59 @@ export function PostureCoachApp() {
           </div>
 
           {selectedStretch && activeStretchStep && (
-            <div className="app-surface flex-1 p-5">
+            <div className="app-surface grid gap-3 p-3">
               <div className="flex items-start gap-3">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center bg-[#C4F6E8] text-[#18755B]">
-                  <Activity className="h-5 w-5" />
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center bg-[#E7FFF7] text-[#18755B]">
+                  {getStretchStepPictogram(activeStretchStep.checkType, "h-9 w-9")}
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
-                    <p className="text-lg font-bold text-gray-900">{selectedStretch.name}</p>
-                    <span className="border border-[#18755B]/20 bg-[#C4F6E8]/55 px-2.5 py-1 text-xs font-bold text-[#18755B]">
+                    <p className="text-sm font-bold text-[#18755B]">{activeStretchStep.title}</p>
+                    <span className="border border-[#18755B]/20 bg-[#C4F6E8]/55 px-2 py-0.5 text-xs font-bold text-[#18755B]">
                       {activeStretchStepIndex + 1} / {selectedStretch.steps.length} 단계
                     </span>
                     {isSelectedStretchComplete && (
-                      <span className="border border-green-200 bg-green-50 px-2.5 py-1 text-xs font-bold text-green-700">
+                      <span className="border border-green-200 bg-green-50 px-2 py-0.5 text-xs font-bold text-green-700">
                         완료
                       </span>
                     )}
                   </div>
-                  <label className="mt-2 inline-flex cursor-pointer items-center gap-1.5 text-xs font-medium text-gray-500">
-                    <input
-                      type="checkbox"
-                      checked={stretchBeepEnabled && isStretchBeepSupported}
-                      disabled={!isStretchBeepSupported}
-                      onChange={(event) => updateStretchBeepEnabled(event.target.checked)}
-                      className="h-3.5 w-3.5"
-                    />
-                    <span>소리 안내</span>
-                  </label>
-                  <div className="mt-3 flex items-start gap-3">
-                    <div className="flex h-12 w-12 shrink-0 items-center justify-center bg-[#E7FFF7] text-[#18755B]">
-                      {getStretchStepPictogram(activeStretchStep.checkType, "h-9 w-9")}
-                    </div>
-                    <div className="min-w-0">
-                      <p className="text-sm font-bold text-[#18755B]">{activeStretchStep.title}</p>
-                      <p className="mt-1 text-base leading-7 text-gray-800">{activeStretchStep.instruction}</p>
-                    </div>
-                  </div>
-                  {isDynamicStretchStep(activeStretchStep) && (
-                    <p className="mt-3 border border-yellow-200 bg-yellow-50 px-3 py-2 text-sm font-bold text-yellow-800">
-                      천천히, 통증 없이 가능한 범위에서만 움직이세요.
-                    </p>
-                  )}
-                  <div className="mt-4 border border-[#18755B]/15 bg-[#E7FFF7]/45 p-4">
-                    <p className="text-sm font-bold text-[#18755B]">실시간 피드백</p>
-                    <p className="mt-1 text-lg font-bold leading-7 text-gray-900">{stretchCoaching.coachingMessage}</p>
-                    <p className="mt-3 text-xl font-black text-[#18755B]">
-                      동작 정확도: {stretchCoaching.matchPercentage ?? stretchCoaching.poseScore ?? "--"}%
-                    </p>
-                    {stretchCoaching.correctionMessages?.length ? (
-                      <div className="mt-3 flex flex-wrap gap-2">
-                        {stretchCoaching.correctionMessages.slice(0, 2).map((message) => (
-                          <span key={message} className="border border-red-200 bg-red-100 px-3 py-1 text-sm font-bold text-red-700">
-                            {message}
-                          </span>
-                        ))}
-                      </div>
-                    ) : null}
-                    <div className="mt-3 flex flex-wrap gap-2 text-sm text-gray-600">
-                      <span>점수: {stretchCoaching.poseScore ?? "--"}점</span>
-                      <span>
-                        {isDynamicStretchStep(activeStretchStep)
-                          ? `반복: ${stretchCoaching.repeatCount ?? 0} / ${stretchCoaching.targetRepeats ?? 3}`
-                          : `유지 시간: ${stretchCoaching.holdSeconds ?? 0} / 5초`}
-                      </span>
-                    </div>
-                  </div>
+                  <p className="mt-1 line-clamp-2 text-sm leading-6 text-gray-700">{activeStretchStep.instruction}</p>
                 </div>
+                <label className="hidden cursor-pointer items-center gap-1.5 text-xs font-medium text-gray-500 sm:inline-flex">
+                  <input
+                    type="checkbox"
+                    checked={stretchBeepEnabled && isStretchBeepSupported}
+                    disabled={!isStretchBeepSupported}
+                    onChange={(event) => updateStretchBeepEnabled(event.target.checked)}
+                    className="h-3.5 w-3.5"
+                  />
+                  <span>소리 안내</span>
+                </label>
+              </div>
+
+              <div className="grid gap-2 border-t border-[#18755B]/10 pt-3 sm:grid-cols-[minmax(120px,0.28fr)_minmax(0,1fr)_auto] sm:items-center">
+                <div className="flex items-baseline gap-2">
+                  <p className="text-xs font-bold text-[#18755B]">동작 정확도</p>
+                  <p className="text-lg font-black text-[#18755B]">
+                    {stretchCoaching.matchPercentage ?? stretchCoaching.poseScore ?? "--"}%
+                  </p>
+                </div>
+                <div className="min-w-0">
+                  <p className="line-clamp-2 text-sm font-bold leading-5 text-gray-900">
+                    {stretchCoaching.coachingMessage}
+                  </p>
+                </div>
+                <label className="inline-flex cursor-pointer items-center gap-1.5 text-xs font-medium text-gray-500 sm:hidden">
+                  <input
+                    type="checkbox"
+                    checked={stretchBeepEnabled && isStretchBeepSupported}
+                    disabled={!isStretchBeepSupported}
+                    onChange={(event) => updateStretchBeepEnabled(event.target.checked)}
+                    className="h-3.5 w-3.5"
+                  />
+                  <span>소리 안내</span>
+                </label>
               </div>
             </div>
           )}
@@ -4312,14 +4387,8 @@ export function PostureCoachApp() {
             >
               다음 단계
             </button>
-            <button
-              type="button"
-              onClick={() => (isRunning ? void stopApp() : void startApp())}
-              className="border border-gray-300 bg-white px-6 py-3 font-medium text-gray-700"
-            >
-              {isRunning ? "카메라 중지" : "카메라 시작"}
-            </button>
           </div>
+
         </div>
 
         <div className="flex min-h-0 flex-col gap-4">
@@ -4417,7 +4486,13 @@ export function PostureCoachApp() {
                                 </span>
                               )}
                             </div>
-                            <p className="mt-1 text-sm leading-6 text-gray-600">{step.instruction}</p>
+                            <p
+                              className={`mt-1 text-sm leading-6 ${
+                                isCurrent ? "line-clamp-2 text-gray-700" : "line-clamp-1 text-gray-500"
+                              }`}
+                            >
+                              {step.instruction}
+                            </p>
                           </div>
                         </div>
                       </button>
@@ -4427,31 +4502,59 @@ export function PostureCoachApp() {
               </div>
 
             </>
+          ) : hasPersonalizedStretchChoices ? (
+            <div className="app-surface p-5">
+              <p className="text-sm font-bold text-gray-900">맞춤 추천에서 선택하세요</p>
+              <p className="mt-1 text-sm leading-6 text-gray-600">
+                위 맞춤 추천 카드에서 스트레칭을 선택하면 단계별 분석을 시작할 수 있습니다.
+              </p>
+            </div>
           ) : (
-            <div className="space-y-3">
-              <h3 className="font-bold text-gray-900">추천 스트레칭</h3>
-              {displayedRecommendedStretches.map((stretch) => (
+            <div className="app-surface p-5">
+              <label htmlFor="stretch-select" className="block text-sm font-bold text-gray-900">
+                스트레칭 선택
+              </label>
+              <p className="mt-1 text-sm leading-6 text-gray-600">
+                맞춤 추천이 없을 때는 목록에서 바로 선택해 분석을 시작할 수 있습니다.
+              </p>
+              <div className="relative mt-4">
                 <button
-                  key={stretch.id}
+                  id="stretch-select"
                   type="button"
-                  onClick={() => handleStretchSelection(stretch.id)}
-                  className="w-full border border-gray-100 bg-white p-4 text-left"
+                  onClick={() => setIsStretchDropdownOpen((current) => !current)}
+                  className="flex min-h-11 w-full items-center justify-between gap-3 border border-[#18755B]/30 bg-white px-3 py-2 text-left text-sm font-bold text-gray-900 focus:border-[#18755B] focus:outline-none"
+                  aria-haspopup="listbox"
+                  aria-expanded={isStretchDropdownOpen}
                 >
-                  <div className="mb-2 flex items-start justify-between gap-3">
-                    <div>
-                      <p className="mb-1 text-xs font-bold text-blue-600">{stretch.targetBodyPart}</p>
-                      <h4 className="font-bold text-gray-900">{stretch.name}</h4>
-                    </div>
-                    <ChevronRight className="h-5 w-5 shrink-0 text-gray-400" />
-                  </div>
-                  <p className="mb-3 text-sm leading-6 text-gray-600">{stretch.shortDescription}</p>
-                  <div className="flex flex-wrap items-center gap-2 text-xs text-gray-500">
-                    <Clock className="h-3 w-3" />
-                    <span>{stretch.durationSec}초</span>
-                    <span>{stretch.steps.length}단계</span>
-                  </div>
+                  <span>스트레칭을 선택하세요</span>
+                  <ChevronRight className={`h-5 w-5 shrink-0 text-[#18755B] transition-transform ${isStretchDropdownOpen ? "rotate-90" : ""}`} />
                 </button>
-              ))}
+                {isStretchDropdownOpen && (
+                  <div className="absolute z-20 mt-2 max-h-72 w-full overflow-auto border border-[#18755B]/25 bg-white shadow-sm" role="listbox">
+                    {displayedRecommendedStretches.map((stretch) => (
+                      <button
+                        key={stretch.id}
+                        type="button"
+                        onClick={() => {
+                          handleStretchSelection(stretch.id);
+                          setIsStretchDropdownOpen(false);
+                        }}
+                        className="flex w-full items-start justify-between gap-3 border-b border-gray-100 px-3 py-3 text-left last:border-b-0 hover:bg-[#E7FFF7] focus:bg-[#E7FFF7] focus:outline-none"
+                        role="option"
+                        aria-selected={activeStretchId === stretch.id}
+                      >
+                        <span className="min-w-0">
+                          <span className="block text-sm font-bold text-gray-900">{stretch.name}</span>
+                          <span className="mt-1 block text-xs text-gray-500">
+                            {stretch.targetBodyPart} · {stretch.durationSec}초 · {stretch.steps.length}단계
+                          </span>
+                        </span>
+                        <ChevronRight className="mt-0.5 h-4 w-4 shrink-0 text-[#18755B]" />
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           )}
         </div>
@@ -4491,42 +4594,61 @@ export function PostureCoachApp() {
       );
     };
 
-    const renderDateItem = (day: HistoryGroup, layout: "desktop" | "mobile") => {
-      const isSelected = selectedHistoryGroup?.dateKey === day.dateKey;
-      const hasAverage = day.averageScore !== null;
-      const layoutClass =
-        layout === "mobile"
-          ? "min-w-[72vw] shrink-0 sm:min-w-[260px]"
-          : "w-full border-l-4";
+    const historyGroupByDate = new Map(historyGroups.map((group) => [group.dateKey, group]));
+    const calendarDays = getCalendarDays(visibleHistoryMonthKey);
+    const todayDateKey = getKoreaDateKey();
+    const currentHistoryMonthKey = getMonthKey(todayDateKey);
+    const canGoNextHistoryMonth = visibleHistoryMonthKey < currentHistoryMonthKey;
+
+    const historySessionsPerPage = 3;
+    const selectedHistorySessions = selectedHistoryGroup
+      ? [...selectedHistoryGroup.sessions].sort((left, right) => {
+          const rightTime = new Date(right.startedAt).getTime();
+          const leftTime = new Date(left.startedAt).getTime();
+          return (Number.isFinite(rightTime) ? rightTime : 0) - (Number.isFinite(leftTime) ? leftTime : 0);
+        })
+      : [];
+    const renderSelectedHistorySessionItem = (session: SessionSummary, index: number) => {
+      if (!selectedHistoryGroup) {
+        return null;
+      }
+
+      const sessionTitleKey = session.sessionTitleKey ?? getSessionTitleKey(session, selectedHistoryGroup.dateKey);
+      const isSelected = selectedHistorySessionKey === sessionTitleKey;
+      const sessionDuration = formatMinutes(session.durationMinutes ?? 0);
+      const averageText = session.averageScore === null ? "측정 부족" : `평균 ${session.averageScore}`;
 
       return (
         <button
-          key={`${layout}-${day.dateKey}`}
+          key={sessionTitleKey}
           type="button"
-          onClick={() => setSelectedHistoryDateKey(day.dateKey)}
-          className={`grid gap-2 border px-4 py-3 text-left text-sm transition-colors ${layoutClass} ${
+          onClick={() => {
+            setHistorySessionPage(Math.floor(index / historySessionsPerPage));
+            setSelectedHistorySessionKey(sessionTitleKey);
+          }}
+          className={`w-full border px-3 py-2.5 text-left transition-colors ${
             isSelected
-              ? "border-[#18755B] bg-[#C4F6E8] text-[#001A12] shadow-sm"
-              : "border-[rgba(18,100,76,0.2)] bg-white text-gray-700 hover:border-[#18755B]"
+              ? "border-[#18755B] bg-[#C4F6E8] text-[#001A12]"
+              : "border-[rgba(18,100,76,0.18)] bg-white text-gray-700 hover:border-[#18755B]"
           }`}
         >
-          <span className="font-bold leading-snug">{formatDateKey(day.dateKey)}</span>
-          <span className="flex items-center justify-between gap-2 text-xs">
-            <span className="text-gray-500">측정 {day.sessionCount}회</span>
-            <span className="font-bold tabular-nums text-[#18755B]">평균 {day.averageScore ?? "--"}</span>
+          <span className="block truncate text-sm font-bold">{getHistorySessionDisplayTitle(session)}</span>
+          <span className="mt-1 block truncate text-xs text-gray-500">
+            {formatTime(session.startedAt)}
+            {session.endedAt ? ` - ${formatTime(session.endedAt)}` : ""} · 사용 {sessionDuration}
           </span>
-          {!hasAverage && missingScoreBadge}
+          <span className={`mt-1 block text-xs font-bold ${session.averageScore === null ? "text-gray-500" : "text-[#18755B]"}`}>
+            {averageText}
+          </span>
         </button>
       );
     };
-
-    const historySessionsPerPage = 3;
     const historySessionTotalPages = selectedHistoryGroup
-      ? Math.max(1, Math.ceil(selectedHistoryGroup.sessions.length / historySessionsPerPage))
+      ? Math.max(1, Math.ceil(selectedHistorySessions.length / historySessionsPerPage))
       : 1;
     const currentHistorySessionPage = Math.min(historySessionPage, historySessionTotalPages - 1);
     const visibleHistorySessions = selectedHistoryGroup
-      ? selectedHistoryGroup.sessions.slice(
+      ? selectedHistorySessions.slice(
           currentHistorySessionPage * historySessionsPerPage,
           currentHistorySessionPage * historySessionsPerPage + historySessionsPerPage
         )
@@ -4553,15 +4675,110 @@ export function PostureCoachApp() {
         ) : selectedHistoryGroup ? (
           <div className="grid gap-4 lg:grid-cols-[minmax(280px,340px)_minmax(0,1fr)] lg:items-start">
             <section className="app-surface p-5 lg:sticky lg:top-4 lg:max-h-[calc(100vh-8rem)] lg:overflow-hidden">
-              <div className="mb-3 flex items-center justify-between gap-3">
-                <h2 className="text-base font-bold text-gray-900">날짜별 기록</h2>
-                <span className="text-xs font-medium text-gray-500">{historyGroups.length}일</span>
+              <div className="mb-4 flex items-center justify-between gap-3">
+                <div>
+                  <h2 className="text-base font-bold text-gray-900">기록 달력</h2>
+                  <p className="mt-1 text-xs font-medium text-gray-500">{historyGroups.length}일 기록</p>
+                </div>
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => setVisibleHistoryMonthKey((current) => shiftMonthKey(current, -1))}
+                    className="flex h-8 w-8 items-center justify-center border border-[rgba(18,100,76,0.2)] bg-white text-[#18755B]"
+                    aria-label="이전 달"
+                  >
+                    <ChevronRight className="h-4 w-4 rotate-180" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setVisibleHistoryMonthKey((current) => {
+                        const nextMonthKey = shiftMonthKey(current, 1);
+                        return nextMonthKey > currentHistoryMonthKey ? currentHistoryMonthKey : nextMonthKey;
+                      })
+                    }
+                    disabled={!canGoNextHistoryMonth}
+                    className={`flex h-8 w-8 items-center justify-center border border-[rgba(18,100,76,0.2)] ${
+                      canGoNextHistoryMonth
+                        ? "bg-white text-[#18755B]"
+                        : "cursor-not-allowed bg-gray-100 text-gray-300"
+                    }`}
+                    aria-label="다음 달"
+                  >
+                    <ChevronRight className="h-4 w-4" />
+                  </button>
+                </div>
               </div>
-              <div className="flex gap-3 overflow-x-auto pb-1 lg:hidden">
-                {historyGroups.map((day) => renderDateItem(day, "mobile"))}
+              <div className="mb-3 text-center text-sm font-bold text-gray-900">
+                {formatHistoryMonthLabel(visibleHistoryMonthKey)}
               </div>
-              <div className="hidden gap-2 overflow-y-auto pr-1 lg:grid lg:max-h-[calc(100vh-14rem)]">
-                {historyGroups.map((day) => renderDateItem(day, "desktop"))}
+              <div className="grid grid-cols-7 gap-1 text-center text-[11px] font-bold text-gray-500">
+                {["일", "월", "화", "수", "목", "금", "토"].map((dayName) => (
+                  <span key={dayName} className="py-1">
+                    {dayName}
+                  </span>
+                ))}
+              </div>
+              <div className="mt-1 grid grid-cols-7 gap-1">
+                {calendarDays.map((dateKey, index) => {
+                  const dayGroup = dateKey ? historyGroupByDate.get(dateKey) : null;
+                  const isSelected = Boolean(dateKey && selectedHistoryGroup?.dateKey === dateKey);
+                  const isToday = dateKey === todayDateKey;
+                  const dayNumber = dateKey ? Number(dateKey.slice(-2)) : null;
+
+                  if (!dateKey) {
+                    return <span key={`empty-${index}`} className="aspect-square" />;
+                  }
+
+                  return (
+                    <button
+                      key={dateKey}
+                      type="button"
+                      disabled={!dayGroup}
+                      onClick={() => {
+                        if (dayGroup) {
+                          setSelectedHistoryDateKey(dateKey);
+                          setHistorySessionPage(0);
+                          setSelectedHistorySessionKey(null);
+                        }
+                      }}
+                      className={`relative flex aspect-square min-h-9 items-center justify-center border text-sm font-bold transition-colors ${
+                        isSelected
+                          ? "border-[#18755B] bg-[#C4F6E8] text-[#001A12]"
+                          : dayGroup
+                            ? "border-[rgba(18,100,76,0.24)] bg-white text-[#18755B] hover:border-[#18755B]"
+                            : "border-transparent bg-transparent text-gray-300"
+                      }`}
+                    >
+                      {dayNumber}
+                      {dayGroup && (
+                        <span
+                          className={`absolute bottom-1 h-1.5 w-1.5 rounded-full border border-white/80 shadow-sm ${getHistoryCalendarDotClass(
+                            dayGroup.averageScore
+                          )}`}
+                        />
+                      )}
+                      {isToday && !isSelected && (
+                        <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-yellow-500" />
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+              <div className="mt-5 border-t border-[rgba(18,100,76,0.14)] pt-4 lg:max-h-[calc(100vh-30rem)] lg:overflow-y-auto lg:pr-1">
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <h3 className="text-sm font-bold text-gray-900">선택한 날짜의 세션</h3>
+                  <span className="text-xs font-medium text-gray-500">{selectedHistorySessions.length}개</span>
+                </div>
+                {selectedHistorySessions.length > 0 ? (
+                  <div className="grid gap-2">
+                    {selectedHistorySessions.map(renderSelectedHistorySessionItem)}
+                  </div>
+                ) : (
+                  <p className="border border-dashed border-gray-200 bg-white px-3 py-3 text-sm text-gray-500">
+                    선택한 날짜의 세션이 없습니다.
+                  </p>
+                )}
               </div>
             </section>
 
@@ -4651,9 +4868,15 @@ export function PostureCoachApp() {
                 const isEditingTitle = editingSessionTitleKey === sessionTitleKey;
                 const isSavingTitle = savingSessionTitleKey === sessionTitleKey;
                 const titleError = sessionTitleErrors[sessionTitleKey];
+                const isSelectedHistorySession = selectedHistorySessionKey === sessionTitleKey;
 
                 return (
-                  <article key={session.sessionId} className="app-surface p-5">
+                  <article
+                    key={session.sessionId}
+                    className={`app-surface p-5 transition-colors ${
+                      isSelectedHistorySession ? "border-[#18755B] bg-[#F0FBF7]" : ""
+                    }`}
+                  >
                     <div className="flex flex-col justify-between gap-3 border-b border-[rgba(18,100,76,0.16)] pb-4 md:flex-row md:items-start">
                       <div className="min-w-0 flex-1">
                         {isEditingTitle ? (
@@ -5208,6 +5431,52 @@ export function PostureCoachApp() {
     );
   };
 
+  const renderStretchCompleteModal = () => {
+    if (!isStretchCompleteModalOpen) {
+      return null;
+    }
+
+    return (
+      <div className="fixed inset-0 z-[70] flex items-end bg-black/35 px-4 py-6 sm:items-center sm:justify-center">
+        <section className="w-full max-w-md border border-[rgba(18,100,76,0.24)] bg-white p-5 shadow-xl">
+          <div className="mb-5 flex items-start justify-between gap-4">
+            <div>
+              <p className="text-lg font-bold text-gray-900">스트레칭이 끝났습니다</p>
+              <p className="mt-2 text-sm leading-6 text-gray-600">
+                몸 상태를 다시 확인하거나 다른 스트레칭을 이어서 진행할 수 있습니다.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={handleCloseStretchCompleteModal}
+              className="flex h-8 w-8 shrink-0 items-center justify-center border border-gray-300 bg-white text-sm font-bold text-gray-700 hover:border-[#18755B] hover:text-[#18755B]"
+              aria-label="스트레칭 완료 창 닫기"
+            >
+              X
+            </button>
+          </div>
+
+          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            <button
+              type="button"
+              onClick={handleDoAnotherStretch}
+              className="min-h-11 border border-gray-300 bg-white px-4 py-2 text-sm font-bold text-gray-700 hover:border-[#18755B] hover:text-[#18755B]"
+            >
+              다른 스트레칭 더 하기
+            </button>
+            <button
+              type="button"
+              onClick={handleReturnToAnalysisAfterStretch}
+              className="min-h-11 border border-[#18755B] bg-[#18755B] px-4 py-2 text-sm font-bold text-white hover:bg-[#12644C]"
+            >
+              자세 분석으로 돌아가기
+            </button>
+          </div>
+        </section>
+      </div>
+    );
+  };
+
   const renderClearHistoryConfirm = () => {
     if (!isClearHistoryConfirmOpen) {
       return null;
@@ -5249,6 +5518,7 @@ export function PostureCoachApp() {
     <div className="app-shell min-h-screen">
       {renderAnalysisSettingsModal()}
       {renderPendingTitlePrompt()}
+      {renderStretchCompleteModal()}
       {renderClearHistoryConfirm()}
       <nav className="sticky top-0 z-50 border-b border-[#12644C]/20 bg-[#C4F6E8]">
         <div className="mx-auto max-w-[1100px] px-6">
