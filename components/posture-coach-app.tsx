@@ -800,6 +800,38 @@ function getHistoryCalendarDotClass(score: number | null) {
   return "bg-[#DC2626]";
 }
 
+function getScoreToneClass(score: number | null | undefined) {
+  if (typeof score !== "number") {
+    return {
+      border: "border-gray-200",
+      bg: "bg-gray-50",
+      text: "text-gray-500",
+    };
+  }
+
+  if (score >= 80) {
+    return {
+      border: "border-[#39AF8E]/35",
+      bg: "bg-[#D6F3EB]",
+      text: "text-[#18755B]",
+    };
+  }
+
+  if (score >= 60) {
+    return {
+      border: "border-yellow-200",
+      bg: "bg-yellow-50",
+      text: "text-yellow-800",
+    };
+  }
+
+  return {
+    border: "border-red-200",
+    bg: "bg-red-50",
+    text: "text-red-700",
+  };
+}
+
 function recordPostureAreaStats(stats: PostureAreaStats, posture: PostureResult) {
   if (!posture.isTracking || !posture.metrics) {
     return;
@@ -1980,6 +2012,8 @@ export function PostureCoachApp() {
   const isSelectedStretchComplete = Boolean(
     selectedStretch && completedStretchSteps.length >= selectedStretch.steps.length
   );
+  const stretchAccuracyScore = stretchCoaching.matchPercentage ?? stretchCoaching.poseScore;
+  const stretchAccuracyTone = getScoreToneClass(stretchAccuracyScore);
   const isStretchingMode = appMode === "stretching";
   const isStretchBeepSupported =
     typeof window === "undefined" ||
@@ -4303,10 +4337,10 @@ export function PostureCoachApp() {
               </div>
 
               <div className="grid gap-2 border-t border-[#18755B]/10 pt-3 sm:grid-cols-[minmax(120px,0.28fr)_minmax(0,1fr)_auto] sm:items-center">
-                <div className="flex items-baseline gap-2">
-                  <p className="text-xs font-bold text-[#18755B]">동작 정확도</p>
-                  <p className="text-lg font-black text-[#18755B]">
-                    {stretchCoaching.matchPercentage ?? stretchCoaching.poseScore ?? "--"}%
+                <div className={`flex items-baseline gap-2 border px-3 py-2 ${stretchAccuracyTone.border} ${stretchAccuracyTone.bg}`}>
+                  <p className={`text-xs font-bold ${stretchAccuracyTone.text}`}>동작 정확도</p>
+                  <p className={`text-lg font-black ${stretchAccuracyTone.text}`}>
+                    {stretchAccuracyScore ?? "--"}%
                   </p>
                 </div>
                 <div className="min-w-0">
