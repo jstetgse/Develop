@@ -30,6 +30,7 @@ import {
   CartesianGrid,
   Line,
   LineChart,
+  ReferenceDot,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -150,6 +151,10 @@ type ScorePoint = {
   score: number;
 };
 
+type HistoryScorePoint = ScorePoint & {
+  sessionKey: string;
+};
+
 type SnapshotExtrema = {
   score: number;
   imageUrl: string | null;
@@ -200,6 +205,9 @@ const STRETCH_CALIBRATION_TARGET_MS = 2_000;
 const STRETCH_CALIBRATION_MIN_SAMPLES = 12;
 const STRETCH_CALIBRATION_MAX_MOVEMENT = 0.09;
 const STRETCH_BEEP_STORAGE_KEY = "posture-coach-stretch-beep-enabled";
+const STRETCH_TTS_STORAGE_KEY = "posture-coach-stretch-tts-enabled";
+const STRETCH_TTS_VOICE_STORAGE_KEY = "posture-coach-stretch-tts-voice";
+const STRETCH_TTS_COOLDOWN_MS = 2_000;
 const POSE_CONNECTIONS_FALLBACK: Array<[number, number]> = [
   [11, 12],
   [11, 13],
@@ -305,6 +313,14 @@ function getStretchReminderMs(settings: Settings) {
 
 function usesPersonalizedStretchAnalysis(stretchId: string | null) {
   return stretchId === "neck-stretch" || stretchId === "shoulder-stretch" || stretchId === "back-stretch";
+}
+
+function getStretchStepSpeechMessage(step: StretchStep, stepIndex: number) {
+  return `${stepIndex + 1}단계입니다. ${step.title}. ${step.instruction}`;
+}
+
+function getStretchVoiceLabel(voice: SpeechSynthesisVoice) {
+  return `${voice.name} (${voice.lang})`;
 }
 
 function createEmptyPostureAreaStats(): PostureAreaStats {
@@ -961,6 +977,97 @@ function createTodaySavedScorePoints(historyGroups: HistoryGroup[]): ScorePoint[
       };
     })
     .sort((left, right) => left.timestamp - right.timestamp);
+}
+
+function formatHistoryScorePointLabel(timestamp: number) {
+  return new Intl.DateTimeFormat("ko-KR", {
+    month: "numeric",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(timestamp));
+}
+
+function createHistoryScorePoint(session: SessionSummary, dateKey: string): HistoryScorePoint | null {
+  if (typeof session.averageScore !== "number") {
+    return null;
+  }
+
+  const timestamp = new Date(session.startedAt).getTime();
+  if (!Number.isFinite(timestamp)) {
+    return null;
+  }
+
+  const sessionKey = session.sessionTitleKey ?? getSessionTitleKey(session, dateKey);
+  return {
+    id: `history-${sessionKey}`,
+    sessionKey,
+    time: formatHistoryScorePointLabel(timestamp),
+    timestamp,
+    score: session.averageScore,
+  };
+}
+
+function createSessionTrendSummary(historyGroups: HistoryGroup[], currentSession: SessionSummary, dateKey: string) {
+  const currentTime = new Date(currentSession.startedAt).getTime();
+  const currentSessionKey = currentSession.sessionTitleKey ?? getSessionTitleKey(currentSession, dateKey);
+
+  if (!Number.isFinite(currentTime)) {
+    return {
+      points: [] as HistoryScorePoint[],
+      currentPoint: null as HistoryScorePoint | null,
+      caption: "최근 점수 흐름을 보려면 기록이 조금 더 필요해요.",
+    };
+  }
+
+  const sevenDaysMs = 7 * 24 * 60 * 60 * 1000;
+  const startTime = currentTime - sevenDaysMs;
+  const points = historyGroups
+    .flatMap((group) => group.sessions.map((session) => createHistoryScorePoint(session, group.dateKey)))
+    .filter((point): point is HistoryScorePoint => Boolean(point))
+    .filter((point) => point.timestamp >= startTime && point.timestamp <= currentTime)
+    .sort((left, right) => left.timestamp - right.timestamp);
+  const currentPoint = points.find((point) => point.sessionKey === currentSessionKey) ?? null;
+
+  if (typeof currentSession.averageScore !== "number") {
+    return {
+      points,
+      currentPoint,
+      caption: "현재 세션은 측정 부족으로 비교에서 제외됐어요.",
+    };
+  }
+
+  const comparisonPoints = points.filter((point) => point.sessionKey !== currentSessionKey);
+  if (comparisonPoints.length === 0) {
+    return {
+      points,
+      currentPoint,
+      caption: "최근 점수 흐름을 보려면 기록이 조금 더 필요해요.",
+    };
+  }
+
+  const comparisonAverage = Math.round(
+    comparisonPoints.reduce((sum, point) => sum + point.score, 0) / comparisonPoints.length
+  );
+  const difference = currentSession.averageScore - comparisonAverage;
+  const absoluteDifference = Math.abs(difference);
+
+  if (absoluteDifference <= 3) {
+    return {
+      points,
+      currentPoint,
+      caption: "최근 7일 평균과 비슷해요.",
+    };
+  }
+
+  return {
+    points,
+    currentPoint,
+    caption:
+      difference > 0
+        ? `최근 7일 평균보다 ${absoluteDifference}점 높아요.`
+        : `최근 7일 평균보다 ${absoluteDifference}점 낮아요.`,
+  };
 }
 
 function formatMinutes(value: number) {
@@ -1772,6 +1879,19 @@ export function PostureCoachApp() {
     }
     return window.localStorage.getItem(STRETCH_BEEP_STORAGE_KEY) !== "false";
   });
+  const [stretchTtsEnabled, setStretchTtsEnabled] = useState(() => {
+    if (typeof window === "undefined") {
+      return true;
+    }
+    return window.localStorage.getItem(STRETCH_TTS_STORAGE_KEY) !== "false";
+  });
+  const [stretchTtsVoiceUri, setStretchTtsVoiceUri] = useState(() => {
+    if (typeof window === "undefined") {
+      return "";
+    }
+    return window.localStorage.getItem(STRETCH_TTS_VOICE_STORAGE_KEY) ?? "";
+  });
+  const [stretchTtsVoices, setStretchTtsVoices] = useState<SpeechSynthesisVoice[]>([]);
   const [latestPosture, setLatestPosture] = useState<PostureResult>(createInitialPosture);
   const [hasCurrentSessionPostureData, setHasCurrentSessionPostureData] = useState(false);
   const [stretchCoaching, setStretchCoaching] = useState<StretchCoachingResult>(createInitialStretchState);
@@ -1847,6 +1967,12 @@ export function PostureCoachApp() {
   const dynamicStretchRuntimeRef = useRef<DynamicStretchRuntimeState>(createDynamicStretchRuntimeState());
   const stretchBeepAudioContextRef = useRef<AudioContext | null>(null);
   const stretchBeepEventKeysRef = useRef<Set<string>>(new Set());
+  const stretchTtsEnabledRef = useRef(stretchTtsEnabled);
+  const stretchTtsVoiceUriRef = useRef(stretchTtsVoiceUri);
+  const stretchTtsVoicesRef = useRef<SpeechSynthesisVoice[]>([]);
+  const stretchTtsEventKeysRef = useRef<Set<string>>(new Set());
+  const stretchTtsUserStartedRef = useRef(false);
+  const lastStretchTtsMessageRef = useRef<{ message: string; spokenAt: number } | null>(null);
   const lastSnapshotAtRef = useRef(0);
   const snapshotSavingRef = useRef(false);
   const bestSnapshotRef = useRef<SnapshotExtrema>(null);
@@ -2018,6 +2144,14 @@ export function PostureCoachApp() {
   const isStretchBeepSupported =
     typeof window === "undefined" ||
     Boolean(window.AudioContext || (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext);
+  const isStretchTtsSupported =
+    typeof window === "undefined" ||
+    ("speechSynthesis" in window && typeof SpeechSynthesisUtterance !== "undefined");
+  const stretchTtsVoiceOptions = useMemo(() => {
+    const koreanVoices = stretchTtsVoices.filter((voice) => voice.lang.toLowerCase().startsWith("ko"));
+    const otherVoices = stretchTtsVoices.filter((voice) => !voice.lang.toLowerCase().startsWith("ko"));
+    return [...koreanVoices, ...otherVoices];
+  }, [stretchTtsVoices]);
   const modeLabel =
     appMode === "posture"
       ? "자세 분석 중"
@@ -2091,6 +2225,77 @@ export function PostureCoachApp() {
     setStretchBeepEnabled(enabled);
     if (typeof window !== "undefined") {
       window.localStorage.setItem(STRETCH_BEEP_STORAGE_KEY, String(enabled));
+    }
+  }, []);
+  const speakStretchCue = useCallback((message: string, eventKey: string, delayMs = 0) => {
+    if (
+      !stretchTtsEnabled ||
+      !stretchTtsEnabledRef.current ||
+      !stretchTtsUserStartedRef.current ||
+      typeof window === "undefined" ||
+      !("speechSynthesis" in window) ||
+      typeof SpeechSynthesisUtterance === "undefined"
+    ) {
+      return;
+    }
+    if (stretchTtsEventKeysRef.current.has(eventKey)) {
+      return;
+    }
+
+    const now = Date.now();
+    const lastMessage = lastStretchTtsMessageRef.current;
+    if (
+      lastMessage &&
+      lastMessage.message === message &&
+      now - lastMessage.spokenAt < STRETCH_TTS_COOLDOWN_MS
+    ) {
+      return;
+    }
+
+    stretchTtsEventKeysRef.current.add(eventKey);
+    lastStretchTtsMessageRef.current = { message, spokenAt: now + delayMs };
+
+    window.setTimeout(() => {
+      if (
+        !stretchTtsEnabled ||
+        !stretchTtsEnabledRef.current ||
+        !stretchTtsUserStartedRef.current ||
+        typeof window === "undefined" ||
+        !("speechSynthesis" in window) ||
+        typeof SpeechSynthesisUtterance === "undefined"
+      ) {
+        return;
+      }
+
+      window.speechSynthesis.cancel();
+      const utterance = new SpeechSynthesisUtterance(message);
+      const selectedVoice = stretchTtsVoicesRef.current.find((voice) => voice.voiceURI === stretchTtsVoiceUriRef.current);
+      if (selectedVoice) {
+        utterance.voice = selectedVoice;
+        utterance.lang = selectedVoice.lang;
+      } else {
+        utterance.lang = "ko-KR";
+      }
+      utterance.rate = 0.95;
+      utterance.pitch = 1;
+      window.speechSynthesis.speak(utterance);
+    }, delayMs);
+  }, [stretchTtsEnabled]);
+  const updateStretchTtsEnabled = useCallback((enabled: boolean) => {
+    stretchTtsEnabledRef.current = enabled;
+    setStretchTtsEnabled(enabled);
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(STRETCH_TTS_STORAGE_KEY, String(enabled));
+      if (!enabled && "speechSynthesis" in window) {
+        window.speechSynthesis.cancel();
+      }
+    }
+  }, []);
+  const updateStretchTtsVoice = useCallback((voiceUri: string) => {
+    stretchTtsVoiceUriRef.current = voiceUri;
+    setStretchTtsVoiceUri(voiceUri);
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(STRETCH_TTS_VOICE_STORAGE_KEY, voiceUri);
     }
   }, []);
   const setIsStretchingMode = useCallback((nextIsStretching: boolean) => {
@@ -2662,6 +2867,10 @@ export function PostureCoachApp() {
           const isLastStep = activeStepIndex >= stretch.steps.length - 1;
           if (isLastStep) {
             playStretchBeep(3, `stretch-complete:${stretch.id}`);
+            speakStretchCue(
+              `${activeStepIndex + 1}단계가 완료되었습니다. 스트레칭이 완료되었습니다. 수고하셨습니다.`,
+              `stretch-complete:${stretch.id}`
+            );
             setIsStretchingMode(false);
             setIsStretchCompleteModalOpen(true);
             stableResult = {
@@ -2671,8 +2880,20 @@ export function PostureCoachApp() {
             };
           } else {
             const nextStepIndex = activeStepIndex + 1;
+            const nextStep = stretch.steps[nextStepIndex];
             playStretchBeep(2, `step-complete:${stretch.id}:${activeStepIndex}`);
             playStretchBeep(1, `step-start:${stretch.id}:${nextStepIndex}`, 520);
+            speakStretchCue(
+              `${activeStepIndex + 1}단계가 완료되었습니다. 다음 단계를 준비해주세요.`,
+              `step-complete:${stretch.id}:${activeStepIndex}`
+            );
+            if (nextStep) {
+              speakStretchCue(
+                getStretchStepSpeechMessage(nextStep, nextStepIndex),
+                `step-start:${stretch.id}:${nextStepIndex}`,
+                2_400
+              );
+            }
             activeStretchStepIndexRef.current = nextStepIndex;
             setActiveStretchStepIndex(nextStepIndex);
             resetDynamicStretchRuntime();
@@ -2732,7 +2953,11 @@ export function PostureCoachApp() {
       stretchHoldStartedAtRef.current = null;
       stableResult = { ...stableResult, holdSeconds: 0 };
     } else if (stableResult.isPoseValid) {
+      const isStartingHold = stretchHoldStartedAtRef.current === null;
       stretchHoldStartedAtRef.current ??= now;
+      if (isStartingHold) {
+        speakStretchCue("좋아요. 그대로 유지하세요.", `hold-start:${activeStretchIdRef.current}:${activeStepIndex}`);
+      }
       if (typeof smoothedMatch === "number") {
         stretchCompletionMatchSamplesRef.current = [...stretchCompletionMatchSamplesRef.current.slice(-239), smoothedMatch];
       }
@@ -2783,6 +3008,10 @@ export function PostureCoachApp() {
               ? Math.round(matchSamples.reduce((sum, score) => sum + score, 0) / matchSamples.length)
               : stableResult.matchPercentage;
             playStretchBeep(3, `stretch-complete:${stretch.id}`);
+            speakStretchCue(
+              `${activeStepIndex + 1}단계가 완료되었습니다. 스트레칭이 완료되었습니다. 수고하셨습니다.`,
+              `stretch-complete:${stretch.id}`
+            );
             setIsStretchingMode(false);
             setIsStretchCompleteModalOpen(true);
             stableResult = {
@@ -2810,8 +3039,20 @@ export function PostureCoachApp() {
             }
           } else {
             const nextStepIndex = activeStepIndex + 1;
+            const nextStep = stretch.steps[nextStepIndex];
             playStretchBeep(2, `step-complete:${stretch.id}:${activeStepIndex}`);
             playStretchBeep(1, `step-start:${stretch.id}:${nextStepIndex}`, 520);
+            speakStretchCue(
+              `${activeStepIndex + 1}단계가 완료되었습니다. 다음 단계를 준비해주세요.`,
+              `step-complete:${stretch.id}:${activeStepIndex}`
+            );
+            if (nextStep) {
+              speakStretchCue(
+                getStretchStepSpeechMessage(nextStep, nextStepIndex),
+                `step-start:${stretch.id}:${nextStepIndex}`,
+                2_400
+              );
+            }
             activeStretchStepIndexRef.current = nextStepIndex;
             setActiveStretchStepIndex(nextStepIndex);
             resetDynamicStretchRuntime();
@@ -2842,7 +3083,7 @@ export function PostureCoachApp() {
     latestStretchCoachingRef.current = stableResult;
     lastStretchFeedbackUpdateAtRef.current = now;
     setStretchCoaching(stableResult);
-  }, [playStretchBeep, resetDynamicStretchRuntime, setIsStretchingMode]);
+  }, [playStretchBeep, resetDynamicStretchRuntime, setIsStretchingMode, speakStretchCue]);
 
   const recordPostureScore = useCallback((posture: PostureResult) => {
     if (!posture.isTracking || typeof posture.score !== "number") {
@@ -3313,6 +3554,9 @@ export function PostureCoachApp() {
     activeStretchStepIndexRef.current = 0;
     completedStretchStepsRef.current = new Set();
     stretchBeepEventKeysRef.current = new Set();
+    stretchTtsEventKeysRef.current = new Set();
+    stretchTtsUserStartedRef.current = false;
+    lastStretchTtsMessageRef.current = null;
     if (appModeRef.current === "stretching") {
       setIsStretchingMode(false);
     }
@@ -3348,7 +3592,25 @@ export function PostureCoachApp() {
     setModeMessage("스트레칭 모드로 전환합니다. 자세 분석이 일시중지됩니다.");
     setIsStretchingMode(true);
     stretchBeepEventKeysRef.current = new Set();
+    stretchTtsEventKeysRef.current = new Set();
+    lastStretchTtsMessageRef.current = null;
+    stretchTtsUserStartedRef.current = true;
     playStretchBeep(1, `step-start:${activeStretchIdRef.current}:${activeStretchStepIndexRef.current}`);
+    const activeStretch = getStretchById(activeStretchIdRef.current);
+    const activeStep = activeStretch?.steps[activeStretchStepIndexRef.current];
+    if (activeStretch) {
+      speakStretchCue(
+        `${activeStretch.name}을 시작합니다. 무리하지 말고 편한 범위까지만 움직여주세요.`,
+        `stretch-start:${activeStretch.id}`
+      );
+    }
+    if (activeStretch && activeStep) {
+      speakStretchCue(
+        getStretchStepSpeechMessage(activeStep, activeStretchStepIndexRef.current),
+        `step-start:${activeStretch.id}:${activeStretchStepIndexRef.current}`,
+        2_400
+      );
+    }
     beginStretchCalibration();
 
     if (!isRunning) {
@@ -3366,10 +3628,14 @@ export function PostureCoachApp() {
       };
       void saveStretchLog(uid, sessionId, payload);
     }
-  }, [beginStretchCalibration, isRunning, playStretchBeep, startApp]);
+  }, [beginStretchCalibration, isRunning, playStretchBeep, speakStretchCue, startApp]);
 
   const handleStopStretchingMode = useCallback(async () => {
     setIsStretchingMode(false);
+    stretchTtsUserStartedRef.current = false;
+    if (typeof window !== "undefined" && "speechSynthesis" in window) {
+      window.speechSynthesis.cancel();
+    }
     stretchHoldStartedAtRef.current = null;
     smoothedStretchMatchRef.current = null;
     lastStretchFeedbackUpdateAtRef.current = 0;
@@ -3464,14 +3730,27 @@ export function PostureCoachApp() {
 
     if (isComplete) {
       playStretchBeep(3, `stretch-complete:${stretch.id}`);
+      speakStretchCue(
+        `${currentStepIndex + 1}단계가 완료되었습니다. 스트레칭이 완료되었습니다. 수고하셨습니다.`,
+        `stretch-complete:${stretch.id}`
+      );
       setIsStretchingMode(false);
       setIsStretchCompleteModalOpen(true);
       resetStretchCalibration();
     } else if (appModeRef.current === "stretching") {
       playStretchBeep(2, `step-complete:${stretch.id}:${currentStepIndex}`);
       playStretchBeep(1, `step-start:${stretch.id}:${nextStepIndex}`, 520);
+      speakStretchCue(
+        `${currentStepIndex + 1}단계가 완료되었습니다. 다음 단계를 준비해주세요.`,
+        `step-complete:${stretch.id}:${currentStepIndex}`
+      );
+      speakStretchCue(
+        getStretchStepSpeechMessage(stretch.steps[nextStepIndex], nextStepIndex),
+        `step-start:${stretch.id}:${nextStepIndex}`,
+        2_400
+      );
     }
-  }, [playStretchBeep, resetDynamicStretchRuntime, resetStretchCalibration, setIsStretchingMode]);
+  }, [playStretchBeep, resetDynamicStretchRuntime, resetStretchCalibration, setIsStretchingMode, speakStretchCue]);
 
   const handleClearStretchSelection = useCallback(() => {
     if (isStretchingMode) {
@@ -3484,6 +3763,12 @@ export function PostureCoachApp() {
     activeStretchStepIndexRef.current = 0;
     completedStretchStepsRef.current = new Set();
     stretchBeepEventKeysRef.current = new Set();
+    stretchTtsEventKeysRef.current = new Set();
+    stretchTtsUserStartedRef.current = false;
+    lastStretchTtsMessageRef.current = null;
+    if (typeof window !== "undefined" && "speechSynthesis" in window) {
+      window.speechSynthesis.cancel();
+    }
     stretchHoldStartedAtRef.current = null;
     smoothedStretchMatchRef.current = null;
     stretchCompletionMatchSamplesRef.current = [];
@@ -3695,6 +3980,9 @@ export function PostureCoachApp() {
       void detector?.close?.();
       void stretchBeepAudioContextRef.current?.close();
       stretchBeepAudioContextRef.current = null;
+      if (typeof window !== "undefined" && "speechSynthesis" in window) {
+        window.speechSynthesis.cancel();
+      }
     };
   }, [refreshHistory]);
 
@@ -3703,6 +3991,36 @@ export function PostureCoachApp() {
     analyzerRef.current.setPreferredSideMode(settings.preferredSideMode);
     detectorRef.current?.setOptions({ smoothLandmarks: true });
   }, [settings]);
+
+  useEffect(() => {
+    stretchTtsEnabledRef.current = stretchTtsEnabled;
+  }, [stretchTtsEnabled]);
+
+  useEffect(() => {
+    stretchTtsVoiceUriRef.current = stretchTtsVoiceUri;
+  }, [stretchTtsVoiceUri]);
+
+  useEffect(() => {
+    stretchTtsVoicesRef.current = stretchTtsVoices;
+  }, [stretchTtsVoices]);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !("speechSynthesis" in window)) {
+      return;
+    }
+
+    const loadVoices = () => {
+      const voices = window.speechSynthesis.getVoices();
+      setStretchTtsVoices(voices);
+      stretchTtsVoicesRef.current = voices;
+    };
+
+    loadVoices();
+    window.speechSynthesis.addEventListener("voiceschanged", loadVoices);
+    return () => {
+      window.speechSynthesis.removeEventListener("voiceschanged", loadVoices);
+    };
+  }, []);
 
   useEffect(() => {
     activeTabRef.current = activeTab;
@@ -3802,16 +4120,16 @@ export function PostureCoachApp() {
   };
 
   const renderHome = () => (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <div>
         <h1 className="text-3xl font-bold text-gray-900">다시 오신 것을 환영합니다</h1>
-        <p className="mt-1 text-gray-600">오늘도 바른 자세로 시작해볼까요?</p>
+        <p className="text-gray-600">오늘도 바른 자세로 시작해볼까요?</p>
       </div>
 
       <section className="app-surface border-l-4 border-l-[#18755B] p-5">
-        <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(280px,360px)] lg:items-center">
+        <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(280px,360px)] lg:items-center">
           <div>
-            <div className="mb-4 flex items-center gap-3">
+            <div className="mb-3 flex items-center gap-3">
               <div className="flex h-9 w-9 items-center justify-center bg-[#C4F6E8] text-[#18755B]">
                 <Activity className="h-5 w-5" />
               </div>
@@ -3820,7 +4138,7 @@ export function PostureCoachApp() {
                 <p className="text-sm text-gray-500">최근 기록으로 몸 상태를 확인하세요</p>
               </div>
             </div>
-            <div className="grid gap-4 text-sm sm:grid-cols-[300px_minmax(0,1fr)] sm:items-start">
+            <div className="grid gap-3 text-sm sm:grid-cols-[300px_minmax(0,1fr)] sm:items-start">
               <div className="grid max-w-[300px] gap-1.5">
               <div className="grid grid-cols-[76px_minmax(0,170px)] items-center gap-3 border-b border-gray-200 pb-1.5 leading-5">
                 <span className="text-gray-500">주의 부위</span>
@@ -3882,9 +4200,9 @@ export function PostureCoachApp() {
         </div>
       </section>
 
-      <div className="grid items-stretch gap-5 xl:grid-cols-[380px_minmax(0,1fr)]">
-      <section className="app-surface flex h-full flex-col justify-between p-6">
-        <div className="mb-5 flex items-center gap-3">
+      <div className="grid items-stretch gap-4 xl:grid-cols-[380px_minmax(0,1fr)]">
+      <section className="app-surface flex h-full flex-col justify-between p-5">
+        <div className="mb-4 flex items-center gap-3">
           <div className="flex h-8 w-8 items-center justify-center bg-[#C4F6E8] text-[#18755B]">
             <CheckCircle className="h-4 w-4" />
           </div>
@@ -3924,7 +4242,7 @@ export function PostureCoachApp() {
             </strong>
           </div>
         </div>
-        <div className="mt-5 grid w-full gap-1.5 border-t border-gray-200 pt-3 text-xs leading-5 text-gray-500">
+        <div className="mt-4 grid w-full gap-1.5 border-t border-gray-200 pt-3 text-xs leading-5 text-gray-500">
           <span className="grid grid-cols-[88px_minmax(0,1fr)] items-center gap-3">
             <span>최근 측정</span>
             <span className="text-right tabular-nums text-gray-700">
@@ -3942,8 +4260,8 @@ export function PostureCoachApp() {
         </div>
       </section>
 
-      <div className="app-surface p-6">
-        <h2 className="mb-4 text-lg font-bold text-gray-900">오늘의 자세 점수 변화</h2>
+      <div className="app-surface p-5">
+        <h2 className="mb-3 text-lg font-bold text-gray-900">오늘의 자세 점수 변화</h2>
         {combinedScorePoints.length > 0 ? (
           <ResponsiveContainer width="100%" height={200}>
             <LineChart data={combinedScorePoints}>
@@ -3965,9 +4283,9 @@ export function PostureCoachApp() {
   );
 
   const renderAnalysis = () => (
-    <div className="grid grid-cols-1 items-stretch gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(320px,1fr)]">
-      <section className="app-surface flex h-full flex-col p-6">
-        <div className="mb-4 flex flex-col justify-between gap-3 sm:flex-row sm:items-start">
+    <div className="grid grid-cols-1 items-stretch gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(320px,1fr)]">
+      <section className="app-surface flex h-full flex-col p-4">
+        <div className="mb-2 flex flex-col justify-between gap-2 sm:flex-row sm:items-start">
           <div>
             <p className="mb-1 text-xs font-bold uppercase tracking-[0.18em] text-blue-600">실시간 카메라</p>
             <div className="flex items-center gap-2">
@@ -3982,7 +4300,7 @@ export function PostureCoachApp() {
                 <span>설정</span>
               </button>
             </div>
-            <p className="mt-2 text-sm leading-6 text-gray-600">
+            <p className="mt-1 text-sm leading-6 text-gray-600">
               카메라가 사용자의 옆모습을 볼 수 있도록 앉아주세요.
             </p>
           </div>
@@ -4001,7 +4319,7 @@ export function PostureCoachApp() {
             {cameraText}
           </span>
         </div>
-        <div className="mb-4 flex flex-wrap items-center gap-x-4 gap-y-2 border-y border-gray-200 py-3 text-sm">
+        <div className="mb-2 flex flex-wrap items-center gap-x-4 gap-y-2 border-y border-gray-200 py-2 text-sm">
           <span className="inline-flex items-center gap-2 font-bold text-blue-700">
             <span className="app-status-dot" />
             {modeLabel}
@@ -4016,7 +4334,7 @@ export function PostureCoachApp() {
           )}
         </div>
 
-        <div className="app-camera-frame relative mt-4 aspect-video overflow-hidden">
+        <div className="app-camera-frame relative mt-2 aspect-video overflow-hidden">
           <video ref={videoRef} className="absolute inset-0 h-full w-full scale-x-[-1] object-cover" playsInline muted />
           <canvas ref={canvasRef} className="absolute inset-0 h-full w-full" />
           {!isRunning && (
@@ -4032,11 +4350,11 @@ export function PostureCoachApp() {
           )}
         </div>
 
-        <div className="mt-5 flex flex-col gap-3 sm:flex-row">
+        <div className="mt-3 flex flex-col gap-2 sm:flex-row">
           <button
             type="button"
             onClick={() => (isRunning ? void stopApp() : void startApp())}
-            className={`min-h-12 flex-1 px-6 py-3 font-bold text-white ${
+            className={`min-h-11 flex-1 px-6 py-2.5 font-bold text-white ${
               isRunning ? "bg-red-600" : "bg-blue-600"
             }`}
           >
@@ -4046,9 +4364,9 @@ export function PostureCoachApp() {
 
       </section>
 
-      <div className="flex h-full flex-col gap-4">
-        <section className="app-surface flex-none p-6">
-          <div className="mb-4 flex items-start justify-between gap-3">
+      <div className="flex h-full flex-col gap-2">
+        <section className="app-surface flex-none p-4">
+          <div className="mb-2 flex items-start justify-between gap-3">
             <div>
               <p className="mb-1 text-xs font-bold uppercase tracking-[0.18em] text-blue-600">실시간 자세</p>
               <h3 className="text-xl font-bold text-gray-900">실시간 자세 점수</h3>
@@ -4069,7 +4387,7 @@ export function PostureCoachApp() {
             </span>
           </div>
 
-          <div className="my-5 flex flex-wrap items-end gap-3 font-bold text-gray-900">
+          <div className="my-2 flex flex-wrap items-end gap-3 font-bold text-gray-900">
             <span className="text-7xl leading-none">{latestPosture.score ?? "--"}</span>
             <span className="mb-2 text-lg text-gray-500">/100</span>
             {appMode === "stretching" && (
@@ -4079,12 +4397,12 @@ export function PostureCoachApp() {
             )}
           </div>
 
-          <p className="border-l-4 border-l-[#18755B] bg-blue-50 p-4 text-sm font-bold leading-6 text-blue-950">
+          <p className="border-l-4 border-l-[#18755B] bg-blue-50 px-3 py-2 text-sm font-bold leading-6 text-blue-950">
             현재 분석 평균 점수: {sessionAverageScore ?? "--"}점
           </p>
-          <p className="mt-4 text-sm leading-6 text-gray-700">{getWeightMessage(latestPosture)}</p>
+          <p className="mt-2 text-sm leading-6 text-gray-700">{getWeightMessage(latestPosture)}</p>
           {latestPosture.feedbackItems.length > 0 && (
-            <div className="mt-4 space-y-2">
+            <div className="mt-2 space-y-2">
               <p className="text-sm font-bold text-gray-900">부위별 피드백</p>
               {latestPosture.feedbackItems.map((item) => (
                 <div
@@ -4102,33 +4420,33 @@ export function PostureCoachApp() {
               ))}
             </div>
           )}
-          <p className="mt-3 text-xs leading-5 text-gray-500">
+          <p className="mt-2 text-xs leading-5 text-gray-500">
             분석 시작 후 감지된 유효 자세 점수만 누적해 평균을 계산합니다.
           </p>
         </section>
 
-        <section className="app-surface flex min-h-[280px] flex-1 flex-col p-6">
-          <h3 className="mb-4 text-lg font-bold text-gray-900">분석 지표</h3>
-          <div className="grid flex-1 grid-rows-3 gap-3">
-            <div className="flex min-h-0 flex-col justify-center border-t border-gray-100 pt-3 first:border-t-0 first:pt-0">
+        <section className="app-surface flex min-h-[210px] flex-1 flex-col p-4">
+          <h3 className="mb-2 text-lg font-bold text-gray-900">분석 지표</h3>
+          <div className="grid flex-1 grid-rows-3 gap-2">
+            <div className="flex min-h-0 flex-col justify-center border-t border-gray-100 pt-2 first:border-t-0 first:pt-0">
               <span className="text-sm font-medium text-gray-600">목 점수 / 각도 / 하중</span>
-              <strong className="mt-2 break-keep text-right text-xl leading-tight text-gray-900">
+              <strong className="mt-1 break-keep text-right text-xl leading-tight text-gray-900">
                 {latestPosture.metrics
                   ? `${Math.round(latestPosture.metrics.neckScore)}점 · ${latestPosture.metrics.neckAngleDegrees.toFixed(1)}° · ${latestPosture.metrics.estimatedNeckLoadKg.toFixed(1)}kg`
                   : "--"}
               </strong>
             </div>
-            <div className="flex min-h-0 flex-col justify-center border-t border-gray-100 pt-3">
+            <div className="flex min-h-0 flex-col justify-center border-t border-gray-100 pt-2">
               <span className="text-sm font-medium text-gray-600">허리 점수 / 기울기</span>
-              <strong className="mt-2 break-keep text-right text-xl leading-tight text-gray-900">
+              <strong className="mt-1 break-keep text-right text-xl leading-tight text-gray-900">
                 {latestPosture.metrics
                   ? `${Math.round(latestPosture.metrics.trunkScore)}점 · ${latestPosture.metrics.trunkLeanDegrees.toFixed(1)}°`
                   : "--"}
               </strong>
             </div>
-            <div className="flex min-h-0 flex-col justify-center border-t border-gray-100 pt-3">
+            <div className="flex min-h-0 flex-col justify-center border-t border-gray-100 pt-2">
               <span className="text-sm font-medium text-gray-600">안정성 점수</span>
-              <strong className="mt-2 break-keep text-right text-xl leading-tight text-gray-900">
+              <strong className="mt-1 break-keep text-right text-xl leading-tight text-gray-900">
                 {latestPosture.metrics ? `${Math.round(latestPosture.metrics.stabilityScore)}점` : "--"}
               </strong>
             </div>
@@ -4138,8 +4456,47 @@ export function PostureCoachApp() {
     </div>
   );
 
+  const renderStretchAudioControls = (className: string) => (
+    <div className={className}>
+      <label className="inline-flex cursor-pointer items-center gap-1.5 text-xs font-medium text-gray-500">
+        <input
+          type="checkbox"
+          checked={stretchBeepEnabled && isStretchBeepSupported}
+          disabled={!isStretchBeepSupported}
+          onChange={(event) => updateStretchBeepEnabled(event.target.checked)}
+          className="h-3.5 w-3.5"
+        />
+        <span>비프음 안내</span>
+      </label>
+      <label className="inline-flex cursor-pointer items-center gap-1.5 text-xs font-medium text-gray-500">
+        <input
+          type="checkbox"
+          checked={stretchTtsEnabled && isStretchTtsSupported}
+          disabled={!isStretchTtsSupported}
+          onChange={(event) => updateStretchTtsEnabled(event.target.checked)}
+          className="h-3.5 w-3.5"
+        />
+        <span>음성 안내</span>
+      </label>
+      <select
+        value={stretchTtsVoiceUri}
+        disabled={!isStretchTtsSupported || !stretchTtsEnabled || stretchTtsVoiceOptions.length === 0}
+        onChange={(event) => updateStretchTtsVoice(event.target.value)}
+        className="max-w-[180px] border border-gray-200 bg-white px-2 py-1 text-xs font-medium text-gray-600 disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-400"
+        aria-label="음성 안내 성우 선택"
+      >
+        <option value="">기본 성우</option>
+        {stretchTtsVoiceOptions.map((voice) => (
+          <option key={voice.voiceURI} value={voice.voiceURI}>
+            {getStretchVoiceLabel(voice)}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+
   const renderStretching = () => (
-    <div className="space-y-6">
+    <div className="-mt-4 space-y-6">
       <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">스트레칭 단계별 분석</h1>
@@ -4322,18 +4679,9 @@ export function PostureCoachApp() {
                       </span>
                     )}
                   </div>
-                  <p className="mt-1 line-clamp-2 text-sm leading-6 text-gray-700">{activeStretchStep.instruction}</p>
+                  <p className="mt-1 whitespace-nowrap text-[13px] leading-6 text-gray-700">{activeStretchStep.instruction}</p>
                 </div>
-                <label className="hidden cursor-pointer items-center gap-1.5 text-xs font-medium text-gray-500 sm:inline-flex">
-                  <input
-                    type="checkbox"
-                    checked={stretchBeepEnabled && isStretchBeepSupported}
-                    disabled={!isStretchBeepSupported}
-                    onChange={(event) => updateStretchBeepEnabled(event.target.checked)}
-                    className="h-3.5 w-3.5"
-                  />
-                  <span>소리 안내</span>
-                </label>
+                {renderStretchAudioControls("hidden flex-wrap items-center justify-end gap-2 sm:flex")}
               </div>
 
               <div className="grid gap-2 border-t border-[#18755B]/10 pt-3 sm:grid-cols-[minmax(120px,0.28fr)_minmax(0,1fr)_auto] sm:items-center">
@@ -4348,16 +4696,7 @@ export function PostureCoachApp() {
                     {stretchCoaching.coachingMessage}
                   </p>
                 </div>
-                <label className="inline-flex cursor-pointer items-center gap-1.5 text-xs font-medium text-gray-500 sm:hidden">
-                  <input
-                    type="checkbox"
-                    checked={stretchBeepEnabled && isStretchBeepSupported}
-                    disabled={!isStretchBeepSupported}
-                    onChange={(event) => updateStretchBeepEnabled(event.target.checked)}
-                    className="h-3.5 w-3.5"
-                  />
-                  <span>소리 안내</span>
-                </label>
+                {renderStretchAudioControls("flex flex-wrap items-center gap-2 sm:hidden")}
               </div>
             </div>
           )}
@@ -4681,14 +5020,22 @@ export function PostureCoachApp() {
       ? Math.max(1, Math.ceil(selectedHistorySessions.length / historySessionsPerPage))
       : 1;
     const currentHistorySessionPage = Math.min(historySessionPage, historySessionTotalPages - 1);
+    const focusedHistorySession = selectedHistorySessionKey
+      ? selectedHistorySessions.find((session) => {
+          const sessionTitleKey = session.sessionTitleKey ?? getSessionTitleKey(session, selectedHistoryGroup?.dateKey ?? "");
+          return sessionTitleKey === selectedHistorySessionKey;
+        }) ?? null
+      : null;
     const visibleHistorySessions = selectedHistoryGroup
-      ? selectedHistorySessions.slice(
+      ? focusedHistorySession
+        ? [focusedHistorySession]
+        : selectedHistorySessions.slice(
           currentHistorySessionPage * historySessionsPerPage,
           currentHistorySessionPage * historySessionsPerPage + historySessionsPerPage
         )
       : [];
-    const canGoPreviousHistoryPage = currentHistorySessionPage > 0;
-    const canGoNextHistoryPage = currentHistorySessionPage < historySessionTotalPages - 1;
+    const canGoPreviousHistoryPage = !focusedHistorySession && currentHistorySessionPage > 0;
+    const canGoNextHistoryPage = !focusedHistorySession && currentHistorySessionPage < historySessionTotalPages - 1;
 
     return (
       <div className="space-y-6">
@@ -4708,7 +5055,7 @@ export function PostureCoachApp() {
           </div>
         ) : selectedHistoryGroup ? (
           <div className="grid gap-4 lg:grid-cols-[minmax(280px,340px)_minmax(0,1fr)] lg:items-start">
-            <section className="app-surface p-5 lg:sticky lg:top-4 lg:max-h-[calc(100vh-8rem)] lg:overflow-hidden">
+            <section className="app-surface p-5 lg:sticky lg:top-4 lg:max-h-[calc(100vh-8rem)] lg:overflow-y-auto">
               <div className="mb-4 flex items-center justify-between gap-3">
                 <div>
                   <h2 className="text-base font-bold text-gray-900">기록 달력</h2>
@@ -4799,7 +5146,7 @@ export function PostureCoachApp() {
                   );
                 })}
               </div>
-              <div className="mt-5 border-t border-[rgba(18,100,76,0.14)] pt-4 lg:max-h-[calc(100vh-30rem)] lg:overflow-y-auto lg:pr-1">
+              <div className="mt-5 border-t border-[rgba(18,100,76,0.14)] pb-2 pt-4 lg:pr-1">
                 <div className="mb-2 flex items-center justify-between gap-2">
                   <h3 className="text-sm font-bold text-gray-900">선택한 날짜의 세션</h3>
                   <span className="text-xs font-medium text-gray-500">{selectedHistorySessions.length}개</span>
@@ -4863,10 +5210,21 @@ export function PostureCoachApp() {
                 <div>
                   <h2 className="text-base font-bold text-gray-900">세션 기록</h2>
                   <p className="mt-1 text-xs font-medium text-gray-500">
-                    {selectedHistoryGroup.sessions.length}개 세션 · {currentHistorySessionPage + 1} / {historySessionTotalPages}
+                    {focusedHistorySession
+                      ? "선택한 세션 보기"
+                      : `${selectedHistoryGroup.sessions.length}개 세션 · ${currentHistorySessionPage + 1} / ${historySessionTotalPages}`}
                   </p>
                 </div>
                 <div className="flex items-center gap-2">
+                  {focusedHistorySession && (
+                    <button
+                      type="button"
+                      onClick={() => setSelectedHistorySessionKey(null)}
+                      className="min-h-9 border border-[rgba(18,100,76,0.24)] bg-white px-3 py-1.5 text-sm font-bold text-[#18755B]"
+                    >
+                      전체 보기
+                    </button>
+                  )}
                   <button
                     type="button"
                     onClick={() => setHistorySessionPage((current) => Math.max(0, current - 1))}
@@ -4892,6 +5250,9 @@ export function PostureCoachApp() {
                 const areaScores = getHistoryAreaScores(session.postureAreaStats);
                 const weakestArea = getHistoryWeakestArea(session.postureAreaStats);
                 const historyReportComment = getHistoryReportComment(areaScores);
+                const sessionTrendSummary = createSessionTrendSummary(historyGroups, session, selectedHistoryGroup.dateKey);
+                const canShowSessionTrendChart =
+                  Boolean(sessionTrendSummary.currentPoint) && sessionTrendSummary.points.length >= 2;
                 const isImagesExpanded = expandedHistoryImageSessions.has(session.sessionId);
                 const sessionAverageScore = session.averageScore;
                 const hasAverage = sessionAverageScore !== null;
@@ -5066,9 +5427,50 @@ export function PostureCoachApp() {
                             </div>
                           ))}
                         </div>
-                        <p className="text-sm leading-6 text-gray-600">
-                          {historyReportComment}
-                        </p>
+                        <div className="min-w-0">
+                          <div className="mb-2 flex items-start justify-between gap-3">
+                            <div>
+                              <h4 className="text-sm font-bold text-gray-900">최근 7일 점수</h4>
+                              <p className="mt-0.5 text-xs font-medium text-gray-500">최근 기록과 비교한 현재 세션의 위치</p>
+                            </div>
+                            {sessionAverageScore !== null && (
+                              <span className="shrink-0 text-xs font-bold tabular-nums text-[#18755B]">
+                                현재 {sessionAverageScore}
+                              </span>
+                            )}
+                          </div>
+                          {canShowSessionTrendChart ? (
+                            <div className="h-[132px]">
+                              <ResponsiveContainer width="100%" height="100%">
+                                <LineChart data={sessionTrendSummary.points} margin={{ top: 8, right: 12, bottom: 0, left: -18 }}>
+                                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" vertical={false} />
+                                  <XAxis dataKey="time" stroke="#9ca3af" fontSize={10} tickLine={false} axisLine={false} />
+                                  <YAxis domain={[0, 100]} stroke="#9ca3af" fontSize={10} tickLine={false} axisLine={false} width={32} />
+                                  <Tooltip />
+                                  <Line type="linear" dataKey="score" stroke="#18755B" strokeWidth={2} dot={{ r: 2.5 }} activeDot={{ r: 4 }} />
+                                  {sessionTrendSummary.currentPoint && (
+                                    <ReferenceDot
+                                      x={sessionTrendSummary.currentPoint.time}
+                                      y={sessionTrendSummary.currentPoint.score}
+                                      r={5}
+                                      fill="#001A12"
+                                      stroke="#C4F6E8"
+                                      strokeWidth={2}
+                                    />
+                                  )}
+                                </LineChart>
+                              </ResponsiveContainer>
+                            </div>
+                          ) : (
+                            <div className="flex h-[132px] items-center justify-center border border-dashed border-gray-200 bg-white px-4 text-center text-xs font-bold text-gray-500">
+                              {sessionAverageScore === null ? "현재 세션은 측정 부족" : "최근 7일 비교 데이터가 부족해요"}
+                            </div>
+                          )}
+                          <div className="mt-2 space-y-1 text-xs leading-5 text-gray-500">
+                            <p className="truncate font-bold text-gray-700">{sessionTrendSummary.caption}</p>
+                            <p className="truncate">{historyReportComment}</p>
+                          </div>
+                        </div>
                       </div>
                     </div>
 
@@ -5619,7 +6021,7 @@ export function PostureCoachApp() {
         </div>
       </nav>
 
-      <main className="mx-auto max-w-[1100px] px-6 pb-[calc(6rem+env(safe-area-inset-bottom))] pt-8">
+      <main className="mx-auto max-w-[1100px] px-6 pb-[calc(5rem+env(safe-area-inset-bottom))] pt-6">
         {alertMessage && (
           <section className="mb-6 border border-yellow-200 bg-yellow-50 p-5">
             <div className="mb-2 flex items-center justify-between gap-3">
