@@ -4270,36 +4270,6 @@ export function PostureCoachApp() {
 
       <div className="stretch-analysis-layout">
         <div className="flex min-h-0 flex-col gap-4">
-          <div className="app-camera-frame relative flex aspect-video items-center justify-center overflow-hidden">
-            <video ref={videoRef} className="absolute inset-0 h-full w-full scale-x-[-1] object-cover" playsInline muted />
-            <canvas ref={canvasRef} className="absolute inset-0 h-full w-full" />
-            {!isRunning ? (
-              <div className="relative text-center">
-                <VideoOff className="mx-auto mb-4 h-16 w-16 text-gray-600" />
-                <p className="text-gray-400">스트레칭 분석 시작을 누르면 카메라가 켜집니다.</p>
-              </div>
-            ) : (
-              <div className="absolute left-4 top-4">
-                <div className="flex items-center gap-2 border border-[#70E5C4] bg-[#18755B] px-3 py-1.5">
-                  <div className="h-2 w-2 animate-pulse rounded-full bg-white" />
-                  <span className="text-sm font-medium text-white">자세 감지 중</span>
-                </div>
-              </div>
-            )}
-            {selectedStretch && activeStretchStep && (
-              <div className="absolute right-4 top-4 flex max-w-[75%] flex-wrap justify-end gap-1.5">
-                <span className="border border-[#70E5C4]/40 bg-[#18755B]/90 px-2.5 py-1 text-xs font-bold text-white">
-                  {activeStretchStepIndex + 1} / {selectedStretch.steps.length} 단계
-                </span>
-                <span className="border border-yellow-200/70 bg-yellow-300/90 px-2.5 py-1 text-xs font-bold text-blue-950">
-                  {isDynamicStretchStep(activeStretchStep)
-                    ? `반복: ${stretchCoaching.repeatCount ?? 0} / ${stretchCoaching.targetRepeats ?? 3}`
-                    : `유지 시간: ${stretchCoaching.holdSeconds ?? 0} / 5초`}
-                </span>
-              </div>
-            )}
-          </div>
-
           {selectedStretch && activeStretchStep && (
             <div className="app-surface grid gap-3 p-3">
               <div className="flex items-start gap-3">
@@ -4357,6 +4327,36 @@ export function PostureCoachApp() {
               </div>
             </div>
           )}
+
+          <div className="app-camera-frame relative flex aspect-video items-center justify-center overflow-hidden">
+            <video ref={videoRef} className="absolute inset-0 h-full w-full scale-x-[-1] object-cover" playsInline muted />
+            <canvas ref={canvasRef} className="absolute inset-0 h-full w-full" />
+            {!isRunning ? (
+              <div className="relative text-center">
+                <VideoOff className="mx-auto mb-4 h-16 w-16 text-gray-600" />
+                <p className="text-gray-400">스트레칭 분석 시작을 누르면 카메라가 켜집니다.</p>
+              </div>
+            ) : (
+              <div className="absolute left-4 top-4">
+                <div className="flex items-center gap-2 border border-[#70E5C4] bg-[#18755B] px-3 py-1.5">
+                  <div className="h-2 w-2 animate-pulse rounded-full bg-white" />
+                  <span className="text-sm font-medium text-white">자세 감지 중</span>
+                </div>
+              </div>
+            )}
+            {selectedStretch && activeStretchStep && (
+              <div className="absolute right-4 top-4 flex max-w-[75%] flex-wrap justify-end gap-1.5">
+                <span className="border border-[#70E5C4]/40 bg-[#18755B]/90 px-2.5 py-1 text-xs font-bold text-white">
+                  {activeStretchStepIndex + 1} / {selectedStretch.steps.length} 단계
+                </span>
+                <span className="border border-yellow-200/70 bg-yellow-300/90 px-2.5 py-1 text-xs font-bold text-blue-950">
+                  {isDynamicStretchStep(activeStretchStep)
+                    ? `반복: ${stretchCoaching.repeatCount ?? 0} / ${stretchCoaching.targetRepeats ?? 3}`
+                    : `유지 시간: ${stretchCoaching.holdSeconds ?? 0} / 5초`}
+                </span>
+              </div>
+            )}
+          </div>
 
           <div className="flex flex-col gap-3 sm:flex-row">
             <button
