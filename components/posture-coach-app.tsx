@@ -4546,9 +4546,7 @@ export function PostureCoachApp() {
               ))}
             </div>
           )}
-          <p className="mt-2 text-xs leading-5 text-gray-500">
-            분석 시작 후 감지된 유효 자세 점수만 누적해 평균을 계산합니다.
-          </p>
+          
         </section>
 
         <section className="app-surface flex min-h-[210px] flex-1 flex-col p-4">
