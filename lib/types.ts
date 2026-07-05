@@ -176,6 +176,14 @@ export interface PostureSnapshot {
   feedback: string;
 }
 
+export interface PostureScorePoint {
+  id?: string;
+  sessionId: string;
+  capturedAt: string;
+  timestamp: number;
+  score: number;
+}
+
 export interface HistoryGroup {
   dateKey: string;
   averageScore: number | null;

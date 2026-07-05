@@ -32,6 +32,7 @@ import type {
   PostureAreaStat,
   PostureAreaStats,
   PostureRecommendationArea,
+  PostureScorePoint,
   PostureSnapshot,
   RecentSummary,
   Settings,
@@ -318,7 +319,7 @@ export async function clearUserMeasurementHistory(uid: string) {
       snapshot.docs.map(async (session) => {
         const sessionRef = doc(sessions, session.id);
         await Promise.all(
-          ["snapshots", "alerts", "stretchLogs"].map(async (subcollection) => {
+          ["snapshots", "alerts", "stretchLogs", "scorePoints"].map(async (subcollection) => {
             const childSnapshot = await getDocs(collection(sessionRef, subcollection));
             await Promise.all(childSnapshot.docs.map((child) => deleteDoc(child.ref)));
           })
@@ -332,6 +333,47 @@ export async function clearUserMeasurementHistory(uid: string) {
     return true;
   } catch (error) {
     console.error("Failed to clear measurement history:", error);
+    return false;
+  }
+}
+
+async function deleteSessionDocumentWithChildren(uid: string, sessionId: string) {
+  const ref = sessionDoc(uid, sessionId);
+  if (!ref) {
+    return;
+  }
+
+  await Promise.all(
+    ["snapshots", "alerts", "stretchLogs", "scorePoints"].map(async (subcollection) => {
+      const childSnapshot = await getDocs(collection(ref, subcollection));
+      await Promise.all(childSnapshot.docs.map((child) => deleteDoc(child.ref)));
+    })
+  );
+  await deleteDoc(ref);
+}
+
+export async function deleteUserMeasurementSessions(
+  uid: string,
+  sessions: Array<Pick<SessionSummary, "sessionId" | "sessionTitleKey" | "startedAt"> & { dateKey: string }>
+) {
+  if (!sessions.length) {
+    return false;
+  }
+
+  try {
+    await Promise.all(
+      sessions.map(async (session) => {
+        const sessionTitleKey = session.sessionTitleKey ?? getSessionTitleKey(session, session.dateKey);
+        const titleRef = sessionTitleDoc(uid, sessionTitleKey);
+        await Promise.all([
+          deleteSessionDocumentWithChildren(uid, session.sessionId),
+          titleRef ? deleteDoc(titleRef) : Promise.resolve(),
+        ]);
+      })
+    );
+    return true;
+  } catch (error) {
+    console.error("Failed to delete measurement sessions:", error);
     return false;
   }
 }
@@ -475,6 +517,110 @@ export async function saveSnapshot(uid: string, sessionId: string, snapshot: Omi
     return true;
   } catch (error) {
     console.error("Failed to save snapshot:", error);
+    return false;
+  }
+}
+
+function normalizeScorePoint(raw: Partial<PostureScorePoint>, id: string, sessionId: string): PostureScorePoint | null {
+  const timestamp =
+    typeof raw.timestamp === "number"
+      ? raw.timestamp
+      : typeof raw.capturedAt === "string"
+        ? new Date(raw.capturedAt).getTime()
+        : NaN;
+  if (!Number.isFinite(timestamp) || typeof raw.score !== "number") {
+    return null;
+  }
+
+  const capturedAt =
+    typeof raw.capturedAt === "string" && Number.isFinite(new Date(raw.capturedAt).getTime())
+      ? raw.capturedAt
+      : new Date(timestamp).toISOString();
+
+  return {
+    id,
+    sessionId: typeof raw.sessionId === "string" ? raw.sessionId : sessionId,
+    capturedAt,
+    timestamp,
+    score: Math.min(Math.max(Math.round(raw.score), 0), 100),
+  };
+}
+
+export async function saveScorePoint(
+  uid: string,
+  sessionId: string,
+  point: Omit<PostureScorePoint, "id">
+) {
+  const db = getDb();
+  if (!db) {
+    return false;
+  }
+
+  try {
+    const pointId = `${point.timestamp}-${crypto.randomUUID()}`;
+    await setDoc(doc(db, "users", uid, "sessions", sessionId, "scorePoints", pointId), point);
+    return true;
+  } catch (error) {
+    console.error("Failed to save score point:", error);
+    return false;
+  }
+}
+
+export async function getScorePointsForSessions(uid: string, sessions: SessionSummary[]) {
+  const db = getDb();
+  const pointsBySession = new Map<string, PostureScorePoint[]>();
+  if (!db || sessions.length === 0) {
+    return pointsBySession;
+  }
+
+  await Promise.all(
+    sessions.map(async (session) => {
+      try {
+        const snapshot = await getDocs(collection(db, "users", uid, "sessions", session.sessionId, "scorePoints"));
+        const points = snapshot.docs
+          .map((entry) => normalizeScorePoint(entry.data() as Partial<PostureScorePoint>, entry.id, session.sessionId))
+          .filter((point): point is PostureScorePoint => Boolean(point))
+          .sort((left, right) => left.timestamp - right.timestamp);
+        if (points.length > 0) {
+          pointsBySession.set(session.sessionId, points);
+        }
+      } catch (error) {
+        console.error(`Failed to load score points for session ${session.sessionId}:`, error);
+      }
+    })
+  );
+
+  return pointsBySession;
+}
+
+export async function deleteScorePointsForNonTodaySessions(uid: string, sessions: SessionSummary[]) {
+  const db = getDb();
+  if (sessions.length === 0) {
+    return true;
+  }
+  if (!db) {
+    return false;
+  }
+
+  const today = getDateKey(new Date().toISOString());
+  const staleSessions = sessions.filter((session) => getDateKey(session.startedAt) !== today);
+  if (staleSessions.length === 0) {
+    return true;
+  }
+
+  try {
+    await Promise.all(
+      staleSessions.map(async (session) => {
+        const pointsSnapshot = await getDocs(collection(db, "users", uid, "sessions", session.sessionId, "scorePoints"));
+        if (pointsSnapshot.empty) {
+          return;
+        }
+        await Promise.all(pointsSnapshot.docs.map((point) => deleteDoc(point.ref)));
+      })
+    );
+    return true;
+  } catch (error) {
+    console.error("Failed to delete old score points:", error);
     return false;
   }
 }

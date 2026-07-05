@@ -37,15 +37,18 @@ import {
   YAxis,
 } from "recharts";
 import {
-  clearUserMeasurementHistory,
   createSession,
+  deleteUserMeasurementSessions,
+  deleteScorePointsForNonTodaySessions,
   ensureUserSettings,
   finalizeSessionSummary,
   getHistoryByDate,
   getRecent24hSummary,
+  getScorePointsForSessions,
   initFirebase,
   saveAlertLog,
   saveSnapshot,
+  saveScorePoint,
   saveSessionTitle,
   saveStretchLog,
   saveUserSettings,
@@ -83,6 +86,7 @@ import type {
   PostureAreaStats,
   PostureRecommendationArea,
   PostureResult,
+  PostureScorePoint,
   RecentSummary,
   Settings,
   SessionSummary,
@@ -97,6 +101,8 @@ type Tab = "home" | "analysis" | "stretching" | "history";
 type AuthPage = "login" | "signup";
 type SettingsSaveStatus = "idle" | "saving" | "saved" | "error";
 type AnalysisSettingsPanel = "analysis-options" | "posture-alerts" | "stretch-alerts";
+type HistoryDeleteScope = "sessions" | "date";
+type HistoryDeleteStep = "scope" | "session-select" | "confirm";
 type PendingTitleSession = {
   sessionId: string;
   sessionTitleKey: string;
@@ -204,6 +210,7 @@ const STRETCH_HOLD_TARGET_MS = 5_000;
 const STRETCH_CALIBRATION_TARGET_MS = 2_000;
 const STRETCH_CALIBRATION_MIN_SAMPLES = 12;
 const STRETCH_CALIBRATION_MAX_MOVEMENT = 0.09;
+const SCORE_POINT_SAVE_INTERVAL_MS = 10_000;
 const STRETCH_BEEP_STORAGE_KEY = "posture-coach-stretch-beep-enabled";
 const STRETCH_TTS_STORAGE_KEY = "posture-coach-stretch-tts-enabled";
 const STRETCH_TTS_VOICE_STORAGE_KEY = "posture-coach-stretch-tts-voice";
@@ -803,17 +810,37 @@ function getScoreIndicatorStyle(score: number | null) {
   };
 }
 
-function getHistoryCalendarDotClass(score: number | null) {
+function getHistoryCalendarToneClass(score: number | null) {
   if (score === null) {
-    return "bg-gray-400";
+    return {
+      border: "border-gray-300",
+      bg: "bg-gray-50",
+      text: "text-gray-500",
+      ring: "ring-gray-300",
+    };
   }
   if (score >= 80) {
-    return "bg-[#39AF8E]";
+    return {
+      border: "border-[#39AF8E]",
+      bg: "bg-[#E7FFF7]",
+      text: "text-[#12644C]",
+      ring: "ring-[#39AF8E]",
+    };
   }
   if (score >= 60) {
-    return "bg-[#EAB308]";
+    return {
+      border: "border-yellow-400",
+      bg: "bg-yellow-50",
+      text: "text-yellow-900",
+      ring: "ring-yellow-400",
+    };
   }
-  return "bg-[#DC2626]";
+  return {
+    border: "border-red-300",
+    bg: "bg-red-50",
+    text: "text-red-700",
+    ring: "ring-red-300",
+  };
 }
 
 function getScoreToneClass(score: number | null | undefined) {
@@ -958,24 +985,44 @@ function getKoreaDateKey(date = new Date()) {
   return `${year}-${month}-${day}`;
 }
 
-function createTodaySavedScorePoints(historyGroups: HistoryGroup[]): ScorePoint[] {
+function createTodaySavedScorePoints(
+  historyGroups: HistoryGroup[],
+  scorePointsBySession = new Map<string, PostureScorePoint[]>()
+): ScorePoint[] {
   const today = getKoreaDateKey();
   const todayGroup = historyGroups.find((group) => group.dateKey === today);
   if (!todayGroup) {
     return [];
   }
 
-  return todayGroup.sessions
-    .filter((session) => typeof session.averageScore === "number")
-    .map((session) => {
-      const timestamp = new Date(session.startedAt).getTime();
-      return {
+  return todayGroup.sessions.flatMap((session) => {
+    const scorePoints = scorePointsBySession.get(session.sessionId) ?? [];
+    if (scorePoints.length > 0) {
+      return scorePoints
+        .filter((point) => Number.isFinite(point.timestamp))
+        .sort((left, right) => left.timestamp - right.timestamp)
+        .map((point) => ({
+          id: `score-point-${session.sessionId}-${point.id ?? point.timestamp}`,
+          time: formatTime(point.capturedAt),
+          timestamp: point.timestamp,
+          score: point.score,
+        }));
+    }
+
+    if (typeof session.averageScore !== "number") {
+      return [];
+    }
+
+    const timestamp = new Date(session.startedAt).getTime();
+    return [
+      {
         id: `saved-${session.sessionId}`,
         time: formatTime(session.startedAt),
         timestamp,
         score: session.averageScore ?? 0,
-      };
-    })
+      },
+    ];
+  })
     .sort((left, right) => left.timestamp - right.timestamp);
 }
 
@@ -1859,8 +1906,12 @@ export function PostureCoachApp() {
   const [activeAnalysisSettingsPanel, setActiveAnalysisSettingsPanel] =
     useState<AnalysisSettingsPanel>("analysis-options");
   const [isAnalysisSettingsOpen, setIsAnalysisSettingsOpen] = useState(false);
-  const [isClearingHistory, setIsClearingHistory] = useState(false);
-  const [isClearHistoryConfirmOpen, setIsClearHistoryConfirmOpen] = useState(false);
+  const [isHistoryDeleteModalOpen, setIsHistoryDeleteModalOpen] = useState(false);
+  const [historyDeleteScope, setHistoryDeleteScope] = useState<HistoryDeleteScope | null>(null);
+  const [historyDeleteStep, setHistoryDeleteStep] = useState<HistoryDeleteStep>("scope");
+  const [historyDeleteSessionKeys, setHistoryDeleteSessionKeys] = useState<string[]>([]);
+  const [isDeletingHistory, setIsDeletingHistory] = useState(false);
+  const [historyDeleteError, setHistoryDeleteError] = useState<string | null>(null);
   const [isRunning, setIsRunning] = useState(false);
   const [pendingCameraStart, setPendingCameraStart] = useState(false);
   const [appMode, setAppMode] = useState<AppMode>("paused");
@@ -1940,6 +1991,9 @@ export function PostureCoachApp() {
   const scoreTotalRef = useRef(0);
   const scoreCountRef = useRef(0);
   const latestSessionAverageRef = useRef<number | null>(null);
+  const liveScorePointsRef = useRef<ScorePoint[]>([]);
+  const lastScorePointSavedAtRef = useRef(0);
+  const scorePointCleanupUidRef = useRef<string | null>(null);
   const postureAreaStatsRef = useRef<PostureAreaStats>(createEmptyPostureAreaStats());
   const lastScoreTrendUpdateAtRef = useRef(0);
   const nextStretchReminderAtRef = useRef(0);
@@ -2135,6 +2189,18 @@ export function PostureCoachApp() {
     () => historyGroups.find((group) => group.dateKey === selectedHistoryDateKey) ?? historyGroups[0] ?? null,
     [historyGroups, selectedHistoryDateKey]
   );
+  const selectedHistorySession = useMemo(() => {
+    if (!selectedHistoryGroup || !selectedHistorySessionKey) {
+      return null;
+    }
+
+    return (
+      selectedHistoryGroup.sessions.find((session) => {
+        const sessionTitleKey = session.sessionTitleKey ?? getSessionTitleKey(session, selectedHistoryGroup.dateKey);
+        return sessionTitleKey === selectedHistorySessionKey;
+      }) ?? null
+    );
+  }, [selectedHistoryGroup, selectedHistorySessionKey]);
   const isSelectedStretchComplete = Boolean(
     selectedStretch && completedStretchSteps.length >= selectedStretch.steps.length
   );
@@ -2332,6 +2398,8 @@ export function PostureCoachApp() {
       setHistoryGroups([]);
       setTodaySavedScorePoints([]);
       setLiveScorePoints([]);
+      liveScorePointsRef.current = [];
+      scorePointCleanupUidRef.current = null;
       return;
     }
 
@@ -2339,9 +2407,16 @@ export function PostureCoachApp() {
     try {
       const [summary, history] = await Promise.all([getRecent24hSummary(uid), getHistoryByDate(uid)]);
       const historyItems = history ?? [];
+      const loadedSessions = historyItems.flatMap((group) => group.sessions);
+      const todaySessions = historyItems.find((group) => group.dateKey === getKoreaDateKey())?.sessions ?? [];
+      const scorePointsBySession = await getScorePointsForSessions(uid, todaySessions);
       setRecentSummary(summary);
       setHistoryGroups(historyItems);
-      setTodaySavedScorePoints(createTodaySavedScorePoints(historyItems));
+      setTodaySavedScorePoints(createTodaySavedScorePoints(historyItems, scorePointsBySession));
+      if (scorePointCleanupUidRef.current !== uid) {
+        scorePointCleanupUidRef.current = uid;
+        void deleteScorePointsForNonTodaySessions(uid, loadedSessions);
+      }
     } finally {
       setIsLoadingHistory(false);
     }
@@ -3137,21 +3212,32 @@ export function PostureCoachApp() {
     }
 
     if (now - lastScoreTrendUpdateAtRef.current >= getRealtimeScoreIntervalMs(settingsRef.current)) {
+      const nextPoint = {
+        id: `live-${now}`,
+        time: new Intl.DateTimeFormat("ko-KR", {
+          hour: "2-digit",
+          minute: "2-digit",
+          timeZone: "Asia/Seoul",
+        }).format(new Date(now)),
+        timestamp: now,
+        score: trendScore,
+      };
       scoreSamplesRef.current = [...scoreSamplesRef.current.slice(-119), trendScore];
-      setLiveScorePoints((previous) => [
-        ...previous.slice(-23),
-        {
-          id: `live-${now}`,
-          time: new Intl.DateTimeFormat("ko-KR", {
-            hour: "2-digit",
-            minute: "2-digit",
-            timeZone: "Asia/Seoul",
-          }).format(new Date(now)),
+      liveScorePointsRef.current = [...liveScorePointsRef.current.slice(-23), nextPoint];
+      setLiveScorePoints(liveScorePointsRef.current);
+      lastScoreTrendUpdateAtRef.current = now;
+
+      const uid = uidRef.current;
+      const sessionId = sessionIdRef.current;
+      if (uid && sessionId && now - lastScorePointSavedAtRef.current >= SCORE_POINT_SAVE_INTERVAL_MS) {
+        lastScorePointSavedAtRef.current = now;
+        void saveScorePoint(uid, sessionId, {
+          sessionId,
+          capturedAt: new Date(now).toISOString(),
           timestamp: now,
           score: trendScore,
-        },
-      ]);
-      lastScoreTrendUpdateAtRef.current = now;
+        });
+      }
     }
 
     return averagePosture;
@@ -3381,6 +3467,8 @@ export function PostureCoachApp() {
       setPendingTitleDraft("");
       setPendingTitleError(null);
     }
+    liveScorePointsRef.current = [];
+    lastScorePointSavedAtRef.current = 0;
     setLiveScorePoints([]);
   }, [refreshHistory, resetStretchCalibration]);
 
@@ -3412,6 +3500,8 @@ export function PostureCoachApp() {
     latestSessionAverageRef.current = null;
     postureAreaStatsRef.current = createEmptyPostureAreaStats();
     lastScoreTrendUpdateAtRef.current = 0;
+    liveScorePointsRef.current = [];
+    lastScorePointSavedAtRef.current = 0;
     setLiveScorePoints([]);
     alertCountRef.current = 0;
     badPostureStartedAtRef.current = null;
@@ -3862,34 +3952,70 @@ export function PostureCoachApp() {
     }
   }, [updateSettingsDraft]);
 
-  const handleClearHistory = useCallback(async () => {
+  const closeHistoryDeleteModal = useCallback(() => {
+    if (isDeletingHistory) {
+      return;
+    }
+    setIsHistoryDeleteModalOpen(false);
+    setHistoryDeleteScope(null);
+    setHistoryDeleteStep("scope");
+    setHistoryDeleteSessionKeys([]);
+    setHistoryDeleteError(null);
+  }, [isDeletingHistory]);
+
+  const handleDeleteHistoryRecords = useCallback(async () => {
     const uid = uidRef.current;
-    if (!uid || isClearingHistory) {
+    if (!uid || isDeletingHistory || !selectedHistoryGroup || !historyDeleteScope) {
       return;
     }
 
-    setIsClearingHistory(true);
-    try {
-      const cleared = await clearUserMeasurementHistory(uid);
-      if (cleared) {
-        setIsClearHistoryConfirmOpen(false);
-        setTodaySavedScorePoints([]);
-        setLiveScorePoints([]);
-        setRecentSummary(null);
-        setHistoryGroups([]);
-        setEditingSessionTitleKey(null);
-        setSessionTitleDraft("");
-        setSavingSessionTitleKey(null);
-        setSessionTitleErrors({});
-        setPendingTitleSession(null);
-        setPendingTitleDraft("");
-        setPendingTitleError(null);
-        await refreshHistory(uid);
-      }
-    } finally {
-      setIsClearingHistory(false);
+    const selectedKeySet = new Set(historyDeleteSessionKeys);
+    const sessionsToDelete =
+      historyDeleteScope === "sessions"
+        ? selectedHistoryGroup.sessions.filter((session) => {
+            const sessionTitleKey = session.sessionTitleKey ?? getSessionTitleKey(session, selectedHistoryGroup.dateKey);
+            return selectedKeySet.has(sessionTitleKey);
+          })
+        : selectedHistoryGroup.sessions;
+
+    if (sessionsToDelete.length === 0) {
+      setHistoryDeleteError("삭제할 기록을 찾지 못했습니다.");
+      return;
     }
-  }, [isClearingHistory, refreshHistory]);
+
+    setIsDeletingHistory(true);
+    setHistoryDeleteError(null);
+    try {
+      const deleted = await deleteUserMeasurementSessions(
+        uid,
+        sessionsToDelete.map((session) => ({
+          sessionId: session.sessionId,
+          sessionTitleKey: session.sessionTitleKey,
+          startedAt: session.startedAt,
+          dateKey: selectedHistoryGroup.dateKey,
+        }))
+      );
+      if (!deleted) {
+        setHistoryDeleteError("기록을 삭제하지 못했습니다.");
+        return;
+      }
+
+      setIsHistoryDeleteModalOpen(false);
+      setHistoryDeleteScope(null);
+      setHistoryDeleteStep("scope");
+      setHistoryDeleteSessionKeys([]);
+      setSelectedHistorySessionKey(null);
+      setHistorySessionPage(0);
+      setExpandedHistoryImageSessions(new Set());
+      setEditingSessionTitleKey(null);
+      setSessionTitleDraft("");
+      setSavingSessionTitleKey(null);
+      setSessionTitleErrors({});
+      await refreshHistory(uid);
+    } finally {
+      setIsDeletingHistory(false);
+    }
+  }, [historyDeleteScope, historyDeleteSessionKeys, isDeletingHistory, refreshHistory, selectedHistoryGroup]);
 
   const handleGoogleLogin = useCallback(async () => {
     setIsGoogleLoading(true);
@@ -4261,7 +4387,7 @@ export function PostureCoachApp() {
       </section>
 
       <div className="app-surface p-5">
-        <h2 className="mb-3 text-lg font-bold text-gray-900">오늘의 자세 점수 변화</h2>
+        <h2 className="mb-3 text-lg font-bold text-gray-900">오늘의 자세 점수 흐름</h2>
         {combinedScorePoints.length > 0 ? (
           <ResponsiveContainer width="100%" height={200}>
             <LineChart data={combinedScorePoints}>
@@ -4466,7 +4592,7 @@ export function PostureCoachApp() {
           onChange={(event) => updateStretchBeepEnabled(event.target.checked)}
           className="h-3.5 w-3.5"
         />
-        <span>비프음 안내</span>
+        <span>알림음</span>
       </label>
       <label className="inline-flex cursor-pointer items-center gap-1.5 text-xs font-medium text-gray-500">
         <input
@@ -4476,7 +4602,7 @@ export function PostureCoachApp() {
           onChange={(event) => updateStretchTtsEnabled(event.target.checked)}
           className="h-3.5 w-3.5"
         />
-        <span>음성 안내</span>
+        <span>음성 코치</span>
       </label>
       <select
         value={stretchTtsVoiceUri}
@@ -5026,14 +5152,7 @@ export function PostureCoachApp() {
           return sessionTitleKey === selectedHistorySessionKey;
         }) ?? null
       : null;
-    const visibleHistorySessions = selectedHistoryGroup
-      ? focusedHistorySession
-        ? [focusedHistorySession]
-        : selectedHistorySessions.slice(
-          currentHistorySessionPage * historySessionsPerPage,
-          currentHistorySessionPage * historySessionsPerPage + historySessionsPerPage
-        )
-      : [];
+    const visibleHistorySessions = focusedHistorySession ? [focusedHistorySession] : [];
     const canGoPreviousHistoryPage = !focusedHistorySession && currentHistorySessionPage > 0;
     const canGoNextHistoryPage = !focusedHistorySession && currentHistorySessionPage < historySessionTotalPages - 1;
 
@@ -5062,6 +5181,22 @@ export function PostureCoachApp() {
                   <p className="mt-1 text-xs font-medium text-gray-500">{historyGroups.length}일 기록</p>
                 </div>
                 <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setHistoryDeleteScope(null);
+                      setHistoryDeleteStep("scope");
+                      setHistoryDeleteSessionKeys([]);
+                      setHistoryDeleteError(null);
+                      setIsHistoryDeleteModalOpen(true);
+                    }}
+                    disabled={selectedHistorySessions.length === 0}
+                    className="flex h-8 items-center justify-center gap-1.5 border border-red-200 bg-white px-2.5 text-xs font-bold text-red-700 disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-300"
+                    aria-label="기록 삭제"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                    <span>기록 삭제</span>
+                  </button>
                   <button
                     type="button"
                     onClick={() => setVisibleHistoryMonthKey((current) => shiftMonthKey(current, -1))}
@@ -5106,6 +5241,7 @@ export function PostureCoachApp() {
                   const isSelected = Boolean(dateKey && selectedHistoryGroup?.dateKey === dateKey);
                   const isToday = dateKey === todayDateKey;
                   const dayNumber = dateKey ? Number(dateKey.slice(-2)) : null;
+                  const calendarTone = dayGroup ? getHistoryCalendarToneClass(dayGroup.averageScore) : null;
 
                   if (!dateKey) {
                     return <span key={`empty-${index}`} className="aspect-square" />;
@@ -5125,23 +5261,17 @@ export function PostureCoachApp() {
                       }}
                       className={`relative flex aspect-square min-h-9 items-center justify-center border text-sm font-bold transition-colors ${
                         isSelected
-                          ? "border-[#18755B] bg-[#C4F6E8] text-[#001A12]"
-                          : dayGroup
-                            ? "border-[rgba(18,100,76,0.24)] bg-white text-[#18755B] hover:border-[#18755B]"
+                          ? isToday
+                            ? "border-[#003D2B] bg-[#003D2B] text-white ring-2 ring-[#001A12]"
+                            : `border-[#18755B] bg-[#C4F6E8] text-[#001A12] ring-2 ${calendarTone?.ring ?? "ring-[#39AF8E]"}`
+                          : isToday
+                            ? "border-[#003D2B] bg-[#003D2B] text-white ring-2 ring-[#001A12]"
+                            : dayGroup
+                            ? `${calendarTone?.border} ${calendarTone?.bg} ${calendarTone?.text} hover:border-[#18755B]`
                             : "border-transparent bg-transparent text-gray-300"
                       }`}
                     >
                       {dayNumber}
-                      {dayGroup && (
-                        <span
-                          className={`absolute bottom-1 h-1.5 w-1.5 rounded-full border border-white/80 shadow-sm ${getHistoryCalendarDotClass(
-                            dayGroup.averageScore
-                          )}`}
-                        />
-                      )}
-                      {isToday && !isSelected && (
-                        <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-yellow-500" />
-                      )}
                     </button>
                   );
                 })}
@@ -5187,24 +5317,6 @@ export function PostureCoachApp() {
                 </div>
               </section>
 
-              <section className="app-surface p-4">
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                  <div>
-                    <h2 className="text-base font-bold text-gray-900">데이터 관리</h2>
-                    <p className="mt-1 text-sm text-gray-500">저장된 자세 분석 기록을 초기화할 수 있습니다.</p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setIsClearHistoryConfirmOpen(true)}
-                    disabled={isClearingHistory}
-                    className="inline-flex min-h-10 items-center justify-center gap-2 border border-red-200 px-4 py-2 text-sm font-bold text-red-700 disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                    {isClearingHistory ? "기록 초기화 중..." : "기록 초기화"}
-                  </button>
-                </div>
-              </section>
-
             <section className="space-y-3">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
@@ -5212,19 +5324,18 @@ export function PostureCoachApp() {
                   <p className="mt-1 text-xs font-medium text-gray-500">
                     {focusedHistorySession
                       ? "선택한 세션 보기"
-                      : `${selectedHistoryGroup.sessions.length}개 세션 · ${currentHistorySessionPage + 1} / ${historySessionTotalPages}`}
+                      : "왼쪽에서 세션을 선택하면 상세가 표시됩니다"}
                   </p>
                 </div>
-                <div className="flex items-center gap-2">
-                  {focusedHistorySession && (
+                {focusedHistorySession && (
+                  <div className="flex items-center gap-2">
                     <button
                       type="button"
                       onClick={() => setSelectedHistorySessionKey(null)}
                       className="min-h-9 border border-[rgba(18,100,76,0.24)] bg-white px-3 py-1.5 text-sm font-bold text-[#18755B]"
                     >
-                      전체 보기
+                      닫기
                     </button>
-                  )}
                   <button
                     type="button"
                     onClick={() => setHistorySessionPage((current) => Math.max(0, current - 1))}
@@ -5244,7 +5355,14 @@ export function PostureCoachApp() {
                     <ChevronRight className="h-4 w-4" />
                   </button>
                 </div>
+                )}
               </div>
+
+              {!focusedHistorySession && (
+                <div className="app-surface border border-dashed border-[rgba(18,100,76,0.24)] bg-white p-6 text-sm font-bold text-gray-500">
+                  선택한 날짜의 세션을 왼쪽 목록에서 선택해주세요.
+                </div>
+              )}
 
               {visibleHistorySessions.map((session) => {
                 const areaScores = getHistoryAreaScores(session.postureAreaStats);
@@ -5913,38 +6031,172 @@ export function PostureCoachApp() {
     );
   };
 
-  const renderClearHistoryConfirm = () => {
-    if (!isClearHistoryConfirmOpen) {
+  const renderHistoryDeleteModal = () => {
+    if (!isHistoryDeleteModalOpen) {
       return null;
     }
+
+    const hasDateSessions = Boolean(selectedHistoryGroup && selectedHistoryGroup.sessions.length > 0);
+    const modalSessions = selectedHistoryGroup
+      ? [...selectedHistoryGroup.sessions].sort((left, right) => {
+          const rightTime = new Date(right.startedAt).getTime();
+          const leftTime = new Date(left.startedAt).getTime();
+          return (Number.isFinite(rightTime) ? rightTime : 0) - (Number.isFinite(leftTime) ? leftTime : 0);
+        })
+      : [];
+    const selectedDeleteKeySet = new Set(historyDeleteSessionKeys);
+    const selectedDeleteCount =
+      historyDeleteScope === "date" ? selectedHistoryGroup?.sessions.length ?? 0 : historyDeleteSessionKeys.length;
+    const confirmDescription =
+      historyDeleteScope === "sessions"
+        ? `선택한 ${selectedDeleteCount}개 세션과 연결된 이미지/알림/점수 기록이 삭제됩니다.`
+        : "이 날짜의 모든 세션과 연결된 이미지/알림/점수 기록이 삭제됩니다.";
+    const toggleDeleteSessionKey = (sessionTitleKey: string) => {
+      setHistoryDeleteSessionKeys((current) =>
+        current.includes(sessionTitleKey)
+          ? current.filter((key) => key !== sessionTitleKey)
+          : [...current, sessionTitleKey]
+      );
+    };
 
     return (
       <div className="fixed inset-0 z-[70] flex items-end bg-black/35 px-4 py-6 sm:items-center sm:justify-center">
         <section className="w-full max-w-md border border-red-200 bg-white p-5 shadow-xl">
-          <div className="mb-4">
-            <p className="text-lg font-bold text-gray-900">기록을 정말 초기화할까요?</p>
-            <p className="mt-2 text-sm leading-6 text-gray-600">
-              저장된 자세 분석 기록, 세션 제목, 자세 이미지 기록이 삭제됩니다. 이 작업은 되돌릴 수 없습니다.
-            </p>
-          </div>
-          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-            <button
-              type="button"
-              disabled={isClearingHistory}
-              onClick={() => setIsClearHistoryConfirmOpen(false)}
-              className="min-h-11 border border-gray-300 bg-white px-4 py-2 text-sm font-bold text-gray-700 disabled:opacity-60"
-            >
-              취소
-            </button>
-            <button
-              type="button"
-              disabled={isClearingHistory}
-              onClick={() => void handleClearHistory()}
-              className="min-h-11 border border-red-600 bg-red-600 px-4 py-2 text-sm font-bold text-white disabled:opacity-60"
-            >
-              {isClearingHistory ? "초기화 중..." : "초기화"}
-            </button>
-          </div>
+          {historyDeleteStep === "scope" ? (
+            <>
+              <div className="mb-4">
+                <p className="text-lg font-bold text-gray-900">삭제할 기록을 선택하세요</p>
+                <p className="mt-2 text-sm leading-6 text-gray-600">삭제할 범위를 고른 뒤 한 번 더 확인합니다.</p>
+              </div>
+              <div className="grid gap-2">
+                <button
+                  type="button"
+                  disabled={!hasDateSessions}
+                  onClick={() => {
+                    setHistoryDeleteError(null);
+                    setHistoryDeleteScope("sessions");
+                    setHistoryDeleteStep("session-select");
+                    setHistoryDeleteSessionKeys(selectedHistorySessionKey ? [selectedHistorySessionKey] : []);
+                  }}
+                  className="border border-[rgba(18,100,76,0.2)] bg-white p-4 text-left disabled:cursor-not-allowed disabled:bg-gray-50 disabled:opacity-50"
+                >
+                  <span className="block text-sm font-bold text-gray-900">선택한 세션만 삭제</span>
+                  <span className="mt-1 block text-sm text-gray-500">현재 날짜에서 삭제할 세션을 직접 선택합니다.</span>
+                </button>
+                <button
+                  type="button"
+                  disabled={!hasDateSessions}
+                  onClick={() => {
+                    setHistoryDeleteError(null);
+                    setHistoryDeleteScope("date");
+                    setHistoryDeleteStep("confirm");
+                    setHistoryDeleteSessionKeys([]);
+                  }}
+                  className="border border-[rgba(18,100,76,0.2)] bg-white p-4 text-left disabled:cursor-not-allowed disabled:bg-gray-50 disabled:opacity-50"
+                >
+                  <span className="block text-sm font-bold text-gray-900">이 날짜의 전체 세션 삭제</span>
+                  <span className="mt-1 block text-sm text-gray-500">선택한 날짜의 모든 세션을 삭제합니다.</span>
+                </button>
+              </div>
+              {historyDeleteError && <p className="mt-3 text-sm font-bold text-red-600">{historyDeleteError}</p>}
+              <div className="mt-4 flex justify-end">
+                <button
+                  type="button"
+                  onClick={closeHistoryDeleteModal}
+                  className="min-h-11 border border-gray-300 bg-white px-4 py-2 text-sm font-bold text-gray-700"
+                >
+                  취소
+                </button>
+              </div>
+            </>
+          ) : historyDeleteStep === "session-select" ? (
+            <>
+              <div className="mb-4">
+                <p className="text-lg font-bold text-gray-900">삭제할 세션을 선택하세요</p>
+                <p className="mt-2 text-sm leading-6 text-gray-600">선택한 날짜의 세션 중 삭제할 항목을 체크하세요.</p>
+              </div>
+              <div className="max-h-72 overflow-y-auto border border-[rgba(18,100,76,0.16)]">
+                {modalSessions.map((session) => {
+                  const sessionTitleKey = session.sessionTitleKey ?? getSessionTitleKey(session, selectedHistoryGroup?.dateKey ?? "");
+                  const isChecked = selectedDeleteKeySet.has(sessionTitleKey);
+                  const sessionDuration = formatMinutes(session.durationMinutes ?? 0);
+                  return (
+                    <label
+                      key={sessionTitleKey}
+                      className="flex cursor-pointer items-start gap-3 border-b border-gray-100 bg-white px-3 py-3 last:border-b-0"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={isChecked}
+                        onChange={() => toggleDeleteSessionKey(sessionTitleKey)}
+                        className="mt-1 h-4 w-4 accent-red-600"
+                      />
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-sm font-bold text-gray-900">{getHistorySessionDisplayTitle(session)}</span>
+                        <span className="mt-1 block truncate text-xs text-gray-500">
+                          {formatTime(session.startedAt)}
+                          {session.endedAt ? ` - ${formatTime(session.endedAt)}` : ""} · 사용 {sessionDuration}
+                        </span>
+                        <span className={`mt-1 block text-xs font-bold ${session.averageScore === null ? "text-gray-500" : "text-[#18755B]"}`}>
+                          {session.averageScore === null ? "측정 부족" : `평균 ${session.averageScore}`}
+                        </span>
+                      </span>
+                    </label>
+                  );
+                })}
+              </div>
+              {historyDeleteError && <p className="mt-3 text-sm font-bold text-red-600">{historyDeleteError}</p>}
+              <div className="mt-4 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setHistoryDeleteStep("scope");
+                    setHistoryDeleteScope(null);
+                    setHistoryDeleteSessionKeys([]);
+                    setHistoryDeleteError(null);
+                  }}
+                  className="min-h-11 border border-gray-300 bg-white px-4 py-2 text-sm font-bold text-gray-700"
+                >
+                  이전
+                </button>
+                <button
+                  type="button"
+                  disabled={historyDeleteSessionKeys.length === 0}
+                  onClick={() => setHistoryDeleteStep("confirm")}
+                  className="min-h-11 border border-red-600 bg-red-600 px-4 py-2 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  다음
+                </button>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="mb-4">
+                <p className="text-lg font-bold text-gray-900">정말 삭제할까요?</p>
+                <p className="mt-2 text-sm leading-6 text-gray-600">{confirmDescription}</p>
+                <p className="mt-1 text-sm font-bold text-red-600">삭제된 기록은 복구할 수 없습니다.</p>
+              </div>
+              {historyDeleteError && <p className="mb-3 text-sm font-bold text-red-600">{historyDeleteError}</p>}
+              <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                <button
+                  type="button"
+                  disabled={isDeletingHistory}
+                  onClick={closeHistoryDeleteModal}
+                  className="min-h-11 border border-gray-300 bg-white px-4 py-2 text-sm font-bold text-gray-700 disabled:opacity-60"
+                >
+                  취소
+                </button>
+                <button
+                  type="button"
+                  disabled={isDeletingHistory}
+                  onClick={() => void handleDeleteHistoryRecords()}
+                  className="min-h-11 border border-red-600 bg-red-600 px-4 py-2 text-sm font-bold text-white disabled:opacity-60"
+                >
+                  {isDeletingHistory ? "삭제 중..." : "삭제"}
+                </button>
+              </div>
+            </>
+          )}
         </section>
       </div>
     );
@@ -5955,7 +6207,7 @@ export function PostureCoachApp() {
       {renderAnalysisSettingsModal()}
       {renderPendingTitlePrompt()}
       {renderStretchCompleteModal()}
-      {renderClearHistoryConfirm()}
+      {renderHistoryDeleteModal()}
       <nav className="sticky top-0 z-50 border-b border-[#12644C]/20 bg-[#C4F6E8]">
         <div className="mx-auto max-w-[1100px] px-6">
           <div className="flex flex-col gap-1.5 py-2">
