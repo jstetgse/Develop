@@ -4815,9 +4815,9 @@ export function PostureCoachApp() {
                 {renderStretchAudioControls("hidden flex-wrap items-center justify-end gap-2 sm:flex")}
               </div>
 
-              <div className="grid gap-2 border-t border-[#18755B]/10 pt-3 sm:grid-cols-[minmax(120px,0.28fr)_minmax(0,1fr)_auto] sm:items-center">
+              <div className="grid gap-2 border-t border-[#18755B]/10 pt-3 sm:grid-cols-[minmax(150px,0.34fr)_minmax(0,1fr)_auto] sm:items-center">
                 <div className={`flex items-baseline gap-2 border px-3 py-2 ${stretchAccuracyTone.border} ${stretchAccuracyTone.bg}`}>
-                  <p className={`text-xs font-bold ${stretchAccuracyTone.text}`}>동작 정확도</p>
+                  <p className={`whitespace-nowrap text-xs font-bold ${stretchAccuracyTone.text}`}>동작 정확도</p>
                   <p className={`text-lg font-black ${stretchAccuracyTone.text}`}>
                     {stretchAccuracyScore ?? "--"}%
                   </p>
@@ -5268,7 +5268,9 @@ export function PostureCoachApp() {
                         isSelected
                           ? isToday
                             ? "border-[#003D2B] bg-[#003D2B] text-white ring-2 ring-[#001A12]"
-                            : `border-[#18755B] bg-[#C4F6E8] text-[#001A12] ring-2 ${calendarTone?.ring ?? "ring-[#39AF8E]"}`
+                            : `${calendarTone?.border ?? "border-[#18755B]"} ${calendarTone?.bg ?? "bg-[#E7FFF7]"} ${
+                                calendarTone?.text ?? "text-[#12644C]"
+                              } ring-2 ${calendarTone?.ring ?? "ring-[#39AF8E]"}`
                           : isToday
                             ? "border-[#003D2B] bg-[#003D2B] text-white ring-2 ring-[#001A12]"
                             : dayGroup
