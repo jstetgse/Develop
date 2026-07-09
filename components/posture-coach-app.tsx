@@ -158,7 +158,7 @@ type ScorePoint = {
 };
 
 type HistoryScorePoint = ScorePoint & {
-  sessionKey: string;
+  dateKey: string;
 };
 
 type SnapshotExtrema = {
@@ -1026,69 +1026,69 @@ function createTodaySavedScorePoints(
     .sort((left, right) => left.timestamp - right.timestamp);
 }
 
-function formatHistoryScorePointLabel(timestamp: number) {
+function formatHistoryScorePointLabel(dateKey: string) {
+  const date = new Date(`${dateKey}T00:00:00+09:00`);
   return new Intl.DateTimeFormat("ko-KR", {
     month: "numeric",
     day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(new Date(timestamp));
+  }).format(date);
 }
 
-function createHistoryScorePoint(session: SessionSummary, dateKey: string): HistoryScorePoint | null {
-  if (typeof session.averageScore !== "number") {
-    return null;
+function createHistoryScoreYAxisDomain(points: HistoryScorePoint[]): [number, number] {
+  const scores = points.map((point) => point.score);
+  const minScore = Math.min(...scores);
+  const maxScore = Math.max(...scores);
+  let minDomain = Math.max(0, minScore - 5);
+  let maxDomain = Math.min(100, maxScore + 5);
+
+  if (maxDomain - minDomain < 10) {
+    const midpoint = (minScore + maxScore) / 2;
+    minDomain = Math.max(0, Math.floor(midpoint - 5));
+    maxDomain = Math.min(100, Math.ceil(midpoint + 5));
   }
 
-  const timestamp = new Date(session.startedAt).getTime();
-  if (!Number.isFinite(timestamp)) {
-    return null;
+  if (maxDomain - minDomain < 10) {
+    if (minDomain === 0) {
+      maxDomain = Math.min(100, minDomain + 10);
+    } else {
+      minDomain = Math.max(0, maxDomain - 10);
+    }
   }
 
-  const sessionKey = session.sessionTitleKey ?? getSessionTitleKey(session, dateKey);
-  return {
-    id: `history-${sessionKey}`,
-    sessionKey,
-    time: formatHistoryScorePointLabel(timestamp),
-    timestamp,
-    score: session.averageScore,
-  };
+  return [minDomain, maxDomain];
 }
 
-function createSessionTrendSummary(historyGroups: HistoryGroup[], currentSession: SessionSummary, dateKey: string) {
-  const currentTime = new Date(currentSession.startedAt).getTime();
-  const currentSessionKey = currentSession.sessionTitleKey ?? getSessionTitleKey(currentSession, dateKey);
+function createSessionTrendSummary(historyGroups: HistoryGroup[], dateKey: string) {
+  const points = historyGroups
+    .filter((group) => group.dateKey <= dateKey && typeof group.averageScore === "number")
+    .sort((left, right) => right.dateKey.localeCompare(left.dateKey))
+    .slice(0, 5)
+    .reverse()
+    .map((group) => ({
+      id: `history-day-${group.dateKey}`,
+      dateKey: group.dateKey,
+      time: formatHistoryScorePointLabel(group.dateKey),
+      timestamp: new Date(`${group.dateKey}T00:00:00+09:00`).getTime(),
+      score: group.averageScore ?? 0,
+    }));
+  const currentPoint = points.find((point) => point.dateKey === dateKey) ?? null;
+  const yDomain = points.length > 0 ? createHistoryScoreYAxisDomain(points) : [0, 100] as [number, number];
 
-  if (!Number.isFinite(currentTime)) {
+  if (!currentPoint) {
     return {
-      points: [] as HistoryScorePoint[],
-      currentPoint: null as HistoryScorePoint | null,
+      points,
+      currentPoint,
+      yDomain,
       caption: "최근 점수 흐름을 보려면 기록이 조금 더 필요해요.",
     };
   }
 
-  const sevenDaysMs = 7 * 24 * 60 * 60 * 1000;
-  const startTime = currentTime - sevenDaysMs;
-  const points = historyGroups
-    .flatMap((group) => group.sessions.map((session) => createHistoryScorePoint(session, group.dateKey)))
-    .filter((point): point is HistoryScorePoint => Boolean(point))
-    .filter((point) => point.timestamp >= startTime && point.timestamp <= currentTime)
-    .sort((left, right) => left.timestamp - right.timestamp);
-  const currentPoint = points.find((point) => point.sessionKey === currentSessionKey) ?? null;
-
-  if (typeof currentSession.averageScore !== "number") {
-    return {
-      points,
-      currentPoint,
-      caption: "현재 세션은 측정 부족으로 비교에서 제외됐어요.",
-    };
-  }
-
-  const comparisonPoints = points.filter((point) => point.sessionKey !== currentSessionKey);
+  const comparisonPoints = points.filter((point) => point.dateKey !== dateKey);
   if (comparisonPoints.length === 0) {
     return {
       points,
       currentPoint,
+      yDomain,
       caption: "최근 점수 흐름을 보려면 기록이 조금 더 필요해요.",
     };
   }
@@ -1096,24 +1096,26 @@ function createSessionTrendSummary(historyGroups: HistoryGroup[], currentSession
   const comparisonAverage = Math.round(
     comparisonPoints.reduce((sum, point) => sum + point.score, 0) / comparisonPoints.length
   );
-  const difference = currentSession.averageScore - comparisonAverage;
+  const difference = currentPoint.score - comparisonAverage;
   const absoluteDifference = Math.abs(difference);
 
   if (absoluteDifference <= 3) {
     return {
       points,
       currentPoint,
-      caption: "최근 7일 평균과 비슷해요.",
+      yDomain,
+      caption: "최근 기록일 평균과 비슷해요.",
     };
   }
 
   return {
     points,
     currentPoint,
+    yDomain,
     caption:
       difference > 0
-        ? `최근 7일 평균보다 ${absoluteDifference}점 높아요.`
-        : `최근 7일 평균보다 ${absoluteDifference}점 낮아요.`,
+        ? `최근 기록일 평균보다 ${absoluteDifference}점 높아요.`
+        : `최근 기록일 평균보다 ${absoluteDifference}점 낮아요.`,
   };
 }
 
@@ -2126,7 +2128,7 @@ export function PostureCoachApp() {
 
     if (validAreaScores.length === 0 || !homeScoreInsight.weakestAreaLabel) {
       return {
-        attentionText: "--",
+        attentionText: "분석 전",
         statusText: "분석을 시작하면 자세 요약이 표시됩니다",
         weakestArea: null,
       };
@@ -2134,7 +2136,7 @@ export function PostureCoachApp() {
 
     if (isStable) {
       return {
-        attentionText: "안정",
+        attentionText: "없음",
         statusText: "최근 자세 흐름이 안정적입니다",
         weakestArea: null,
       };
@@ -2154,7 +2156,7 @@ export function PostureCoachApp() {
     };
   }, [homeScoreInsight]);
   const homeAttentionTone = getHomeScoreTone(
-    homePostureSummary.attentionText === "안정" ? 100 : homeScoreInsight.weakestAreaScore
+    homePostureSummary.attentionText === "없음" ? 100 : homeScoreInsight.weakestAreaScore
   );
   const combinedScorePoints = useMemo(
     () =>
@@ -4264,40 +4266,42 @@ export function PostureCoachApp() {
                 <p className="text-sm text-gray-500">최근 기록으로 몸 상태를 확인하세요</p>
               </div>
             </div>
-            <div className="grid gap-3 text-sm sm:grid-cols-[300px_minmax(0,1fr)] sm:items-start">
-              <div className="grid max-w-[300px] gap-1.5">
-              <div className="grid grid-cols-[76px_minmax(0,170px)] items-center gap-3 border-b border-gray-200 pb-1.5 leading-5">
-                <span className="text-gray-500">주의 부위</span>
-                <strong className="inline-flex items-center justify-end gap-1.5 text-right font-bold tabular-nums text-[#18755B]">
-                  {homePostureSummary.weakestArea ? getPostureAreaIcon(homePostureSummary.weakestArea, "h-3.5 w-3.5") : null}
-                  <span className={`${homeAttentionTone.badgeClass} px-1.5 py-0.5`}>{homePostureSummary.attentionText}</span>
-                </strong>
-              </div>
-              <p className="pt-1 text-sm font-medium leading-6 text-gray-600">{homePostureSummary.statusText}</p>
+            <div className="grid gap-3 text-sm sm:grid-cols-[minmax(260px,0.8fr)_minmax(300px,1fr)] sm:items-start">
+              <div className="grid max-w-[360px] gap-2">
+                <div className="flex flex-wrap items-center gap-2 border-b border-gray-200 pb-2 leading-5">
+                  <span className="shrink-0 text-gray-500">주의 부위</span>
+                  <strong className="inline-flex items-center gap-1.5 font-bold tabular-nums text-[#18755B]">
+                    {homePostureSummary.weakestArea ? getPostureAreaIcon(homePostureSummary.weakestArea, "h-3.5 w-3.5") : null}
+                    <span className={`${homeAttentionTone.badgeClass} px-1.5 py-0.5`}>{homePostureSummary.attentionText}</span>
+                  </strong>
+                </div>
+                <p className="text-sm font-medium leading-6 text-gray-600">{homePostureSummary.statusText}</p>
               </div>
               <div className="grid max-w-[560px] gap-2">
-                <div className="grid gap-2">
-                  {homeScoreInsight.areaScores.map((area) => (
-                    (() => {
-                      const areaTone = getHomeScoreTone(area.score);
-                      return (
-                        <div key={area.area} className="grid grid-cols-[56px_minmax(0,1fr)_44px] items-center gap-3 leading-5">
-                          <span className="inline-flex items-center gap-1.5 text-gray-500">
-                            {getPostureAreaIcon(area.area, "h-3.5 w-3.5")}
-                            {area.label}
-                          </span>
-                          <div className={`h-1.5 ${areaTone.trackClass}`}>
-                            <div
-                              className={`block h-full ${areaTone.barClass}`}
-                              style={{ width: `${area.score ?? 0}%` }}
-                            />
-                          </div>
-                          <strong className="text-right tabular-nums text-gray-900">{area.score ?? "--"}</strong>
+                {homeScoreInsight.areaScores.map((area) => (
+                  (() => {
+                    const areaTone = getHomeScoreTone(area.score);
+                    const areaValue = area.score === null ? "분석 전" : `${area.score}점`;
+                    return (
+                      <div
+                        key={area.area}
+                        className="grid grid-cols-[max-content_max-content] gap-x-3 gap-y-1 leading-5 sm:grid-cols-[76px_72px_minmax(140px,220px)] sm:items-center"
+                      >
+                        <span className="inline-flex items-center gap-1.5 whitespace-nowrap text-gray-500">
+                          {getPostureAreaIcon(area.area, "h-3.5 w-3.5")}
+                          {area.label}
+                        </span>
+                        <strong className="whitespace-nowrap tabular-nums text-gray-900">{areaValue}</strong>
+                        <div className={`col-span-2 h-1.5 w-full max-w-[220px] ${areaTone.trackClass} sm:col-span-1`}>
+                          <div
+                            className={`block h-full ${areaTone.barClass}`}
+                            style={{ width: `${area.score ?? 0}%` }}
+                          />
                         </div>
-                      );
-                    })()
-                  ))}
-                </div>
+                      </div>
+                    );
+                  })()
+                ))}
               </div>
             </div>
           </div>
@@ -4337,18 +4341,20 @@ export function PostureCoachApp() {
             <p className="text-sm text-gray-500">지난 24시간</p>
           </div>
         </div>
-        <div className="grid w-full gap-1.5 text-sm">
-          <div className="grid grid-cols-[88px_minmax(0,1fr)] items-center gap-3 border-b border-gray-200 pb-1.5 leading-5">
+        <div className="grid w-full max-w-[320px] gap-1.5 text-sm">
+          <div className="grid grid-cols-[max-content_max-content] items-center gap-3 border-b border-gray-200 pb-1.5 leading-5">
             <span className="text-gray-500">평균 점수</span>
-            <strong className="text-right tabular-nums text-gray-900">
-              {recentSummary?.averageScore === null || recentSummary?.averageScore === undefined ? "--" : recentSummary.averageScore}
-              <span className="ml-1 text-xs font-bold text-gray-500">/100</span>
+            <strong className="tabular-nums text-gray-900">
+              {recentSummary?.averageScore === null || recentSummary?.averageScore === undefined ? "기록 없음" : recentSummary.averageScore}
+              {recentSummary?.averageScore !== null && recentSummary?.averageScore !== undefined && (
+                <span className="ml-1 text-xs font-bold text-gray-500">/100</span>
+              )}
             </strong>
           </div>
-          <div className="grid grid-cols-[88px_minmax(0,1fr)] items-center gap-3 border-b border-gray-200 pb-1.5 leading-5">
+          <div className="grid grid-cols-[max-content_max-content] items-center gap-3 border-b border-gray-200 pb-1.5 leading-5">
             <span className="text-gray-500">7일 비교</span>
             <strong
-              className={`text-right tabular-nums ${
+              className={`tabular-nums ${
                 homeScoreInsight.trend === null
                   ? "text-gray-700"
                   : homeScoreInsight.trend >= 0
@@ -4356,32 +4362,32 @@ export function PostureCoachApp() {
                     : "text-yellow-800"
               }`}
             >
-              {homeScoreInsight.trend === null ? "--" : `${homeScoreInsight.trend >= 0 ? "+" : ""}${homeScoreInsight.trend}`}
+              {homeScoreInsight.trend === null ? "기록 없음" : `${homeScoreInsight.trend >= 0 ? "+" : ""}${homeScoreInsight.trend}`}
             </strong>
           </div>
-          <div className="grid grid-cols-[88px_minmax(0,1fr)] items-center gap-3 border-b border-gray-200 pb-1.5 leading-5">
+          <div className="grid grid-cols-[max-content_max-content] items-center gap-3 border-b border-gray-200 pb-1.5 leading-5">
             <span className="text-gray-500">최고 / 최저</span>
-            <strong className="text-right tabular-nums text-gray-900">
+            <strong className="tabular-nums text-gray-900">
               {homeScoreInsight.bestScore !== null || homeScoreInsight.worstScore !== null
                 ? `${homeScoreInsight.bestScore ?? "--"} / ${homeScoreInsight.worstScore ?? "--"}`
-                : "--"}
+                : "기록 없음"}
             </strong>
           </div>
         </div>
-        <div className="mt-4 grid w-full gap-1.5 border-t border-gray-200 pt-3 text-xs leading-5 text-gray-500">
-          <span className="grid grid-cols-[88px_minmax(0,1fr)] items-center gap-3">
+        <div className="mt-4 grid w-full max-w-[320px] gap-1.5 border-t border-gray-200 pt-3 text-xs leading-5 text-gray-500">
+          <span className="grid grid-cols-[max-content_max-content] items-center gap-3">
             <span>최근 측정</span>
-            <span className="text-right tabular-nums text-gray-700">
-              {homeScoreInsight.latestMeasuredAt ? formatTime(homeScoreInsight.latestMeasuredAt) : "--"}
+            <span className="tabular-nums text-gray-700">
+              {homeScoreInsight.latestMeasuredAt ? formatTime(homeScoreInsight.latestMeasuredAt) : "아직 없음"}
             </span>
           </span>
-          <span className="grid grid-cols-[88px_minmax(0,1fr)] items-center gap-3">
+          <span className="grid grid-cols-[max-content_max-content] items-center gap-3">
             <span>사용 시간</span>
-            <span className="text-right tabular-nums text-gray-700">{formatMinutes(recentSummary?.totalUsageMinutes ?? 0)}</span>
+            <span className="tabular-nums text-gray-700">{formatMinutes(recentSummary?.totalUsageMinutes ?? 0)}</span>
           </span>
-          <span className="grid grid-cols-[88px_minmax(0,1fr)] items-center gap-3">
+          <span className="grid grid-cols-[max-content_max-content] items-center gap-3">
             <span>알림 횟수</span>
-            <span className="text-right tabular-nums text-gray-700">{recentSummary?.alertCount ?? 0}</span>
+            <span className="tabular-nums text-gray-700">{recentSummary?.alertCount ?? 0}회</span>
           </span>
         </div>
       </section>
@@ -4399,8 +4405,9 @@ export function PostureCoachApp() {
             </LineChart>
           </ResponsiveContainer>
         ) : (
-          <div className="flex h-[200px] items-center justify-center border border-dashed border-gray-200 bg-[rgba(196,246,232,0.28)] px-4 text-center text-sm font-medium text-gray-500">
-            오늘 분석 기록이 아직 없습니다
+          <div className="flex h-[200px] flex-col items-center justify-center border border-dashed border-gray-200 bg-[rgba(196,246,232,0.28)] px-4 text-center text-sm font-medium text-gray-500">
+            <span>오늘 분석 기록이 아직 없습니다</span>
+            <span className="mt-1 text-xs text-gray-500">자세 분석을 시작하면 점수 변화가 여기에 표시됩니다</span>
           </div>
         )}
       </div>
@@ -5366,7 +5373,7 @@ export function PostureCoachApp() {
                 const areaScores = getHistoryAreaScores(session.postureAreaStats);
                 const weakestArea = getHistoryWeakestArea(session.postureAreaStats);
                 const historyReportComment = getHistoryReportComment(areaScores);
-                const sessionTrendSummary = createSessionTrendSummary(historyGroups, session, selectedHistoryGroup.dateKey);
+                const sessionTrendSummary = createSessionTrendSummary(historyGroups, selectedHistoryGroup.dateKey);
                 const canShowSessionTrendChart =
                   Boolean(sessionTrendSummary.currentPoint) && sessionTrendSummary.points.length >= 2;
                 const isImagesExpanded = expandedHistoryImageSessions.has(session.sessionId);
@@ -5546,12 +5553,12 @@ export function PostureCoachApp() {
                         <div className="min-w-0">
                           <div className="mb-2 flex items-start justify-between gap-3">
                             <div>
-                              <h4 className="text-sm font-bold text-gray-900">최근 7일 점수</h4>
-                              <p className="mt-0.5 text-xs font-medium text-gray-500">최근 기록과 비교한 현재 세션의 위치</p>
+                              <h4 className="text-sm font-bold text-gray-900">최근 5개 기록일 점수</h4>
+                              <p className="mt-0.5 text-xs font-medium text-gray-500">기록한 날짜 기준 흐름</p>
                             </div>
-                            {sessionAverageScore !== null && (
+                            {sessionTrendSummary.currentPoint && (
                               <span className="shrink-0 text-xs font-bold tabular-nums text-[#18755B]">
-                                현재 {sessionAverageScore}
+                                현재 {sessionTrendSummary.currentPoint.score}
                               </span>
                             )}
                           </div>
@@ -5561,7 +5568,7 @@ export function PostureCoachApp() {
                                 <LineChart data={sessionTrendSummary.points} margin={{ top: 8, right: 12, bottom: 0, left: -18 }}>
                                   <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" vertical={false} />
                                   <XAxis dataKey="time" stroke="#9ca3af" fontSize={10} tickLine={false} axisLine={false} />
-                                  <YAxis domain={[0, 100]} stroke="#9ca3af" fontSize={10} tickLine={false} axisLine={false} width={32} />
+                                  <YAxis domain={sessionTrendSummary.yDomain} stroke="#9ca3af" fontSize={10} tickLine={false} axisLine={false} width={32} />
                                   <Tooltip />
                                   <Line type="linear" dataKey="score" stroke="#18755B" strokeWidth={2} dot={{ r: 2.5 }} activeDot={{ r: 4 }} />
                                   {sessionTrendSummary.currentPoint && (
@@ -5579,7 +5586,7 @@ export function PostureCoachApp() {
                             </div>
                           ) : (
                             <div className="flex h-[132px] items-center justify-center border border-dashed border-gray-200 bg-white px-4 text-center text-xs font-bold text-gray-500">
-                              {sessionAverageScore === null ? "현재 세션은 측정 부족" : "최근 7일 비교 데이터가 부족해요"}
+                              최근 기록일 비교 데이터가 부족해요
                             </div>
                           )}
                           <div className="mt-2 space-y-1 text-xs leading-5 text-gray-500">
@@ -6302,13 +6309,13 @@ export function PostureCoachApp() {
                 key={tab.id}
                 type="button"
                 onClick={() => setActiveTab(tab.id)}
-                className={`relative flex min-h-14 min-w-0 flex-col items-center justify-center gap-1 px-1 text-[10px] leading-tight sm:text-xs ${
+                className={`relative flex min-h-14 min-w-0 flex-col items-center justify-center gap-1 px-1 text-[11px] leading-tight sm:text-xs ${
                   isActive ? "font-bold text-[#18755B]" : "text-gray-500"
                 }`}
               >
                 <span className={`absolute top-0 h-0.5 w-5 ${isActive ? "bg-[#18755B]" : "bg-transparent"}`} />
                 {tab.icon}
-                <span className="max-w-full whitespace-nowrap">{tab.label}</span>
+                <span className="max-w-full truncate whitespace-nowrap">{tab.label}</span>
               </button>
             );
           })}
