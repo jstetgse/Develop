@@ -31,6 +31,7 @@ import {
   Line,
   LineChart,
   ReferenceDot,
+  ReferenceLine,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -101,6 +102,11 @@ type Tab = "home" | "analysis" | "stretching" | "history";
 type AuthPage = "login" | "signup";
 type SettingsSaveStatus = "idle" | "saving" | "saved" | "error";
 type AnalysisSettingsPanel = "analysis-options" | "posture-alerts" | "stretch-alerts";
+type StretchSettingsDraft = {
+  beepEnabled: boolean;
+  ttsEnabled: boolean;
+  ttsVoiceUri: string;
+};
 type HistoryDeleteScope = "sessions" | "date";
 type HistoryDeleteStep = "scope" | "session-select" | "confirm";
 type PendingTitleSession = {
@@ -157,8 +163,8 @@ type ScorePoint = {
   score: number;
 };
 
-type HistorySessionScorePoint = ScorePoint & {
-  sessionTitleKey: string;
+type HistoryScorePoint = ScorePoint & {
+  dateKey: string;
 };
 
 type SnapshotExtrema = {
@@ -843,6 +849,27 @@ function getHistoryCalendarToneClass(score: number | null) {
   };
 }
 
+function getHistoryAverageReferenceTone(score: number) {
+  if (score >= 80) {
+    return {
+      stroke: "#003D2B",
+      label: "#003D2B",
+    };
+  }
+
+  if (score >= 60) {
+    return {
+      stroke: "#D97706",
+      label: "#92400E",
+    };
+  }
+
+  return {
+    stroke: "#DC2626",
+    label: "#991B1B",
+  };
+}
+
 function getScoreToneClass(score: number | null | undefined) {
   if (typeof score !== "number") {
     return {
@@ -1065,78 +1092,86 @@ function createHistoryScoreYAxisTicks(domain: [number, number]) {
   return ticks.length > 0 ? ticks : [minDomain, maxDomain];
 }
 
-function createSessionTrendSummary(
-  sessions: SessionSummary[],
-  dateKey: string,
-  currentSessionTitleKey: string
-) {
-  const points: HistorySessionScorePoint[] = sessions
-    .filter((session) => typeof session.averageScore === "number")
-    .map((session) => {
-      const sessionTitleKey = session.sessionTitleKey ?? getSessionTitleKey(session, dateKey);
+function formatHistoryScorePointLabel(dateKey: string) {
+  const date = new Date(`${dateKey}T00:00:00+09:00`);
+  return new Intl.DateTimeFormat("ko-KR", {
+    month: "numeric",
+    day: "numeric",
+  }).format(date);
+}
 
-      return {
-        id: sessionTitleKey,
-        sessionTitleKey,
-        time: formatTime(session.startedAt),
-        timestamp: new Date(session.startedAt).getTime(),
-        score: session.averageScore ?? 0,
-      };
-    })
-    .sort((left, right) => left.timestamp - right.timestamp);
-  const currentPoint = points.find((point) => point.sessionTitleKey === currentSessionTitleKey) ?? null;
-  const yDomain: [number, number] = points.length > 0 ? createHistoryScoreYAxisDomain(points) : [0, 100];
+function createSessionTrendSummary(historyGroups: HistoryGroup[], dateKey: string) {
+  const points: HistoryScorePoint[] = historyGroups
+    .filter((group) => group.dateKey <= dateKey && typeof group.averageScore === "number")
+    .sort((left, right) => right.dateKey.localeCompare(left.dateKey))
+    .slice(0, 5)
+    .reverse()
+    .map((group) => ({
+      id: `history-day-${group.dateKey}`,
+      dateKey: group.dateKey,
+      time: formatHistoryScorePointLabel(group.dateKey),
+      timestamp: new Date(`${group.dateKey}T00:00:00+09:00`).getTime(),
+      score: group.averageScore ?? 0,
+    }));
+  const selectedGroup = historyGroups.find((group) => group.dateKey === dateKey) ?? null;
+  const selectedAverageScore =
+    typeof selectedGroup?.averageScore === "number" ? selectedGroup.averageScore : null;
+  const currentPoint = points.find((point) => point.dateKey === dateKey) ?? null;
+  const yDomainPoints =
+    selectedAverageScore !== null ? [...points, { score: selectedAverageScore }] : points;
+  const yDomain: [number, number] = yDomainPoints.length > 0 ? createHistoryScoreYAxisDomain(yDomainPoints) : [0, 100];
   const yTicks = createHistoryScoreYAxisTicks(yDomain);
 
-  if (!currentPoint) {
+  if (selectedAverageScore === null) {
     return {
       points,
       currentPoint,
+      selectedAverageScore,
       yDomain,
       yTicks,
-      caption:
-        points.length >= 2
-          ? "현재 세션은 측정 부족으로 비교에서 제외됐어요."
-          : "이 날짜에는 비교할 세션이 더 필요해요.",
+      caption: "선택 날짜 평균은 측정 부족이에요.",
     };
   }
 
-  const comparisonPoints = points.filter((point) => point.sessionTitleKey !== currentSessionTitleKey);
+  const comparisonPoints = points.filter((point) => point.dateKey !== dateKey);
   if (comparisonPoints.length === 0) {
     return {
       points,
       currentPoint,
+      selectedAverageScore,
       yDomain,
       yTicks,
-      caption: "이 날짜에는 비교할 세션이 더 필요해요.",
+      caption: "최근 점수 흐름을 보려면 기록이 조금 더 필요해요.",
     };
   }
 
   const comparisonAverage = Math.round(
     comparisonPoints.reduce((sum, point) => sum + point.score, 0) / comparisonPoints.length
   );
-  const difference = currentPoint.score - comparisonAverage;
+  const difference = selectedAverageScore - comparisonAverage;
   const absoluteDifference = Math.abs(difference);
 
   if (absoluteDifference <= 3) {
     return {
       points,
       currentPoint,
+      selectedAverageScore,
       yDomain,
       yTicks,
-      caption: "이 날짜의 다른 세션과 비슷해요.",
+      caption: "최근 기록일 평균과 비슷해요.",
     };
   }
 
   return {
     points,
     currentPoint,
+    selectedAverageScore,
     yDomain,
     yTicks,
     caption:
       difference > 0
-        ? `이 날짜의 다른 세션보다 ${absoluteDifference}점 높아요.`
-        : `이 날짜의 다른 세션보다 ${absoluteDifference}점 낮아요.`,
+        ? `최근 기록일 평균보다 ${absoluteDifference}점 높아요.`
+        : `최근 기록일 평균보다 ${absoluteDifference}점 낮아요.`,
   };
 }
 
@@ -1965,6 +2000,13 @@ export function PostureCoachApp() {
     }
     return window.localStorage.getItem(STRETCH_TTS_VOICE_STORAGE_KEY) ?? "";
   });
+  const [isStretchSettingsOpen, setIsStretchSettingsOpen] = useState(false);
+  const [stretchSettingsDraft, setStretchSettingsDraft] = useState<StretchSettingsDraft>({
+    beepEnabled: true,
+    ttsEnabled: true,
+    ttsVoiceUri: "",
+  });
+  const [stretchSettingsSaveStatus, setStretchSettingsSaveStatus] = useState<SettingsSaveStatus>("idle");
   const [stretchTtsVoices, setStretchTtsVoices] = useState<SpeechSynthesisVoice[]>([]);
   const [latestPosture, setLatestPosture] = useState<PostureResult>(createInitialPosture);
   const [hasCurrentSessionPostureData, setHasCurrentSessionPostureData] = useState(false);
@@ -2208,6 +2250,7 @@ export function PostureCoachApp() {
     hasCurrentSessionPostureData && personalizedStretchRecommendations.recommendations.length > 0;
   const selectedStretch = useMemo(() => getStretchById(activeStretchId), [activeStretchId]);
   const activeStretchStep = selectedStretch?.steps[activeStretchStepIndex] ?? null;
+  const nextStretchStep = selectedStretch?.steps[activeStretchStepIndex + 1] ?? null;
   const selectedHistoryGroup = useMemo(
     () => historyGroups.find((group) => group.dateKey === selectedHistoryDateKey) ?? historyGroups[0] ?? null,
     [historyGroups, selectedHistoryDateKey]
@@ -2387,6 +2430,40 @@ export function PostureCoachApp() {
       window.localStorage.setItem(STRETCH_TTS_VOICE_STORAGE_KEY, voiceUri);
     }
   }, []);
+  const openStretchSettings = useCallback(() => {
+    setStretchSettingsDraft({
+      beepEnabled: stretchBeepEnabled,
+      ttsEnabled: stretchTtsEnabled,
+      ttsVoiceUri: stretchTtsVoiceUri,
+    });
+    setStretchSettingsSaveStatus("idle");
+    setIsStretchSettingsOpen(true);
+  }, [stretchBeepEnabled, stretchTtsEnabled, stretchTtsVoiceUri]);
+  const closeStretchSettings = useCallback(() => {
+    setStretchSettingsSaveStatus("idle");
+    setIsStretchSettingsOpen(false);
+  }, []);
+  const updateStretchSettingsDraft = useCallback((changes: Partial<StretchSettingsDraft>) => {
+    setStretchSettingsDraft((current) => ({
+      ...current,
+      ...changes,
+    }));
+    setStretchSettingsSaveStatus("idle");
+  }, []);
+  const handleResetStretchSettings = useCallback(() => {
+    setStretchSettingsDraft({
+      beepEnabled: true,
+      ttsEnabled: true,
+      ttsVoiceUri: "",
+    });
+    setStretchSettingsSaveStatus("idle");
+  }, []);
+  const handleApplyStretchSettings = useCallback(() => {
+    updateStretchBeepEnabled(stretchSettingsDraft.beepEnabled);
+    updateStretchTtsEnabled(stretchSettingsDraft.ttsEnabled);
+    updateStretchTtsVoice(stretchSettingsDraft.ttsVoiceUri);
+    setStretchSettingsSaveStatus("saved");
+  }, [stretchSettingsDraft, updateStretchBeepEnabled, updateStretchTtsEnabled, updateStretchTtsVoice]);
   const setIsStretchingMode = useCallback((nextIsStretching: boolean) => {
     if (nextIsStretching) {
       appModeRef.current = "stretching";
@@ -4352,7 +4429,7 @@ export function PostureCoachApp() {
       </section>
 
       <div className="grid items-stretch gap-4 xl:grid-cols-[380px_minmax(0,1fr)]">
-      <section className="app-surface flex h-full flex-col justify-between p-5">
+      <section className="app-surface flex h-full flex-col p-5">
         <div className="mb-4 flex items-center gap-3">
           <div className="flex h-8 w-8 items-center justify-center bg-[#C4F6E8] text-[#18755B]">
             <CheckCircle className="h-4 w-4" />
@@ -4362,54 +4439,58 @@ export function PostureCoachApp() {
             <p className="text-sm text-gray-500">지난 24시간</p>
           </div>
         </div>
-        <div className="grid w-full max-w-[320px] gap-1.5 text-sm">
-          <div className="grid grid-cols-[max-content_max-content] items-center gap-3 border-b border-gray-200 pb-1.5 leading-5">
-            <span className="text-gray-500">평균 점수</span>
-            <strong className="tabular-nums text-gray-900">
-              {recentSummary?.averageScore === null || recentSummary?.averageScore === undefined ? "기록 없음" : recentSummary.averageScore}
-              {recentSummary?.averageScore !== null && recentSummary?.averageScore !== undefined && (
-                <span className="ml-1 text-xs font-bold text-gray-500">/100</span>
-              )}
-            </strong>
+        <div className="flex flex-1 flex-col justify-center gap-4">
+          <div className="grid gap-3 border-y border-gray-200 py-3 text-sm sm:grid-cols-3">
+            <div className="min-w-0">
+              <span className="block text-xs font-bold text-gray-500">평균 점수</span>
+              <strong className="mt-1 block truncate tabular-nums text-gray-900">
+                {recentSummary?.averageScore === null || recentSummary?.averageScore === undefined ? "기록 없음" : recentSummary.averageScore}
+                {recentSummary?.averageScore !== null && recentSummary?.averageScore !== undefined && (
+                  <span className="ml-1 text-xs font-bold text-gray-500">/100</span>
+                )}
+              </strong>
+            </div>
+            <div className="min-w-0">
+              <span className="block text-xs font-bold text-gray-500">7일 비교</span>
+              <strong
+                className={`mt-1 block truncate tabular-nums ${
+                  homeScoreInsight.trend === null
+                    ? "text-gray-700"
+                    : homeScoreInsight.trend >= 0
+                      ? "text-[#18755B]"
+                      : "text-yellow-800"
+                }`}
+              >
+                {homeScoreInsight.trend === null ? "기록 없음" : `${homeScoreInsight.trend >= 0 ? "+" : ""}${homeScoreInsight.trend}`}
+              </strong>
+            </div>
+            <div className="min-w-0">
+              <span className="block text-xs font-bold text-gray-500">최고 / 최저</span>
+              <strong className="mt-1 block truncate tabular-nums text-gray-900">
+                {homeScoreInsight.bestScore !== null || homeScoreInsight.worstScore !== null
+                  ? `${homeScoreInsight.bestScore ?? "--"} / ${homeScoreInsight.worstScore ?? "--"}`
+                  : "기록 없음"}
+              </strong>
+            </div>
           </div>
-          <div className="grid grid-cols-[max-content_max-content] items-center gap-3 border-b border-gray-200 pb-1.5 leading-5">
-            <span className="text-gray-500">7일 비교</span>
-            <strong
-              className={`tabular-nums ${
-                homeScoreInsight.trend === null
-                  ? "text-gray-700"
-                  : homeScoreInsight.trend >= 0
-                    ? "text-[#18755B]"
-                    : "text-yellow-800"
-              }`}
-            >
-              {homeScoreInsight.trend === null ? "기록 없음" : `${homeScoreInsight.trend >= 0 ? "+" : ""}${homeScoreInsight.trend}`}
-            </strong>
+          <div className="grid gap-3 border-t border-gray-200 pt-3 text-xs sm:grid-cols-3">
+            <div className="min-w-0">
+              <span className="block font-bold text-gray-500">최근 측정</span>
+              <strong className="mt-1 block truncate tabular-nums text-gray-700">
+                {homeScoreInsight.latestMeasuredAt ? formatTime(homeScoreInsight.latestMeasuredAt) : "아직 없음"}
+              </strong>
+            </div>
+            <div className="min-w-0">
+              <span className="block font-bold text-gray-500">사용 시간</span>
+              <strong className="mt-1 block truncate tabular-nums text-gray-700">
+                {formatMinutes(recentSummary?.totalUsageMinutes ?? 0)}
+              </strong>
+            </div>
+            <div className="min-w-0">
+              <span className="block font-bold text-gray-500">알림</span>
+              <strong className="mt-1 block truncate tabular-nums text-gray-700">{recentSummary?.alertCount ?? 0}회</strong>
+            </div>
           </div>
-          <div className="grid grid-cols-[max-content_max-content] items-center gap-3 border-b border-gray-200 pb-1.5 leading-5">
-            <span className="text-gray-500">최고 / 최저</span>
-            <strong className="tabular-nums text-gray-900">
-              {homeScoreInsight.bestScore !== null || homeScoreInsight.worstScore !== null
-                ? `${homeScoreInsight.bestScore ?? "--"} / ${homeScoreInsight.worstScore ?? "--"}`
-                : "기록 없음"}
-            </strong>
-          </div>
-        </div>
-        <div className="mt-4 grid w-full max-w-[320px] gap-1.5 border-t border-gray-200 pt-3 text-xs leading-5 text-gray-500">
-          <span className="grid grid-cols-[max-content_max-content] items-center gap-3">
-            <span>최근 측정</span>
-            <span className="tabular-nums text-gray-700">
-              {homeScoreInsight.latestMeasuredAt ? formatTime(homeScoreInsight.latestMeasuredAt) : "아직 없음"}
-            </span>
-          </span>
-          <span className="grid grid-cols-[max-content_max-content] items-center gap-3">
-            <span>사용 시간</span>
-            <span className="tabular-nums text-gray-700">{formatMinutes(recentSummary?.totalUsageMinutes ?? 0)}</span>
-          </span>
-          <span className="grid grid-cols-[max-content_max-content] items-center gap-3">
-            <span>알림 횟수</span>
-            <span className="tabular-nums text-gray-700">{recentSummary?.alertCount ?? 0}회</span>
-          </span>
         </div>
       </section>
 
@@ -4660,6 +4741,15 @@ export function PostureCoachApp() {
           <h1 className="text-3xl font-bold text-gray-900">스트레칭 단계별 분석</h1>
           <p className="mt-1 text-gray-600">추천 스트레칭을 순서대로 따라 하며 각 단계의 자세를 확인합니다.</p>
         </div>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={openStretchSettings}
+            className="inline-flex min-h-11 items-center justify-center gap-2 border border-[#18755B]/25 bg-white px-5 py-2 font-bold text-[#18755B]"
+          >
+            <SlidersHorizontal className="h-5 w-5" />
+            스트레칭 설정
+          </button>
         <button
           type="button"
           onClick={() => setActiveTab("analysis")}
@@ -4668,6 +4758,7 @@ export function PostureCoachApp() {
           <Video className="h-5 w-5" />
           자세 분석 모드
         </button>
+        </div>
       </div>
 
       {hasCurrentSessionPostureData && (
@@ -4818,7 +4909,7 @@ export function PostureCoachApp() {
       )}
 
       <div className="stretch-analysis-layout">
-        <div className="mx-auto flex w-full max-w-2xl flex-col gap-4">
+        <div className="order-2 mx-auto flex w-full max-w-2xl flex-col gap-4">
           <div className="app-camera-frame relative flex aspect-video items-center justify-center overflow-hidden">
             <video ref={videoRef} className="absolute inset-0 h-full w-full scale-x-[-1] object-cover" playsInline muted />
             <canvas ref={canvasRef} className="absolute inset-0 h-full w-full" />
@@ -4893,38 +4984,87 @@ export function PostureCoachApp() {
 
         </div>
 
-        <div className="flex min-h-0 w-full flex-col gap-4">
+        <div className="order-1 flex min-h-0 w-full flex-col gap-4">
           {selectedStretch ? (
             <>
-              <div className="app-surface flex-1 p-5">
-                <div className="mb-5 grid items-start gap-4 md:grid-cols-[minmax(0,1fr)_auto]">
+              <div className="app-surface flex-1 p-4">
+                <div className="mb-4 grid items-start gap-4 md:grid-cols-[minmax(0,1fr)_auto]">
                   <div className="min-w-0">
                     <p className="mb-2 text-xs font-bold text-blue-600">{selectedStretch.targetBodyPart}</p>
                     <h3 className="mb-1 text-xl font-bold text-gray-900">{selectedStretch.name}</h3>
+                    <div className="mt-2 flex items-center gap-2 text-sm text-gray-600">
+                      <Clock className="h-4 w-4" />
+                      <span>{selectedStretch.durationSec}초</span>
+                      <span className="text-gray-300">|</span>
+                      <span>{completedStretchSteps.length} / {selectedStretch.steps.length} 단계 완료</span>
+                    </div>
 
                     {isStretchingMode && activeStretchStep && (
                       <div className="mt-3 border border-[#18755B]/25 bg-[#E7FFF7]/55 p-3 text-left">
-                        <div className="flex items-start gap-3">
-                          <div className="flex h-10 w-10 shrink-0 items-center justify-center bg-white text-[#18755B]">
-                            {getStretchStepPictogram(activeStretchStep.checkType, "h-8 w-8")}
-                          </div>
-                          <div className="min-w-0 flex-1 text-left">
-                            <div className="flex flex-wrap items-center justify-start gap-2">
-                              <p className="text-sm font-bold text-[#18755B]">{activeStretchStep.title}</p>
-                              <span className="border border-[#18755B]/20 bg-white/75 px-2 py-0.5 text-xs font-bold text-[#18755B]">
-                                {activeStretchStepIndex + 1} / {selectedStretch.steps.length} 단계
-                              </span>
-                              {isSelectedStretchComplete && (
-                                <span className="border border-green-200 bg-green-50 px-2 py-0.5 text-xs font-bold text-green-700">
-                                  완료
-                                </span>
-                              )}
+                        <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(280px,0.36fr)] lg:items-start">
+                          <div className="flex items-start gap-3">
+                            <div className="flex h-10 w-10 shrink-0 items-center justify-center bg-white text-[#18755B]">
+                              {getStretchStepPictogram(activeStretchStep.checkType, "h-8 w-8")}
                             </div>
-                            <p className="mt-1 text-sm leading-6 text-gray-700">{activeStretchStep.instruction}</p>
+                            <div className="min-w-0 flex-1 text-left">
+                              <div className="flex flex-wrap items-center justify-start gap-2">
+                                <p className="text-sm font-bold text-[#18755B]">{activeStretchStep.title}</p>
+                                <span className="border border-[#18755B]/20 bg-white/75 px-2 py-0.5 text-xs font-bold text-[#18755B]">
+                                  {activeStretchStepIndex + 1} / {selectedStretch.steps.length} 단계
+                                </span>
+                                {isSelectedStretchComplete && (
+                                  <span className="border border-green-200 bg-green-50 px-2 py-0.5 text-xs font-bold text-green-700">
+                                    완료
+                                  </span>
+                                )}
+                              </div>
+                              <p className="mt-1 text-sm leading-6 text-gray-700">{activeStretchStep.instruction}</p>
+                            </div>
                           </div>
+                          {nextStretchStep && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const nextStepIndex = activeStretchStepIndex + 1;
+                                activeStretchStepIndexRef.current = nextStepIndex;
+                                setActiveStretchStepIndex(nextStepIndex);
+                                if (appModeRef.current === "stretching") {
+                                  playStretchBeep(1, `step-start:${selectedStretch.id}:${nextStepIndex}`);
+                                }
+                                resetDynamicStretchRuntime();
+                                stretchHoldStartedAtRef.current = null;
+                                lastStretchFeedbackUpdateAtRef.current = 0;
+                                latestStretchCoachingRef.current = {
+                                  stretchId: selectedStretch.id,
+                                  stepIndex: nextStepIndex,
+                                  isPoseValid: false,
+                                  poseScore: null,
+                                  coachingMessage: "선택한 단계 자세를 준비한 뒤 안내에 맞춰 움직여주세요.",
+                                  holdSeconds: 0,
+                                };
+                                setStretchCoaching(latestStretchCoachingRef.current);
+                              }}
+                              className="w-full border border-gray-200 bg-white p-3 text-left"
+                            >
+                              <div className="flex items-center gap-3">
+                                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gray-100 text-sm font-bold text-gray-600">
+                                  {activeStretchStepIndex + 2}
+                                </div>
+                                <div className="flex h-8 w-8 shrink-0 items-center justify-center bg-transparent text-gray-300">
+                                  {getStretchStepPictogram(nextStretchStep.checkType, "h-5 w-5")}
+                                </div>
+                                <div className="min-w-0">
+                                  <p className="text-xs font-bold text-[#18755B]/70">다음 단계</p>
+                                  <p className="break-keep text-base font-bold leading-snug text-gray-900">
+                                    {nextStretchStep.title}
+                                  </p>
+                                </div>
+                              </div>
+                            </button>
+                          )}
                         </div>
 
-                        <div className="mt-3 grid gap-2 border-t border-[#18755B]/10 pt-3 lg:grid-cols-[minmax(150px,0.3fr)_minmax(0,1fr)_auto] lg:items-center">
+                        <div className="mt-3 grid gap-2 border-t border-[#18755B]/10 pt-3 lg:grid-cols-[minmax(150px,0.3fr)_minmax(0,1fr)] lg:items-center">
                           <div className={`flex items-baseline gap-2 border px-3 py-2 ${stretchAccuracyTone.border} ${stretchAccuracyTone.bg}`}>
                             <p className={`whitespace-nowrap text-xs font-bold ${stretchAccuracyTone.text}`}>동작 정확도</p>
                             <p className={`text-lg font-black ${stretchAccuracyTone.text}`}>
@@ -4937,7 +5077,6 @@ export function PostureCoachApp() {
                               {stretchCoaching.coachingMessage}
                             </p>
                           </div>
-                          {renderStretchAudioControls("flex flex-wrap items-center gap-2")}
                         </div>
                       </div>
                     )}
@@ -4952,14 +5091,8 @@ export function PostureCoachApp() {
                   </button>
                 </div>
 
-                <div className="mb-5 flex items-center gap-2 text-sm text-gray-600">
-                  <Clock className="h-4 w-4" />
-                  <span>{selectedStretch.durationSec}초</span>
-                  <span className="text-gray-300">|</span>
-                  <span>{completedStretchSteps.length} / {selectedStretch.steps.length} 단계 완료</span>
-                </div>
-
-                <div className={`grid gap-3 ${isStretchingMode ? "md:grid-cols-2 xl:grid-cols-4" : "lg:grid-cols-2"}`}>
+                {!isStretchingMode && (
+                <div className="grid gap-3 lg:grid-cols-2">
                   {isStretchingMode && !selectedStretch.steps.some((_, index) => index > activeStretchStepIndex) && (
                     <p className="border border-[#18755B]/15 bg-[#E7FFF7]/45 px-3 py-3 text-sm font-bold text-[#18755B] md:col-span-2 xl:col-span-4">
                       마지막 단계입니다. 현재 안내에 맞춰 마무리하세요.
@@ -4999,7 +5132,7 @@ export function PostureCoachApp() {
                           };
                           setStretchCoaching(latestStretchCoachingRef.current);
                         }}
-                        className={`w-full border p-4 text-left ${
+                        className={`w-full border p-3 text-left ${
                           isCurrent
                             ? "border-[#18755B]/45 bg-[#E7FFF7]"
                             : isDone
@@ -5047,6 +5180,7 @@ export function PostureCoachApp() {
                     );
                   })}
                 </div>
+                )}
               </div>
 
             </>
@@ -5424,12 +5558,14 @@ export function PostureCoachApp() {
                 const hasAverage = sessionAverageScore !== null;
                 const sessionDuration = formatMinutes(session.durationMinutes ?? 0);
                 const sessionTitleKey = session.sessionTitleKey ?? getSessionTitleKey(session, selectedHistoryGroup.dateKey);
-                const sessionTrendSummary = createSessionTrendSummary(
-                  selectedHistoryGroup.sessions,
-                  selectedHistoryGroup.dateKey,
-                  sessionTitleKey
-                );
-                const canShowSessionTrendChart = sessionTrendSummary.points.length >= 2;
+                const sessionTrendSummary = createSessionTrendSummary(historyGroups, selectedHistoryGroup.dateKey);
+                const selectedAverageReferenceTone =
+                  typeof sessionTrendSummary.selectedAverageScore === "number"
+                    ? getHistoryAverageReferenceTone(sessionTrendSummary.selectedAverageScore)
+                    : null;
+                const canShowSessionTrendChart =
+                  sessionTrendSummary.points.length >= 2 ||
+                  typeof sessionTrendSummary.selectedAverageScore === "number";
                 const displayTitle = getHistorySessionDisplayTitle(session);
                 const hasCustomTitle = Boolean(session.customTitle?.trim());
                 const isEditingTitle = editingSessionTitleKey === sessionTitleKey;
@@ -5602,8 +5738,8 @@ export function PostureCoachApp() {
                         <div className="min-w-0">
                           <div className="mb-2 flex items-start justify-between gap-3">
                             <div>
-                              <h4 className="text-sm font-bold text-gray-900">선택 날짜 세션 점수</h4>
-                              <p className="mt-0.5 text-xs font-medium text-gray-500">같은 날짜 안의 세션별 흐름</p>
+                              <h4 className="text-sm font-bold text-gray-900">최근 5개 기록일 점수</h4>
+                              <p className="mt-0.5 text-xs font-medium text-gray-500">기록일 평균과 선택 날짜 평균 비교</p>
                             </div>
                             {sessionTrendSummary.currentPoint && (
                               <span className="shrink-0 text-xs font-bold tabular-nums text-[#18755B]">
@@ -5616,16 +5752,7 @@ export function PostureCoachApp() {
                               <ResponsiveContainer width="100%" height="100%">
                                 <LineChart data={sessionTrendSummary.points} margin={{ top: 8, right: 12, bottom: 0, left: 4 }}>
                                   <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" vertical={false} />
-                                  <XAxis
-                                    dataKey="id"
-                                    tickFormatter={(value) =>
-                                      sessionTrendSummary.points.find((point) => point.id === value)?.time ?? String(value)
-                                    }
-                                    stroke="#9ca3af"
-                                    fontSize={10}
-                                    tickLine={false}
-                                    axisLine={false}
-                                  />
+                                  <XAxis dataKey="time" stroke="#9ca3af" fontSize={10} tickLine={false} axisLine={false} />
                                   <YAxis
                                     domain={sessionTrendSummary.yDomain}
                                     ticks={sessionTrendSummary.yTicks}
@@ -5637,15 +5764,26 @@ export function PostureCoachApp() {
                                     axisLine={false}
                                     width={44}
                                   />
-                                  <Tooltip
-                                    labelFormatter={(value) =>
-                                      sessionTrendSummary.points.find((point) => point.id === value)?.time ?? String(value)
-                                    }
-                                  />
+                                  <Tooltip />
+                                  {typeof sessionTrendSummary.selectedAverageScore === "number" && (
+                                    <ReferenceLine
+                                      y={sessionTrendSummary.selectedAverageScore}
+                                      stroke={selectedAverageReferenceTone?.stroke}
+                                      strokeWidth={3}
+                                      ifOverflow="extendDomain"
+                                      label={{
+                                        value: `선택 날짜 평균 ${sessionTrendSummary.selectedAverageScore}`,
+                                        position: "right",
+                                        fill: selectedAverageReferenceTone?.label,
+                                        fontSize: 10,
+                                        fontWeight: 700,
+                                      }}
+                                    />
+                                  )}
                                   <Line type="linear" dataKey="score" stroke="#18755B" strokeWidth={2} dot={{ r: 2.5 }} activeDot={{ r: 4 }} />
                                   {sessionTrendSummary.currentPoint && (
                                     <ReferenceDot
-                                      x={sessionTrendSummary.currentPoint.id}
+                                      x={sessionTrendSummary.currentPoint.time}
                                       y={sessionTrendSummary.currentPoint.score}
                                       r={5}
                                       fill="#001A12"
@@ -5658,7 +5796,7 @@ export function PostureCoachApp() {
                             </div>
                           ) : (
                             <div className="flex h-[132px] items-center justify-center border border-dashed border-gray-200 bg-white px-4 text-center text-xs font-bold text-gray-500">
-                              이 날짜에는 비교할 세션이 더 필요해요.
+                              최근 점수 흐름을 보려면 기록이 조금 더 필요해요.
                             </div>
                           )}
                           <div className="mt-2 space-y-1 text-xs leading-5 text-gray-500">
@@ -5766,6 +5904,113 @@ export function PostureCoachApp() {
       />
     </label>
   );
+
+  const renderStretchSettingsModal = () => {
+    if (!isStretchSettingsOpen) {
+      return null;
+    }
+
+    const stretchSettingsStatusText =
+      stretchSettingsSaveStatus === "saved"
+        ? "스트레칭 설정이 적용되었습니다."
+        : stretchSettingsSaveStatus === "error"
+          ? "스트레칭 설정 적용 실패"
+          : "";
+    const isVoiceSelectDisabled =
+      !isStretchTtsSupported || !stretchSettingsDraft.ttsEnabled || stretchTtsVoiceOptions.length === 0;
+
+    return (
+      <div className="fixed inset-0 z-[70] flex items-end bg-black/35 px-4 py-6 sm:items-center sm:justify-center">
+        <section className="flex max-h-[88vh] w-full max-w-xl flex-col border border-[rgba(18,100,76,0.24)] bg-white">
+          <div className="flex items-start justify-between gap-4 border-b border-[rgba(18,100,76,0.16)] p-5">
+            <div>
+              <p className="text-lg font-bold text-gray-900">스트레칭 설정</p>
+              <p className="mt-1 text-sm text-gray-600">알림음과 음성 코치 방식을 조정하세요.</p>
+            </div>
+            <button
+              type="button"
+              onClick={closeStretchSettings}
+              className="flex h-8 w-8 shrink-0 items-center justify-center border border-gray-300 bg-white text-gray-700"
+              aria-label="스트레칭 설정 닫기"
+            >
+              X
+            </button>
+          </div>
+
+          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-5">
+            <ToggleControl
+              checked={stretchSettingsDraft.beepEnabled && isStretchBeepSupported}
+              onChange={(checked) => updateStretchSettingsDraft({ beepEnabled: checked })}
+              label="단계 알림음 켜기/끄기"
+            />
+            {!isStretchBeepSupported && (
+              <p className="text-sm leading-6 text-gray-500">이 브라우저에서는 단계 알림음을 지원하지 않습니다.</p>
+            )}
+
+            <ToggleControl
+              checked={stretchSettingsDraft.ttsEnabled && isStretchTtsSupported}
+              onChange={(checked) => updateStretchSettingsDraft({ ttsEnabled: checked })}
+              label="음성 코치 켜기/끄기"
+            />
+
+            <label className="block border border-gray-100 bg-[rgba(196,246,232,0.18)] p-4">
+              <span className="text-sm font-medium text-gray-700">음성 코치 성우</span>
+              <select
+                value={stretchSettingsDraft.ttsVoiceUri}
+                disabled={isVoiceSelectDisabled}
+                onChange={(event) => updateStretchSettingsDraft({ ttsVoiceUri: event.target.value })}
+                className="mt-2 w-full border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-400"
+                aria-label="음성 코치 성우 선택"
+              >
+                <option value="">기본 성우</option>
+                {stretchTtsVoiceOptions.map((voice) => (
+                  <option key={voice.voiceURI} value={voice.voiceURI}>
+                    {getStretchVoiceLabel(voice)}
+                  </option>
+                ))}
+              </select>
+              <p className="mt-2 text-xs leading-5 text-gray-500">
+                {!isStretchTtsSupported
+                  ? "이 브라우저에서는 음성 코치를 지원하지 않습니다."
+                  : !stretchSettingsDraft.ttsEnabled
+                    ? "음성 코치를 켜면 성우를 선택할 수 있습니다."
+                    : stretchTtsVoiceOptions.length === 0
+                      ? "사용 가능한 브라우저 음성을 불러오는 중입니다."
+                      : "브라우저와 운영체제에 설치된 음성 목록을 사용합니다."}
+              </p>
+            </label>
+          </div>
+
+          <div className="flex flex-col gap-3 border-t border-[rgba(18,100,76,0.16)] p-5 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              {stretchSettingsStatusText && (
+                <span className="border bg-blue-50 px-3 py-1 text-xs font-medium text-blue-700">
+                  {stretchSettingsStatusText}
+                </span>
+              )}
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={handleApplyStretchSettings}
+                className="bg-blue-600 px-4 py-2 text-sm font-bold text-white"
+              >
+                적용하기
+              </button>
+              <button
+                type="button"
+                onClick={handleResetStretchSettings}
+                className="inline-flex min-h-9 items-center justify-center gap-2 border border-gray-300 bg-white px-3 py-2 text-sm font-bold text-gray-700"
+              >
+                <RotateCcw className="h-4 w-4" />
+                기본 설정으로 되돌리기
+              </button>
+            </div>
+          </div>
+        </section>
+      </div>
+    );
+  };
 
   const renderAnalysisSettingsModal = () => {
     if (!isAnalysisSettingsOpen) {
@@ -6282,6 +6527,7 @@ export function PostureCoachApp() {
   return (
     <div className="app-shell min-h-screen">
       {renderAnalysisSettingsModal()}
+      {renderStretchSettingsModal()}
       {renderPendingTitlePrompt()}
       {renderStretchCompleteModal()}
       {renderHistoryDeleteModal()}
