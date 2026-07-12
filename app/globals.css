@@ -184,6 +184,18 @@ input[type="range"] {
   background: #001a12;
 }
 
+.app-camera-standby {
+  background: rgba(0, 26, 18, 0.34);
+  color: #e7fff7;
+}
+
+.app-camera-standby-corner {
+  position: absolute;
+  width: 28px;
+  height: 28px;
+  border-color: rgba(112, 229, 196, 0.58);
+}
+
 .app-status-dot {
   display: inline-flex;
   width: 0.5rem;
@@ -194,14 +206,14 @@ input[type="range"] {
 
 .stretch-analysis-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(320px, 380px);
-  align-items: stretch;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
   gap: 1.5rem;
 }
 
 @media (min-width: 1280px) {
   .stretch-analysis-layout {
-    grid-template-columns: minmax(0, 1.3fr) minmax(380px, 420px);
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 

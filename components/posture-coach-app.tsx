@@ -157,8 +157,8 @@ type ScorePoint = {
   score: number;
 };
 
-type HistoryScorePoint = ScorePoint & {
-  dateKey: string;
+type HistorySessionScorePoint = ScorePoint & {
+  sessionTitleKey: string;
 };
 
 type SnapshotExtrema = {
@@ -1026,70 +1026,89 @@ function createTodaySavedScorePoints(
     .sort((left, right) => left.timestamp - right.timestamp);
 }
 
-function formatHistoryScorePointLabel(dateKey: string) {
-  const date = new Date(`${dateKey}T00:00:00+09:00`);
-  return new Intl.DateTimeFormat("ko-KR", {
-    month: "numeric",
-    day: "numeric",
-  }).format(date);
-}
-
-function createHistoryScoreYAxisDomain(points: HistoryScorePoint[]): [number, number] {
+function createHistoryScoreYAxisDomain(points: Array<{ score: number }>): [number, number] {
   const scores = points.map((point) => point.score);
   const minScore = Math.min(...scores);
   const maxScore = Math.max(...scores);
-  let minDomain = Math.max(0, minScore - 5);
-  let maxDomain = Math.min(100, maxScore + 5);
+  let minDomain = Math.max(0, Math.floor((minScore - 5) / 5) * 5);
+  let maxDomain = Math.min(100, Math.ceil((maxScore + 5) / 5) * 5);
 
   if (maxDomain - minDomain < 10) {
     const midpoint = (minScore + maxScore) / 2;
-    minDomain = Math.max(0, Math.floor(midpoint - 5));
-    maxDomain = Math.min(100, Math.ceil(midpoint + 5));
+    minDomain = Math.max(0, Math.floor((midpoint - 5) / 5) * 5);
+    maxDomain = Math.min(100, Math.ceil((midpoint + 5) / 5) * 5);
   }
 
   if (maxDomain - minDomain < 10) {
     if (minDomain === 0) {
       maxDomain = Math.min(100, minDomain + 10);
-    } else {
+    } else if (maxDomain === 100) {
       minDomain = Math.max(0, maxDomain - 10);
+    } else {
+      maxDomain = Math.min(100, minDomain + 10);
     }
   }
 
   return [minDomain, maxDomain];
 }
 
-function createSessionTrendSummary(historyGroups: HistoryGroup[], dateKey: string) {
-  const points = historyGroups
-    .filter((group) => group.dateKey <= dateKey && typeof group.averageScore === "number")
-    .sort((left, right) => right.dateKey.localeCompare(left.dateKey))
-    .slice(0, 5)
-    .reverse()
-    .map((group) => ({
-      id: `history-day-${group.dateKey}`,
-      dateKey: group.dateKey,
-      time: formatHistoryScorePointLabel(group.dateKey),
-      timestamp: new Date(`${group.dateKey}T00:00:00+09:00`).getTime(),
-      score: group.averageScore ?? 0,
-    }));
-  const currentPoint = points.find((point) => point.dateKey === dateKey) ?? null;
-  const yDomain = points.length > 0 ? createHistoryScoreYAxisDomain(points) : [0, 100] as [number, number];
+function createHistoryScoreYAxisTicks(domain: [number, number]) {
+  const [minDomain, maxDomain] = domain;
+  const tickStep = maxDomain - minDomain <= 20 ? 5 : 10;
+  const firstTick = Math.ceil(minDomain / tickStep) * tickStep;
+  const ticks: number[] = [];
+
+  for (let value = firstTick; value <= maxDomain; value += tickStep) {
+    ticks.push(value);
+  }
+
+  return ticks.length > 0 ? ticks : [minDomain, maxDomain];
+}
+
+function createSessionTrendSummary(
+  sessions: SessionSummary[],
+  dateKey: string,
+  currentSessionTitleKey: string
+) {
+  const points: HistorySessionScorePoint[] = sessions
+    .filter((session) => typeof session.averageScore === "number")
+    .map((session) => {
+      const sessionTitleKey = session.sessionTitleKey ?? getSessionTitleKey(session, dateKey);
+
+      return {
+        id: sessionTitleKey,
+        sessionTitleKey,
+        time: formatTime(session.startedAt),
+        timestamp: new Date(session.startedAt).getTime(),
+        score: session.averageScore ?? 0,
+      };
+    })
+    .sort((left, right) => left.timestamp - right.timestamp);
+  const currentPoint = points.find((point) => point.sessionTitleKey === currentSessionTitleKey) ?? null;
+  const yDomain: [number, number] = points.length > 0 ? createHistoryScoreYAxisDomain(points) : [0, 100];
+  const yTicks = createHistoryScoreYAxisTicks(yDomain);
 
   if (!currentPoint) {
     return {
       points,
       currentPoint,
       yDomain,
-      caption: "최근 점수 흐름을 보려면 기록이 조금 더 필요해요.",
+      yTicks,
+      caption:
+        points.length >= 2
+          ? "현재 세션은 측정 부족으로 비교에서 제외됐어요."
+          : "이 날짜에는 비교할 세션이 더 필요해요.",
     };
   }
 
-  const comparisonPoints = points.filter((point) => point.dateKey !== dateKey);
+  const comparisonPoints = points.filter((point) => point.sessionTitleKey !== currentSessionTitleKey);
   if (comparisonPoints.length === 0) {
     return {
       points,
       currentPoint,
       yDomain,
-      caption: "최근 점수 흐름을 보려면 기록이 조금 더 필요해요.",
+      yTicks,
+      caption: "이 날짜에는 비교할 세션이 더 필요해요.",
     };
   }
 
@@ -1104,7 +1123,8 @@ function createSessionTrendSummary(historyGroups: HistoryGroup[], dateKey: strin
       points,
       currentPoint,
       yDomain,
-      caption: "최근 기록일 평균과 비슷해요.",
+      yTicks,
+      caption: "이 날짜의 다른 세션과 비슷해요.",
     };
   }
 
@@ -1112,10 +1132,11 @@ function createSessionTrendSummary(historyGroups: HistoryGroup[], dateKey: strin
     points,
     currentPoint,
     yDomain,
+    yTicks,
     caption:
       difference > 0
-        ? `최근 기록일 평균보다 ${absoluteDifference}점 높아요.`
-        : `최근 기록일 평균보다 ${absoluteDifference}점 낮아요.`,
+        ? `이 날짜의 다른 세션보다 ${absoluteDifference}점 높아요.`
+        : `이 날짜의 다른 세션보다 ${absoluteDifference}점 낮아요.`,
   };
 }
 
@@ -4471,14 +4492,20 @@ export function PostureCoachApp() {
           <video ref={videoRef} className="absolute inset-0 h-full w-full scale-x-[-1] object-cover" playsInline muted />
           <canvas ref={canvasRef} className="absolute inset-0 h-full w-full" />
           {!isRunning && (
-            <div className="absolute inset-0 flex items-center justify-center bg-gray-950/45 p-6 text-center">
-              <div>
-                <VideoOff className="mx-auto mb-4 h-14 w-14 text-gray-500" />
-                <p className="text-lg font-bold text-gray-100">카메라 대기 중</p>
-                <p className="mt-2 max-w-sm text-sm leading-6 text-gray-300">
-                  분석을 시작하면 실시간 자세 오버레이와 1초 평균 점수가 표시됩니다.
-                </p>
+            <div className="app-camera-standby absolute inset-0 p-4">
+              <div aria-hidden="true">
+                <span className="app-camera-standby-corner left-4 top-4 border-l border-t" />
+                <span className="app-camera-standby-corner right-4 top-4 border-r border-t" />
+                <span className="app-camera-standby-corner bottom-4 left-4 border-b border-l" />
+                <span className="app-camera-standby-corner bottom-4 right-4 border-b border-r" />
               </div>
+              <div className="absolute left-5 top-5 inline-flex items-center gap-2 border border-[#70E5C4]/45 bg-[#001A12]/72 px-3 py-1.5 text-sm font-bold text-[#D6F3EB]">
+                <VideoOff className="h-4 w-4" />
+                <span>카메라 대기 중</span>
+              </div>
+              <p className="absolute bottom-5 left-1/2 w-[calc(100%-2.5rem)] max-w-sm -translate-x-1/2 text-center text-sm font-medium leading-6 text-[#D6F3EB]/82">
+                분석을 시작하면 실시간 자세 오버레이와 1초 평균 점수가 표시됩니다.
+              </p>
             </div>
           )}
         </div>
@@ -4791,54 +4818,25 @@ export function PostureCoachApp() {
       )}
 
       <div className="stretch-analysis-layout">
-        <div className="flex min-h-0 flex-col gap-4">
-          {selectedStretch && activeStretchStep && (
-            <div className="app-surface grid gap-3 p-3">
-              <div className="flex items-start gap-3">
-                <div className="flex h-12 w-12 shrink-0 items-center justify-center bg-[#E7FFF7] text-[#18755B]">
-                  {getStretchStepPictogram(activeStretchStep.checkType, "h-9 w-9")}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <p className="text-sm font-bold text-[#18755B]">{activeStretchStep.title}</p>
-                    <span className="border border-[#18755B]/20 bg-[#C4F6E8]/55 px-2 py-0.5 text-xs font-bold text-[#18755B]">
-                      {activeStretchStepIndex + 1} / {selectedStretch.steps.length} 단계
-                    </span>
-                    {isSelectedStretchComplete && (
-                      <span className="border border-green-200 bg-green-50 px-2 py-0.5 text-xs font-bold text-green-700">
-                        완료
-                      </span>
-                    )}
-                  </div>
-                  <p className="mt-1 whitespace-nowrap text-[13px] leading-6 text-gray-700">{activeStretchStep.instruction}</p>
-                </div>
-                {renderStretchAudioControls("hidden flex-wrap items-center justify-end gap-2 sm:flex")}
-              </div>
-
-              <div className="grid gap-2 border-t border-[#18755B]/10 pt-3 sm:grid-cols-[minmax(150px,0.34fr)_minmax(0,1fr)_auto] sm:items-center">
-                <div className={`flex items-baseline gap-2 border px-3 py-2 ${stretchAccuracyTone.border} ${stretchAccuracyTone.bg}`}>
-                  <p className={`whitespace-nowrap text-xs font-bold ${stretchAccuracyTone.text}`}>동작 정확도</p>
-                  <p className={`text-lg font-black ${stretchAccuracyTone.text}`}>
-                    {stretchAccuracyScore ?? "--"}%
-                  </p>
-                </div>
-                <div className="min-w-0">
-                  <p className="line-clamp-2 text-sm font-bold leading-5 text-gray-900">
-                    {stretchCoaching.coachingMessage}
-                  </p>
-                </div>
-                {renderStretchAudioControls("flex flex-wrap items-center gap-2 sm:hidden")}
-              </div>
-            </div>
-          )}
-
+        <div className="mx-auto flex w-full max-w-2xl flex-col gap-4">
           <div className="app-camera-frame relative flex aspect-video items-center justify-center overflow-hidden">
             <video ref={videoRef} className="absolute inset-0 h-full w-full scale-x-[-1] object-cover" playsInline muted />
             <canvas ref={canvasRef} className="absolute inset-0 h-full w-full" />
             {!isRunning ? (
-              <div className="relative text-center">
-                <VideoOff className="mx-auto mb-4 h-16 w-16 text-gray-600" />
-                <p className="text-gray-400">스트레칭 분석 시작을 누르면 카메라가 켜집니다.</p>
+              <div className="app-camera-standby absolute inset-0 p-4">
+                <div aria-hidden="true">
+                  <span className="app-camera-standby-corner left-4 top-4 border-l border-t" />
+                  <span className="app-camera-standby-corner right-4 top-4 border-r border-t" />
+                  <span className="app-camera-standby-corner bottom-4 left-4 border-b border-l" />
+                  <span className="app-camera-standby-corner bottom-4 right-4 border-b border-r" />
+                </div>
+                <div className="absolute left-5 top-5 inline-flex items-center gap-2 border border-[#70E5C4]/45 bg-[#001A12]/72 px-3 py-1.5 text-sm font-bold text-[#D6F3EB]">
+                  <VideoOff className="h-4 w-4" />
+                  <span>스트레칭 분석 대기</span>
+                </div>
+                <p className="absolute bottom-5 left-1/2 w-[calc(100%-2.5rem)] max-w-sm -translate-x-1/2 text-center text-sm font-medium leading-6 text-[#D6F3EB]/82">
+                  스트레칭 분석 시작을 누르면 카메라가 켜집니다.
+                </p>
               </div>
             ) : (
               <div className="absolute left-4 top-4">
@@ -4895,20 +4893,60 @@ export function PostureCoachApp() {
 
         </div>
 
-        <div className="flex min-h-0 flex-col gap-4">
+        <div className="flex min-h-0 w-full flex-col gap-4">
           {selectedStretch ? (
             <>
               <div className="app-surface flex-1 p-5">
-                <div className="mb-4 flex items-start justify-between gap-4">
-                  <div>
+                <div className="mb-5 grid items-start gap-4 md:grid-cols-[minmax(0,1fr)_auto]">
+                  <div className="min-w-0">
                     <p className="mb-2 text-xs font-bold text-blue-600">{selectedStretch.targetBodyPart}</p>
                     <h3 className="mb-1 text-xl font-bold text-gray-900">{selectedStretch.name}</h3>
-                    <p className="text-sm leading-6 text-gray-600">{selectedStretch.description}</p>
+
+                    {isStretchingMode && activeStretchStep && (
+                      <div className="mt-3 border border-[#18755B]/25 bg-[#E7FFF7]/55 p-3 text-left">
+                        <div className="flex items-start gap-3">
+                          <div className="flex h-10 w-10 shrink-0 items-center justify-center bg-white text-[#18755B]">
+                            {getStretchStepPictogram(activeStretchStep.checkType, "h-8 w-8")}
+                          </div>
+                          <div className="min-w-0 flex-1 text-left">
+                            <div className="flex flex-wrap items-center justify-start gap-2">
+                              <p className="text-sm font-bold text-[#18755B]">{activeStretchStep.title}</p>
+                              <span className="border border-[#18755B]/20 bg-white/75 px-2 py-0.5 text-xs font-bold text-[#18755B]">
+                                {activeStretchStepIndex + 1} / {selectedStretch.steps.length} 단계
+                              </span>
+                              {isSelectedStretchComplete && (
+                                <span className="border border-green-200 bg-green-50 px-2 py-0.5 text-xs font-bold text-green-700">
+                                  완료
+                                </span>
+                              )}
+                            </div>
+                            <p className="mt-1 text-sm leading-6 text-gray-700">{activeStretchStep.instruction}</p>
+                          </div>
+                        </div>
+
+                        <div className="mt-3 grid gap-2 border-t border-[#18755B]/10 pt-3 lg:grid-cols-[minmax(150px,0.3fr)_minmax(0,1fr)_auto] lg:items-center">
+                          <div className={`flex items-baseline gap-2 border px-3 py-2 ${stretchAccuracyTone.border} ${stretchAccuracyTone.bg}`}>
+                            <p className={`whitespace-nowrap text-xs font-bold ${stretchAccuracyTone.text}`}>동작 정확도</p>
+                            <p className={`text-lg font-black ${stretchAccuracyTone.text}`}>
+                              {stretchAccuracyScore ?? "--"}%
+                            </p>
+                          </div>
+                          <div className="min-w-0 border border-[#18755B]/15 bg-white px-3 py-2">
+                            <p className="text-xs font-bold text-[#18755B]">실시간 피드백</p>
+                            <p className="mt-0.5 line-clamp-2 text-sm font-bold leading-5 text-gray-900">
+                              {stretchCoaching.coachingMessage}
+                            </p>
+                          </div>
+                          {renderStretchAudioControls("flex flex-wrap items-center gap-2")}
+                        </div>
+                      </div>
+                    )}
                   </div>
+
                   <button
                     type="button"
                     onClick={handleClearStretchSelection}
-                    className="shrink-0 text-sm text-gray-400"
+                    className="shrink-0 justify-self-start text-sm text-gray-400 xl:justify-self-end"
                   >
                     변경
                   </button>
@@ -4921,8 +4959,16 @@ export function PostureCoachApp() {
                   <span>{completedStretchSteps.length} / {selectedStretch.steps.length} 단계 완료</span>
                 </div>
 
-                <div className="space-y-3">
-                  {selectedStretch.steps.map((step, index) => {
+                <div className={`grid gap-3 ${isStretchingMode ? "md:grid-cols-2 xl:grid-cols-4" : "lg:grid-cols-2"}`}>
+                  {isStretchingMode && !selectedStretch.steps.some((_, index) => index > activeStretchStepIndex) && (
+                    <p className="border border-[#18755B]/15 bg-[#E7FFF7]/45 px-3 py-3 text-sm font-bold text-[#18755B] md:col-span-2 xl:col-span-4">
+                      마지막 단계입니다. 현재 안내에 맞춰 마무리하세요.
+                    </p>
+                  )}
+                  {selectedStretch.steps
+                    .map((step, index) => ({ step, index }))
+                    .filter(({ index }) => !isStretchingMode || index > activeStretchStepIndex)
+                    .map(({ step, index }) => {
                     const isCurrent = index === activeStretchStepIndex;
                     const isDone = completedStretchSteps.includes(index);
                     const pictogramBoxClassName = isCurrent
@@ -4953,7 +4999,7 @@ export function PostureCoachApp() {
                           };
                           setStretchCoaching(latestStretchCoachingRef.current);
                         }}
-                        className={`w-full border p-3 text-left ${
+                        className={`w-full border p-4 text-left ${
                           isCurrent
                             ? "border-[#18755B]/45 bg-[#E7FFF7]"
                             : isDone
@@ -4961,24 +5007,26 @@ export function PostureCoachApp() {
                               : "border-gray-200 bg-white"
                         }`}
                       >
-                        <div className="flex gap-3">
-                          <div
-                            className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-bold ${
-                              isDone
-                                ? "bg-green-600 text-white"
-                                : isCurrent
-                                  ? "bg-[#18755B] text-white"
-                                  : "bg-gray-100 text-gray-600"
-                            }`}
-                          >
-                            {isDone ? <CheckCircle className="h-4 w-4" /> : index + 1}
+                        <div className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-2">
+                          <div className="flex items-center gap-2">
+                            <div
+                              className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-bold ${
+                                isDone
+                                  ? "bg-green-600 text-white"
+                                  : isCurrent
+                                    ? "bg-[#18755B] text-white"
+                                    : "bg-gray-100 text-gray-600"
+                              }`}
+                            >
+                              {isDone ? <CheckCircle className="h-4 w-4" /> : index + 1}
+                            </div>
+                            <div className={`flex h-8 w-8 shrink-0 items-center justify-center ${pictogramBoxClassName}`}>
+                              {getStretchStepPictogram(step.checkType, "h-5 w-5")}
+                            </div>
                           </div>
-                          <div className={`flex h-8 w-8 shrink-0 items-center justify-center ${pictogramBoxClassName}`}>
-                            {getStretchStepPictogram(step.checkType, "h-5 w-5")}
-                          </div>
-                          <div className="min-w-0 flex-1">
+                          <div className="min-w-0 self-center">
                             <div className="flex flex-wrap items-center gap-2">
-                              <p className="font-bold text-gray-900">{step.title}</p>
+                              <p className="break-keep text-base font-bold leading-snug text-gray-900">{step.title}</p>
                               {isCurrent && (
                                 <span className="border border-[#18755B]/15 bg-[#C4F6E8]/55 px-2 py-0.5 text-xs font-bold text-[#18755B]">
                                   현재 단계
@@ -4990,14 +5038,10 @@ export function PostureCoachApp() {
                                 </span>
                               )}
                             </div>
-                            <p
-                              className={`mt-1 text-sm leading-6 ${
-                                isCurrent ? "line-clamp-2 text-gray-700" : "line-clamp-1 text-gray-500"
-                              }`}
-                            >
-                              {step.instruction}
-                            </p>
                           </div>
+                          {!isStretchingMode && (
+                            <p className="col-start-2 text-sm leading-6 text-gray-600">{step.instruction}</p>
+                          )}
                         </div>
                       </button>
                     );
@@ -5375,14 +5419,17 @@ export function PostureCoachApp() {
                 const areaScores = getHistoryAreaScores(session.postureAreaStats);
                 const weakestArea = getHistoryWeakestArea(session.postureAreaStats);
                 const historyReportComment = getHistoryReportComment(areaScores);
-                const sessionTrendSummary = createSessionTrendSummary(historyGroups, selectedHistoryGroup.dateKey);
-                const canShowSessionTrendChart =
-                  Boolean(sessionTrendSummary.currentPoint) && sessionTrendSummary.points.length >= 2;
                 const isImagesExpanded = expandedHistoryImageSessions.has(session.sessionId);
                 const sessionAverageScore = session.averageScore;
                 const hasAverage = sessionAverageScore !== null;
                 const sessionDuration = formatMinutes(session.durationMinutes ?? 0);
                 const sessionTitleKey = session.sessionTitleKey ?? getSessionTitleKey(session, selectedHistoryGroup.dateKey);
+                const sessionTrendSummary = createSessionTrendSummary(
+                  selectedHistoryGroup.sessions,
+                  selectedHistoryGroup.dateKey,
+                  sessionTitleKey
+                );
+                const canShowSessionTrendChart = sessionTrendSummary.points.length >= 2;
                 const displayTitle = getHistorySessionDisplayTitle(session);
                 const hasCustomTitle = Boolean(session.customTitle?.trim());
                 const isEditingTitle = editingSessionTitleKey === sessionTitleKey;
@@ -5555,8 +5602,8 @@ export function PostureCoachApp() {
                         <div className="min-w-0">
                           <div className="mb-2 flex items-start justify-between gap-3">
                             <div>
-                              <h4 className="text-sm font-bold text-gray-900">최근 5개 기록일 점수</h4>
-                              <p className="mt-0.5 text-xs font-medium text-gray-500">기록한 날짜 기준 흐름</p>
+                              <h4 className="text-sm font-bold text-gray-900">선택 날짜 세션 점수</h4>
+                              <p className="mt-0.5 text-xs font-medium text-gray-500">같은 날짜 안의 세션별 흐름</p>
                             </div>
                             {sessionTrendSummary.currentPoint && (
                               <span className="shrink-0 text-xs font-bold tabular-nums text-[#18755B]">
@@ -5567,15 +5614,38 @@ export function PostureCoachApp() {
                           {canShowSessionTrendChart ? (
                             <div className="h-[132px]">
                               <ResponsiveContainer width="100%" height="100%">
-                                <LineChart data={sessionTrendSummary.points} margin={{ top: 8, right: 12, bottom: 0, left: -18 }}>
+                                <LineChart data={sessionTrendSummary.points} margin={{ top: 8, right: 12, bottom: 0, left: 4 }}>
                                   <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" vertical={false} />
-                                  <XAxis dataKey="time" stroke="#9ca3af" fontSize={10} tickLine={false} axisLine={false} />
-                                  <YAxis domain={sessionTrendSummary.yDomain} stroke="#9ca3af" fontSize={10} tickLine={false} axisLine={false} width={32} />
-                                  <Tooltip />
+                                  <XAxis
+                                    dataKey="id"
+                                    tickFormatter={(value) =>
+                                      sessionTrendSummary.points.find((point) => point.id === value)?.time ?? String(value)
+                                    }
+                                    stroke="#9ca3af"
+                                    fontSize={10}
+                                    tickLine={false}
+                                    axisLine={false}
+                                  />
+                                  <YAxis
+                                    domain={sessionTrendSummary.yDomain}
+                                    ticks={sessionTrendSummary.yTicks}
+                                    allowDecimals={false}
+                                    tickMargin={6}
+                                    stroke="#9ca3af"
+                                    fontSize={10}
+                                    tickLine={false}
+                                    axisLine={false}
+                                    width={44}
+                                  />
+                                  <Tooltip
+                                    labelFormatter={(value) =>
+                                      sessionTrendSummary.points.find((point) => point.id === value)?.time ?? String(value)
+                                    }
+                                  />
                                   <Line type="linear" dataKey="score" stroke="#18755B" strokeWidth={2} dot={{ r: 2.5 }} activeDot={{ r: 4 }} />
                                   {sessionTrendSummary.currentPoint && (
                                     <ReferenceDot
-                                      x={sessionTrendSummary.currentPoint.time}
+                                      x={sessionTrendSummary.currentPoint.id}
                                       y={sessionTrendSummary.currentPoint.score}
                                       r={5}
                                       fill="#001A12"
@@ -5588,7 +5658,7 @@ export function PostureCoachApp() {
                             </div>
                           ) : (
                             <div className="flex h-[132px] items-center justify-center border border-dashed border-gray-200 bg-white px-4 text-center text-xs font-bold text-gray-500">
-                              최근 기록일 비교 데이터가 부족해요
+                              이 날짜에는 비교할 세션이 더 필요해요.
                             </div>
                           )}
                           <div className="mt-2 space-y-1 text-xs leading-5 text-gray-500">
