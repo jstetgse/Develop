@@ -4349,7 +4349,6 @@ export function PostureCoachApp() {
     <div className="space-y-4">
       <div>
         <h1 className="text-3xl font-bold text-gray-900">다시 오신 것을 환영합니다</h1>
-        <p className="text-gray-600">오늘도 바른 자세로 시작해볼까요?</p>
       </div>
 
       <section className="app-surface border-l-4 border-l-[#18755B] p-5">
@@ -4361,7 +4360,6 @@ export function PostureCoachApp() {
               </div>
               <div>
                 <h2 className="text-lg font-bold text-gray-900">오늘의 자세 요약</h2>
-                <p className="text-sm text-gray-500">최근 기록으로 몸 상태를 확인하세요</p>
               </div>
             </div>
             <div className="grid gap-3 text-sm sm:grid-cols-[minmax(260px,0.8fr)_minmax(300px,1fr)] sm:items-start">
@@ -4535,9 +4533,6 @@ export function PostureCoachApp() {
                 <span>설정</span>
               </button>
             </div>
-            <p className="mt-1 text-sm leading-6 text-gray-600">
-              카메라가 사용자의 옆모습을 볼 수 있도록 앉아주세요.
-            </p>
           </div>
           <span
             className={`inline-flex min-h-9 items-center justify-center gap-2 border px-3 py-1 text-sm font-bold ${
@@ -4739,7 +4734,6 @@ export function PostureCoachApp() {
       <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">스트레칭 단계별 분석</h1>
-          <p className="mt-1 text-gray-600">추천 스트레칭을 순서대로 따라 하며 각 단계의 자세를 확인합니다.</p>
         </div>
         <div className="flex flex-wrap gap-2">
           <button
@@ -4761,7 +4755,7 @@ export function PostureCoachApp() {
         </div>
       </div>
 
-      {hasCurrentSessionPostureData && (
+      {hasCurrentSessionPostureData && !isStretchingMode && !activeStretchId && (
         <section className="app-surface p-5">
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
             <div>
@@ -4909,7 +4903,7 @@ export function PostureCoachApp() {
       )}
 
       <div className="stretch-analysis-layout">
-        <div className="order-2 mx-auto flex w-full max-w-2xl flex-col gap-4">
+        <div className={`${isStretchingMode ? "order-1" : "order-2"} mx-auto flex w-full max-w-2xl flex-col gap-3`}>
           <div className="app-camera-frame relative flex aspect-video items-center justify-center overflow-hidden">
             <video ref={videoRef} className="absolute inset-0 h-full w-full scale-x-[-1] object-cover" playsInline muted />
             <canvas ref={canvasRef} className="absolute inset-0 h-full w-full" />
@@ -4951,7 +4945,48 @@ export function PostureCoachApp() {
             )}
           </div>
 
-          <div className="flex flex-col gap-3 sm:flex-row">
+          <div className="border border-[#18755B]/20 bg-[#E7FFF7]/60 px-3 py-2">
+            {!selectedStretch ? (
+              <p className="text-sm font-bold text-[#18755B]">스트레칭을 선택하면 단계 안내가 표시됩니다.</p>
+            ) : !isStretchingMode || !activeStretchStep ? (
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="text-sm font-bold text-[#18755B]">{selectedStretch.name}</p>
+                  <p className="text-sm text-gray-600">분석 시작 후 현재 단계와 피드백이 표시됩니다.</p>
+                </div>
+                <span className="shrink-0 border border-[#18755B]/20 bg-white/75 px-2 py-1 text-xs font-bold text-[#18755B]">
+                  {selectedStretch.steps.length}단계
+                </span>
+              </div>
+            ) : (
+              <div className="flex flex-col gap-2 lg:flex-row lg:items-center">
+                <div className="flex min-w-0 flex-1 items-center gap-3">
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center bg-white text-[#18755B]">
+                    {getStretchStepPictogram(activeStretchStep.checkType, "h-7 w-7")}
+                  </div>
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="text-sm font-bold text-[#18755B]">{activeStretchStep.title}</p>
+                      <span className="border border-[#18755B]/20 bg-white/75 px-2 py-0.5 text-xs font-bold text-[#18755B]">
+                        {activeStretchStepIndex + 1} / {selectedStretch.steps.length} 단계
+                      </span>
+                    </div>
+                    <p className="truncate text-sm text-gray-700">{activeStretchStep.instruction}</p>
+                  </div>
+                </div>
+                <div className="flex min-w-0 flex-wrap items-center gap-2 lg:justify-end">
+                  <span className={`shrink-0 border px-2 py-1 text-xs font-bold ${stretchAccuracyTone.border} ${stretchAccuracyTone.bg} ${stretchAccuracyTone.text}`}>
+                    정확도 {stretchAccuracyScore ?? "--"}%
+                  </span>
+                  <span className="min-w-0 flex-1 truncate border border-[#18755B]/15 bg-white px-2 py-1 text-xs font-bold text-gray-800 lg:max-w-[280px]">
+                    {stretchCoaching.coachingMessage}
+                  </span>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="flex flex-col gap-3 sm:flex-row sm:justify-center">
             <button
               type="button"
               onClick={() => {
@@ -4962,7 +4997,7 @@ export function PostureCoachApp() {
                 }
               }}
               disabled={!activeStretchId || isSelectedStretchComplete}
-              className={`flex-1 px-6 py-3 font-medium ${
+              className={`px-6 py-3 font-medium sm:min-w-[220px] ${
                 isStretchingMode
                   ? "bg-red-600 text-white"
                   : !activeStretchId || isSelectedStretchComplete
@@ -4976,15 +5011,55 @@ export function PostureCoachApp() {
               type="button"
               onClick={handleNextStretchStep}
               disabled={!selectedStretch || isSelectedStretchComplete}
-              className="border border-blue-200 bg-white px-6 py-3 font-medium text-blue-700 disabled:cursor-not-allowed disabled:border-gray-200 disabled:text-gray-400"
+              className="border border-blue-200 bg-white px-6 py-3 font-medium text-blue-700 disabled:cursor-not-allowed disabled:border-gray-200 disabled:text-gray-400 sm:min-w-[140px]"
             >
               다음 단계
             </button>
           </div>
 
+          {isStretchingMode && selectedStretch && nextStretchStep && (
+            <button
+              type="button"
+              onClick={() => {
+                const nextStepIndex = activeStretchStepIndex + 1;
+                activeStretchStepIndexRef.current = nextStepIndex;
+                setActiveStretchStepIndex(nextStepIndex);
+                if (appModeRef.current === "stretching") {
+                  playStretchBeep(1, `step-start:${selectedStretch.id}:${nextStepIndex}`);
+                }
+                resetDynamicStretchRuntime();
+                stretchHoldStartedAtRef.current = null;
+                lastStretchFeedbackUpdateAtRef.current = 0;
+                latestStretchCoachingRef.current = {
+                  stretchId: selectedStretch.id,
+                  stepIndex: nextStepIndex,
+                  isPoseValid: false,
+                  poseScore: null,
+                  coachingMessage: "선택한 단계 자세를 준비한 뒤 안내에 맞춰 움직여주세요.",
+                  holdSeconds: 0,
+                };
+                setStretchCoaching(latestStretchCoachingRef.current);
+              }}
+              className="border border-gray-200 bg-white p-3 text-left"
+            >
+              <div className="flex items-center gap-3">
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gray-100 text-sm font-bold text-gray-600">
+                  {activeStretchStepIndex + 2}
+                </div>
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center bg-transparent text-gray-300">
+                  {getStretchStepPictogram(nextStretchStep.checkType, "h-5 w-5")}
+                </div>
+                <div className="min-w-0">
+                  <p className="text-xs font-bold text-[#18755B]/70">다음 단계</p>
+                  <p className="break-keep text-base font-bold leading-snug text-gray-900">{nextStretchStep.title}</p>
+                </div>
+              </div>
+            </button>
+          )}
+
         </div>
 
-        <div className="order-1 flex min-h-0 w-full flex-col gap-4">
+        <div className={`${isStretchingMode ? "hidden" : "order-1 flex"} min-h-0 w-full flex-col gap-4`}>
           {selectedStretch ? (
             <>
               <div className="app-surface flex-1 p-4">
@@ -5343,7 +5418,6 @@ export function PostureCoachApp() {
       <div className="space-y-6">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">기록</h1>
-          <p className="mt-1 text-gray-600">자세 분석 기록을 확인하세요</p>
         </div>
 
         {isLoadingHistory ? (
@@ -5750,7 +5824,7 @@ export function PostureCoachApp() {
                           {canShowSessionTrendChart ? (
                             <div className="h-[132px]">
                               <ResponsiveContainer width="100%" height="100%">
-                                <LineChart data={sessionTrendSummary.points} margin={{ top: 8, right: 12, bottom: 0, left: 4 }}>
+                                <LineChart data={sessionTrendSummary.points} margin={{ top: 12, right: 16, bottom: 0, left: 4 }}>
                                   <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" vertical={false} />
                                   <XAxis dataKey="time" stroke="#9ca3af" fontSize={10} tickLine={false} axisLine={false} />
                                   <YAxis
@@ -5772,8 +5846,8 @@ export function PostureCoachApp() {
                                       strokeWidth={3}
                                       ifOverflow="extendDomain"
                                       label={{
-                                        value: `선택 날짜 평균 ${sessionTrendSummary.selectedAverageScore}`,
-                                        position: "right",
+                                        value: `선택 평균 ${sessionTrendSummary.selectedAverageScore}`,
+                                        position: "insideTopRight",
                                         fill: selectedAverageReferenceTone?.label,
                                         fontSize: 10,
                                         fontWeight: 700,
