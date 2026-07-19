@@ -362,14 +362,7 @@ export function StretchingView(props: StretchingViewProps) {
             >
               {isStretchingMode ? "스트레칭 중지" : "스트레칭 분석 시작"}
             </button>
-            <button
-              type="button"
-              onClick={handleNextStretchStep}
-              disabled={!selectedStretch || isSelectedStretchComplete}
-              className="min-h-11 border border-blue-200 bg-white px-5 py-2.5 font-bold text-blue-700 disabled:cursor-not-allowed disabled:border-gray-200 disabled:text-gray-400"
-            >
-              다음 단계
-            </button>
+            
           </div>
         </section>
 
@@ -487,7 +480,28 @@ export function StretchingView(props: StretchingViewProps) {
             <section className="app-surface flex min-h-[170px] flex-1 flex-col p-4">
               <h3 className="mb-2 text-lg font-bold text-gray-900">다음 단계</h3>
               {nextStretchStep ? (
-                renderStepCard(nextStretchStep, activeStretchStepIndex + 1, true)
+                <button
+                  type="button"
+                  onClick={() => onSelectStep(activeStretchStepIndex + 1)}
+                  className="flex w-full flex-1 flex-col border border-gray-200 bg-white p-3 text-left"
+                >
+                  <div className="flex items-start gap-3">
+                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gray-100 text-sm font-bold text-gray-600">
+                      {activeStretchStepIndex + 2}
+                    </div>
+                    <div className="flex h-9 w-9 shrink-0 items-center justify-center text-gray-300">
+                      {getStretchStepPictogram(nextStretchStep.checkType, "h-5 w-5")}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="font-bold text-gray-900">{nextStretchStep.title}</p>
+                      <p className="mt-1 line-clamp-2 text-sm leading-5 text-gray-600">{nextStretchStep.instruction}</p>
+                    </div>
+                  </div>
+                  <div className="mt-3 flex items-center justify-between border-t border-gray-100 pt-2 text-sm font-bold text-[#18755B]">
+                    <span>이 단계로 넘어가기</span>
+                    <ChevronRight className="h-4 w-4 shrink-0" />
+                  </div>
+                </button>
               ) : (
                 <p className="border border-[#18755B]/15 bg-[#E7FFF7]/45 px-3 py-3 text-sm font-bold text-[#18755B]">
                   마지막 단계입니다. 현재 안내에 맞춰 마무리하세요.
