@@ -4,7 +4,7 @@ import { CartesianGrid, Line, LineChart, ReferenceDot, ReferenceLine, Responsive
 import type { HistoryGroup, SessionSummary } from "@/lib/types";
 import { SESSION_TITLE_MAX_LENGTH, getSessionTitleKey } from "@/lib/session-title";
 import { formatMinutes, getStatusLabel } from "@/components/posture-coach/display-utils";
-import { createSessionTrendSummary, formatDateKey, formatHistoryMonthLabel, formatTime, getCalendarDays, getHistoryAreaScores, getHistoryAverageReferenceTone, getHistoryCalendarToneClass, getHistoryReportComment, getHistorySessionDisplayTitle, getHistoryWeakestArea, getKoreaDateKey, getMonthKey, getScoreIndicatorStyle, shiftMonthKey } from "@/components/posture-coach/history-utils";
+import { createSessionTrendSummary, formatDateKey, formatHistoryMonthLabel, formatTime, getCalendarDays, getHistoryAreaScores, getHistoryAverageReferenceTone, getHistoryCalendarToneClass, getHistoryGraphDotColor, getHistoryReportComment, getHistorySessionDisplayTitle, getHistoryWeakestArea, getKoreaDateKey, getMonthKey, getScoreIndicatorStyle, shiftMonthKey } from "@/components/posture-coach/history-utils";
 import { getPostureAreaIcon } from "@/components/posture-coach/posture-icons";
 
 type HistoryViewProps = {
@@ -44,6 +44,34 @@ function appendImageVersion(imageUrl: string, version: number | string | null | 
   } catch {
     return imageUrl;
   }
+}
+
+type HistoryTrendDotProps = {
+  cx?: number;
+  cy?: number;
+  payload?: {
+    score?: number | null;
+  };
+};
+
+function renderHistoryTrendDot(props: HistoryTrendDotProps) {
+  const { cx, cy, payload } = props;
+  if (typeof cx !== "number" || typeof cy !== "number") {
+    return null;
+  }
+
+  const color = getHistoryGraphDotColor(payload?.score);
+  return <circle cx={cx} cy={cy} r={2.5} fill={color} stroke={color} strokeWidth={1} />;
+}
+
+function renderHistoryTrendActiveDot(props: HistoryTrendDotProps) {
+  const { cx, cy, payload } = props;
+  if (typeof cx !== "number" || typeof cy !== "number") {
+    return null;
+  }
+
+  const color = getHistoryGraphDotColor(payload?.score);
+  return <circle cx={cx} cy={cy} r={4} fill={color} stroke="#ffffff" strokeWidth={1.5} />;
 }
 
 export function HistoryView(props: HistoryViewProps) {
@@ -171,7 +199,6 @@ export function HistoryView(props: HistoryViewProps) {
                     aria-label="기록 삭제"
                   >
                     <Trash2 className="h-3.5 w-3.5" />
-                    <span>기록 삭제</span>
                   </button>
                   <button
                     type="button"
@@ -553,7 +580,7 @@ export function HistoryView(props: HistoryViewProps) {
                                       }}
                                     />
                                   )}
-                                  <Line type="linear" dataKey="score" stroke="#18755B" strokeWidth={2} dot={{ r: 2.5 }} activeDot={{ r: 4 }} />
+                                  <Line type="linear" dataKey="score" stroke="#18755B" strokeWidth={1.5} dot={renderHistoryTrendDot} activeDot={renderHistoryTrendActiveDot} />
                                   {sessionTrendSummary.currentPoint && (
                                     <ReferenceDot
                                       x={sessionTrendSummary.currentPoint.time}
@@ -561,7 +588,7 @@ export function HistoryView(props: HistoryViewProps) {
                                       r={5}
                                       fill="#001A12"
                                       stroke="#C4F6E8"
-                                      strokeWidth={2}
+                                      strokeWidth={3}
                                     />
                                   )}
                                 </LineChart>

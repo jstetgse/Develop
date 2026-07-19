@@ -148,6 +148,22 @@ export function getHistoryAverageReferenceTone(score: number) {
   };
 }
 
+export function getHistoryGraphDotColor(score: number | null | undefined) {
+  if (typeof score !== "number") {
+    return "#9CA3AF";
+  }
+
+  if (score >= 80) {
+    return "#39AF8E";
+  }
+
+  if (score >= 60) {
+    return "#EAB308";
+  }
+
+  return "#DC2626";
+}
+
 export function getScoreToneClass(score: number | null | undefined) {
   if (typeof score !== "number") {
     return {
@@ -452,5 +468,4 @@ export function createSessionTrendSummary(historyGroups: HistoryGroup[], dateKey
         : `최근 기록일 평균보다 ${absoluteDifference}점 낮아요.`,
   };
 }
-
 
