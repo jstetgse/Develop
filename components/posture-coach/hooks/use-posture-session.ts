@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateAction } from "react";
 
-import { SCORE_POINT_SAVE_INTERVAL_MS, SNAPSHOT_INTERVAL_MS } from "@/components/posture-coach/constants";
+import { SCORE_POINT_SAVE_INTERVAL_MS } from "@/components/posture-coach/constants";
 import { getIssueText } from "@/components/posture-coach/display-utils";
 import { recordPostureAreaStats } from "@/components/posture-coach/history-utils";
 import type { Tab } from "@/components/posture-coach/types";
@@ -8,11 +8,21 @@ import { getStretchReminderMs } from "@/lib/posture/posture-alert-engine";
 import { averageScores, createLiveScorePoint, withPostureScore } from "@/lib/posture/posture-score-stream";
 import { calculateSessionAverage } from "@/lib/posture/posture-session-summary";
 import { PostureAnalyzer } from "@/lib/posture-analysis";
-import { saveAlertLog, saveScorePoint, saveSnapshot, uploadSnapshotImage } from "@/lib/repositories/posture-session-repository";
+import { saveAlertLog, saveScorePoint, uploadSessionExtremaImage } from "@/lib/repositories/posture-session-repository";
 import type { PostureAreaStats, PostureResult, Settings } from "@/lib/types";
 
 type ScorePoint = { id: string; time: string; timestamp: number; score: number };
-type SnapshotExtrema = { score: number; imageUrl: string | null } | null;
+type SnapshotExtrema = {
+  score: number;
+  imageUrl: string | null;
+  imagePath: string | null;
+  imageScore: number | null;
+  imageCapturedAt: number | null;
+} | null;
+type ExtremaImageKind = "best" | "worst";
+
+const EXTREMA_IMAGE_MIN_DELTA = 3;
+const EXTREMA_IMAGE_UPLOAD_COOLDOWN_MS = 10_000;
 
 type Props = {
   uid: string | null;
@@ -64,6 +74,30 @@ function createEmptyPostureAreaStats(): PostureAreaStats {
   };
 }
 
+function createExtremaScore(score: number): NonNullable<SnapshotExtrema> {
+  return {
+    score,
+    imageUrl: null,
+    imagePath: null,
+    imageScore: null,
+    imageCapturedAt: null,
+  };
+}
+
+function shouldUploadBestImage(snapshot: SnapshotExtrema, score: number, now: number, lastUploadedAt: number) {
+  if (!snapshot?.imageUrl || typeof snapshot.imageScore !== "number") {
+    return true;
+  }
+  return score >= snapshot.imageScore + EXTREMA_IMAGE_MIN_DELTA && now - lastUploadedAt >= EXTREMA_IMAGE_UPLOAD_COOLDOWN_MS;
+}
+
+function shouldUploadWorstImage(snapshot: SnapshotExtrema, score: number, now: number, lastUploadedAt: number) {
+  if (!snapshot?.imageUrl || typeof snapshot.imageScore !== "number") {
+    return true;
+  }
+  return score <= snapshot.imageScore - EXTREMA_IMAGE_MIN_DELTA && now - lastUploadedAt >= EXTREMA_IMAGE_UPLOAD_COOLDOWN_MS;
+}
+
 export function usePostureSession({ uid, settings, captureCurrentFrame, setActiveTab, setAlertMessage }: Props) {
   const [latestPosture, setLatestPosture] = useState<PostureResult>(createInitialPosture);
   const [hasCurrentSessionPostureData, setHasCurrentSessionPostureData] = useState(false);
@@ -95,10 +129,14 @@ export function usePostureSession({ uid, settings, captureCurrentFrame, setActiv
   const wasPostureRunningBeforeStretchRef = useRef(false);
   const posturePausedStartedAtRef = useRef<number | null>(null);
   const totalPosturePausedMsRef = useRef(0);
-  const lastSnapshotAtRef = useRef(0);
-  const snapshotSavingRef = useRef(false);
   const bestSnapshotRef = useRef<SnapshotExtrema>(null);
   const worstSnapshotRef = useRef<SnapshotExtrema>(null);
+  const bestImageUploadInProgressRef = useRef(false);
+  const worstImageUploadInProgressRef = useRef(false);
+  const bestImageLastUploadedAtRef = useRef(0);
+  const worstImageLastUploadedAtRef = useRef(0);
+  const bestImageUploadPromiseRef = useRef<Promise<void> | null>(null);
+  const worstImageUploadPromiseRef = useRef<Promise<void> | null>(null);
 
   useEffect(() => { uidRef.current = uid; }, [uid]);
   useEffect(() => {
@@ -111,27 +149,115 @@ export function usePostureSession({ uid, settings, captureCurrentFrame, setActiv
     liveScorePointsRef.current = [];
   }, []);
 
-  const persistSnapshotIfNeeded = useCallback(async (posture: PostureResult) => {
+  const uploadExtremaImage = useCallback((
+    kind: ExtremaImageKind,
+    score: number,
+    imageDataUrl: string,
+    capturedAt: number
+  ) => {
     const currentUid = uidRef.current;
     const sessionId = sessionIdRef.current;
-    const now = Date.now();
-    if (!currentUid || !sessionId || !posture.isTracking || posture.score === null || snapshotSavingRef.current || now - lastSnapshotAtRef.current < SNAPSHOT_INTERVAL_MS) return;
-    const imageDataUrl = captureCurrentFrame();
-    if (!imageDataUrl) return;
-    snapshotSavingRef.current = true;
-    lastSnapshotAtRef.current = now;
-    try {
-      const imageUrl = await uploadSnapshotImage(currentUid, sessionId, now, imageDataUrl);
-      if (!imageUrl) return;
-      await saveSnapshot(currentUid, sessionId, { capturedAt: new Date(now).toISOString(), score: posture.score, imageUrl, feedback: getIssueText(posture) });
-      if (!bestSnapshotRef.current || posture.score > bestSnapshotRef.current.score || (posture.score === bestSnapshotRef.current.score && !bestSnapshotRef.current.imageUrl)) bestSnapshotRef.current = { score: posture.score, imageUrl };
-      if (!worstSnapshotRef.current || posture.score < worstSnapshotRef.current.score || (posture.score === worstSnapshotRef.current.score && !worstSnapshotRef.current.imageUrl)) worstSnapshotRef.current = { score: posture.score, imageUrl };
-    } catch (error) {
-      console.error("Failed to save posture snapshot:", error);
-    } finally {
-      snapshotSavingRef.current = false;
+    if (!currentUid || !sessionId) {
+      return Promise.resolve();
     }
-  }, [captureCurrentFrame]);
+
+    const isBest = kind === "best";
+    if (isBest ? bestImageUploadInProgressRef.current : worstImageUploadInProgressRef.current) {
+      return Promise.resolve();
+    }
+
+    if (isBest) {
+      bestImageUploadInProgressRef.current = true;
+    } else {
+      worstImageUploadInProgressRef.current = true;
+    }
+
+    let uploadPromise!: Promise<void>;
+    uploadPromise = (async () => {
+      try {
+        const uploaded = await uploadSessionExtremaImage(currentUid, sessionId, kind, imageDataUrl);
+        if (!uploaded) {
+          return;
+        }
+
+        const current = isBest ? bestSnapshotRef.current : worstSnapshotRef.current;
+        const nextSnapshot: NonNullable<SnapshotExtrema> = {
+          ...(current ?? createExtremaScore(score)),
+          score: current?.score ?? score,
+          imageUrl: uploaded.imageUrl,
+          imagePath: uploaded.imagePath,
+          imageScore: score,
+          imageCapturedAt: capturedAt,
+        };
+
+        if (isBest) {
+          bestSnapshotRef.current = nextSnapshot;
+          bestImageLastUploadedAtRef.current = Date.now();
+        } else {
+          worstSnapshotRef.current = nextSnapshot;
+          worstImageLastUploadedAtRef.current = Date.now();
+        }
+      } catch (error) {
+        console.error(`Failed to upload ${kind} posture image:`, error);
+      } finally {
+        if (isBest) {
+          bestImageUploadInProgressRef.current = false;
+          if (bestImageUploadPromiseRef.current === uploadPromise) {
+            bestImageUploadPromiseRef.current = null;
+          }
+        } else {
+          worstImageUploadInProgressRef.current = false;
+          if (worstImageUploadPromiseRef.current === uploadPromise) {
+            worstImageUploadPromiseRef.current = null;
+          }
+        }
+      }
+    })();
+
+    if (isBest) {
+      bestImageUploadPromiseRef.current = uploadPromise;
+    } else {
+      worstImageUploadPromiseRef.current = uploadPromise;
+    }
+
+    return uploadPromise;
+  }, []);
+
+  const persistSnapshotIfNeeded = useCallback((posture: PostureResult) => {
+    const currentUid = uidRef.current;
+    const sessionId = sessionIdRef.current;
+    const score = posture.score;
+    if (!currentUid || !sessionId || !posture.isTracking || typeof score !== "number") {
+      return;
+    }
+
+    const now = Date.now();
+    const shouldUploadBest =
+      !bestImageUploadInProgressRef.current &&
+      shouldUploadBestImage(bestSnapshotRef.current, score, now, bestImageLastUploadedAtRef.current);
+    const shouldUploadWorst =
+      !worstImageUploadInProgressRef.current &&
+      shouldUploadWorstImage(worstSnapshotRef.current, score, now, worstImageLastUploadedAtRef.current);
+
+    if (!shouldUploadBest && !shouldUploadWorst) {
+      return;
+    }
+
+    const imageDataUrl = captureCurrentFrame();
+    if (!imageDataUrl) {
+      return;
+    }
+
+    const uploads: Promise<void>[] = [];
+    if (shouldUploadBest) {
+      uploads.push(uploadExtremaImage("best", score, imageDataUrl, now));
+    }
+    if (shouldUploadWorst) {
+      uploads.push(uploadExtremaImage("worst", score, imageDataUrl, now));
+    }
+
+    void Promise.allSettled(uploads);
+  }, [captureCurrentFrame, uploadExtremaImage]);
 
   const updateAlerts = useCallback(async (posture: PostureResult) => {
     const now = Date.now();
@@ -180,8 +306,18 @@ export function usePostureSession({ uid, settings, captureCurrentFrame, setActiv
     const cumulativeAverage = calculateSessionAverage(scoreTotalRef.current, scoreCountRef.current) ?? posture.score;
     latestSessionAverageRef.current = cumulativeAverage;
     setSessionAverageScore(cumulativeAverage);
-    if (!bestSnapshotRef.current || posture.score > bestSnapshotRef.current.score) bestSnapshotRef.current = { score: posture.score, imageUrl: null };
-    if (!worstSnapshotRef.current || posture.score < worstSnapshotRef.current.score) worstSnapshotRef.current = { score: posture.score, imageUrl: null };
+    if (!bestSnapshotRef.current || posture.score > bestSnapshotRef.current.score) {
+      bestSnapshotRef.current = {
+        ...(bestSnapshotRef.current ?? createExtremaScore(posture.score)),
+        score: posture.score,
+      };
+    }
+    if (!worstSnapshotRef.current || posture.score < worstSnapshotRef.current.score) {
+      worstSnapshotRef.current = {
+        ...(worstSnapshotRef.current ?? createExtremaScore(posture.score)),
+        score: posture.score,
+      };
+    }
     const averagePosture = withPostureScore(posture, cumulativeAverage, settingsRef.current.warningScoreThreshold);
     realtimeScoreWindowRef.current.push(posture.score);
     if (!lastRealtimeScoreUpdateAtRef.current) lastRealtimeScoreUpdateAtRef.current = now;
@@ -215,7 +351,9 @@ export function usePostureSession({ uid, settings, captureCurrentFrame, setActiv
     lastScorePointSavedAtRef, postureAreaStatsRef, lastScoreTrendUpdateAtRef, nextStretchReminderAtRef,
     latestLandmarksRef, alertVisibleUntilRef, postureAlertVisibleUntilRef, stretchAlertVisibleUntilRef,
     alertCountRef, badPostureStartedAtRef, wasPostureRunningBeforeStretchRef, posturePausedStartedAtRef,
-    totalPosturePausedMsRef, lastSnapshotAtRef, snapshotSavingRef, bestSnapshotRef, worstSnapshotRef,
+    totalPosturePausedMsRef, bestSnapshotRef, worstSnapshotRef,
+    bestImageUploadInProgressRef, worstImageUploadInProgressRef, bestImageLastUploadedAtRef, worstImageLastUploadedAtRef,
+    bestImageUploadPromiseRef, worstImageUploadPromiseRef,
     persistSnapshotIfNeeded, updateAlerts, recordPostureScore, createInitialPosture,
   };
 }

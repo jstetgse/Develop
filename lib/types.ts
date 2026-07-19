@@ -154,7 +154,13 @@ export interface SessionSummary {
   bestScore: number | null;
   worstScore: number | null;
   bestImageUrl: string | null;
+  bestImagePath?: string | null;
+  bestImageScore?: number | null;
+  bestImageCapturedAt?: number | null;
   worstImageUrl: string | null;
+  worstImagePath?: string | null;
+  worstImageScore?: number | null;
+  worstImageCapturedAt?: number | null;
   createdAt?: string;
 }
 

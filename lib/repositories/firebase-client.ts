@@ -24,7 +24,7 @@ import {
   type User as FirebaseUser,
   type Auth,
 } from "firebase/auth";
-import { getDownloadURL, getStorage, ref, uploadString, type FirebaseStorage } from "firebase/storage";
+import { deleteObject, getDownloadURL, getStorage, ref, uploadString, type FirebaseStorage } from "firebase/storage";
 import type {
   FirebaseConfigShape,
   FirebaseStatus,
@@ -33,7 +33,6 @@ import type {
   PostureAreaStats,
   PostureRecommendationArea,
   PostureScorePoint,
-  PostureSnapshot,
   RecentSummary,
   Settings,
   SessionSummary,
@@ -46,6 +45,8 @@ let firestoreInstance: Firestore | null = null;
 let storageInstance: FirebaseStorage | null = null;
 let authInstance: Auth | null = null;
 let initializationStatus: FirebaseStatus | null = null;
+
+type ExtremaImageKind = "best" | "worst";
 
 function resolveConfig(): FirebaseConfigShape | null {
   const config = {
@@ -318,6 +319,7 @@ export async function clearUserMeasurementHistory(uid: string) {
     await Promise.all(
       snapshot.docs.map(async (session) => {
         const sessionRef = doc(sessions, session.id);
+        await deleteSessionExtremaImages(uid, session.id);
         await Promise.all(
           ["snapshots", "alerts", "stretchLogs", "scorePoints"].map(async (subcollection) => {
             const childSnapshot = await getDocs(collection(sessionRef, subcollection));
@@ -337,12 +339,34 @@ export async function clearUserMeasurementHistory(uid: string) {
   }
 }
 
+async function deleteSessionExtremaImages(uid: string, sessionId: string) {
+  const storage = getStorageInstance();
+  if (!storage) {
+    return;
+  }
+
+  await Promise.all(
+    (["best", "worst"] as const).map(async (kind) => {
+      const imagePath = `users/${uid}/sessions/${sessionId}/${kind}.jpg`;
+      try {
+        await deleteObject(ref(storage, imagePath));
+      } catch (error) {
+        const code = typeof error === "object" && error !== null && "code" in error ? String(error.code) : "";
+        if (code !== "storage/object-not-found") {
+          console.error(`Failed to delete ${kind} posture image:`, error);
+        }
+      }
+    })
+  );
+}
+
 async function deleteSessionDocumentWithChildren(uid: string, sessionId: string) {
   const ref = sessionDoc(uid, sessionId);
   if (!ref) {
     return;
   }
 
+  await deleteSessionExtremaImages(uid, sessionId);
   await Promise.all(
     ["snapshots", "alerts", "stretchLogs", "scorePoints"].map(async (subcollection) => {
       const childSnapshot = await getDocs(collection(ref, subcollection));
@@ -434,7 +458,13 @@ export async function createSession(
       bestScore: null,
       worstScore: null,
       bestImageUrl: null,
+      bestImagePath: null,
+      bestImageScore: null,
+      bestImageCapturedAt: null,
       worstImageUrl: null,
+      worstImagePath: null,
+      worstImageScore: null,
+      worstImageCapturedAt: null,
       alertCount: 0,
       preferredSideMode,
       createdAt: startedAt,
@@ -458,7 +488,13 @@ export async function finalizeSessionSummary(
     | "bestScore"
     | "worstScore"
     | "bestImageUrl"
+    | "bestImagePath"
+    | "bestImageScore"
+    | "bestImageCapturedAt"
     | "worstImageUrl"
+    | "worstImagePath"
+    | "worstImageScore"
+    | "worstImageCapturedAt"
     | "preferredSideMode"
     | "postureAreaStats"
   >
@@ -477,7 +513,13 @@ export async function finalizeSessionSummary(
       bestScore: summary.bestScore,
       worstScore: summary.worstScore,
       bestImageUrl: summary.bestImageUrl,
+      bestImagePath: summary.bestImagePath ?? null,
+      bestImageScore: summary.bestImageScore ?? null,
+      bestImageCapturedAt: summary.bestImageCapturedAt ?? null,
       worstImageUrl: summary.worstImageUrl,
+      worstImagePath: summary.worstImagePath ?? null,
+      worstImageScore: summary.worstImageScore ?? null,
+      worstImageCapturedAt: summary.worstImageCapturedAt ?? null,
       preferredSideMode: normalizeSideMode(summary.preferredSideMode),
       ...(summary.postureAreaStats ? { postureAreaStats: summary.postureAreaStats } : {}),
     });
@@ -488,10 +530,10 @@ export async function finalizeSessionSummary(
   }
 }
 
-export async function uploadSnapshotImage(
+export async function uploadSessionExtremaImage(
   uid: string,
   sessionId: string,
-  timestamp: number,
+  kind: ExtremaImageKind,
   imageDataUrl: string
 ) {
   const storage = getStorageInstance();
@@ -499,26 +541,11 @@ export async function uploadSnapshotImage(
     return null;
   }
 
-  const path = `users/${uid}/sessions/${sessionId}/snapshots/${timestamp}.jpg`;
-  const storageRef = ref(storage, path);
+  const imagePath = `users/${uid}/sessions/${sessionId}/${kind}.jpg`;
+  const storageRef = ref(storage, imagePath);
   await uploadString(storageRef, imageDataUrl, "data_url");
-  return getDownloadURL(storageRef);
-}
-
-export async function saveSnapshot(uid: string, sessionId: string, snapshot: Omit<PostureSnapshot, "snapshotId">) {
-  const db = getDb();
-  if (!db) {
-    return false;
-  }
-
-  try {
-    const snapshotId = crypto.randomUUID();
-    await setDoc(doc(db, "users", uid, "sessions", sessionId, "snapshots", snapshotId), snapshot);
-    return true;
-  } catch (error) {
-    console.error("Failed to save snapshot:", error);
-    return false;
-  }
+  const imageUrl = await getDownloadURL(storageRef);
+  return { imageUrl, imagePath };
 }
 
 function normalizeScorePoint(raw: Partial<PostureScorePoint>, id: string, sessionId: string): PostureScorePoint | null {
@@ -718,7 +745,13 @@ function normalizeSession(raw: Partial<SessionSummary>, sessionId: string): Sess
     bestScore: typeof raw.bestScore === "number" ? raw.bestScore : null,
     worstScore: typeof raw.worstScore === "number" ? raw.worstScore : null,
     bestImageUrl: typeof raw.bestImageUrl === "string" ? raw.bestImageUrl : null,
+    bestImagePath: typeof raw.bestImagePath === "string" ? raw.bestImagePath : null,
+    bestImageScore: typeof raw.bestImageScore === "number" ? raw.bestImageScore : null,
+    bestImageCapturedAt: typeof raw.bestImageCapturedAt === "number" ? raw.bestImageCapturedAt : null,
     worstImageUrl: typeof raw.worstImageUrl === "string" ? raw.worstImageUrl : null,
+    worstImagePath: typeof raw.worstImagePath === "string" ? raw.worstImagePath : null,
+    worstImageScore: typeof raw.worstImageScore === "number" ? raw.worstImageScore : null,
+    worstImageCapturedAt: typeof raw.worstImageCapturedAt === "number" ? raw.worstImageCapturedAt : null,
     alertCount: typeof raw.alertCount === "number" ? raw.alertCount : 0,
     durationMinutes,
     postureAreaStats: normalizePostureAreaStats(raw.postureAreaStats),
@@ -830,5 +863,3 @@ export async function getHistoryByDate(uid: string): Promise<HistoryGroup[] | nu
     return null;
   }
 }
-
-

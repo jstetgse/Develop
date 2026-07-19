@@ -1,6 +1,4 @@
 import type { Settings } from "@/lib/types";
-
-export const SNAPSHOT_INTERVAL_MS = 60_000;
 export const STRETCH_FEEDBACK_INTERVAL_MS = 800;
 export const STRETCH_HOLD_TARGET_MS = 5_000;
 export const STRETCH_CALIBRATION_TARGET_MS = 2_000;
@@ -36,4 +34,3 @@ export const DEFAULT_SETTINGS: Settings = {
   preferredSideMode: "left",
   notificationPermissionStatus: "default",
 };
-

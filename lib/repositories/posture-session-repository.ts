@@ -5,7 +5,5 @@ export {
   getScorePointsForSessions,
   saveAlertLog,
   saveScorePoint,
-  saveSnapshot,
-  uploadSnapshotImage,
+  uploadSessionExtremaImage,
 } from "@/lib/repositories/firebase-client";
-

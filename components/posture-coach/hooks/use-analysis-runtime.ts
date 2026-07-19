@@ -113,13 +113,25 @@ export function useAnalysisRuntime(props: Props) {
     let finalizedSessionForTitle: PendingTitleSession | null = null;
     const activePausedMs = posture.posturePausedStartedAtRef.current === null ? 0 : Date.now() - posture.posturePausedStartedAtRef.current;
     if (currentUid && sessionId && startedAt) {
+      await Promise.allSettled(
+        [posture.bestImageUploadPromiseRef.current, posture.worstImageUploadPromiseRef.current].filter(
+          (promise): promise is Promise<void> => Boolean(promise)
+        )
+      );
       const endedAt = new Date().toISOString();
       const postureDurationMs = Math.max(0, Date.now() - new Date(startedAt).getTime() - posture.totalPosturePausedMsRef.current - activePausedMs);
       const finalized = await finalizeSessionSummary(currentUid, sessionId, {
         endedAt, averageScore: finalAverageScore, durationMinutes: Math.max(1, Math.round(postureDurationMs / 60000)),
         alertCount: posture.alertCountRef.current, bestScore: posture.bestSnapshotRef.current?.score ?? null,
         worstScore: posture.worstSnapshotRef.current?.score ?? null, bestImageUrl: posture.bestSnapshotRef.current?.imageUrl ?? null,
-        worstImageUrl: posture.worstSnapshotRef.current?.imageUrl ?? null, preferredSideMode: posture.settingsRef.current.preferredSideMode,
+        bestImagePath: posture.bestSnapshotRef.current?.imagePath ?? null,
+        bestImageScore: posture.bestSnapshotRef.current?.imageScore ?? null,
+        bestImageCapturedAt: posture.bestSnapshotRef.current?.imageCapturedAt ?? null,
+        worstImageUrl: posture.worstSnapshotRef.current?.imageUrl ?? null,
+        worstImagePath: posture.worstSnapshotRef.current?.imagePath ?? null,
+        worstImageScore: posture.worstSnapshotRef.current?.imageScore ?? null,
+        worstImageCapturedAt: posture.worstSnapshotRef.current?.imageCapturedAt ?? null,
+        preferredSideMode: posture.settingsRef.current.preferredSideMode,
         postureAreaStats: areaStats,
       });
       if (finalized) {
@@ -148,10 +160,14 @@ export function useAnalysisRuntime(props: Props) {
     posture.posturePausedStartedAtRef.current = null;
     posture.totalPosturePausedMsRef.current = 0;
     stretch.resetForAppStop();
-    posture.lastSnapshotAtRef.current = 0;
-    posture.snapshotSavingRef.current = false;
     posture.bestSnapshotRef.current = null;
     posture.worstSnapshotRef.current = null;
+    posture.bestImageUploadInProgressRef.current = false;
+    posture.worstImageUploadInProgressRef.current = false;
+    posture.bestImageLastUploadedAtRef.current = 0;
+    posture.worstImageLastUploadedAtRef.current = 0;
+    posture.bestImageUploadPromiseRef.current = null;
+    posture.worstImageUploadPromiseRef.current = null;
     setIsRunning(false);
     setPendingCameraStart(false);
     stretch.setIsStretchingMode(false);
@@ -204,7 +220,12 @@ export function useAnalysisRuntime(props: Props) {
     posture.totalPosturePausedMsRef.current = 0;
     posture.bestSnapshotRef.current = null;
     posture.worstSnapshotRef.current = null;
-    posture.lastSnapshotAtRef.current = 0;
+    posture.bestImageUploadInProgressRef.current = false;
+    posture.worstImageUploadInProgressRef.current = false;
+    posture.bestImageLastUploadedAtRef.current = 0;
+    posture.worstImageLastUploadedAtRef.current = 0;
+    posture.bestImageUploadPromiseRef.current = null;
+    posture.worstImageUploadPromiseRef.current = null;
     setAlertMessage(null);
     posture.setLatestPosture(posture.createInitialPosture());
     posture.setSessionAverageScore(null);

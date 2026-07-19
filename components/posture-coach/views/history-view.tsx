@@ -32,6 +32,20 @@ type HistoryViewProps = {
   onSaveTitle: (session: SessionSummary, dateKey: string) => void;
 };
 
+function appendImageVersion(imageUrl: string, version: number | string | null | undefined) {
+  if (version === null || version === undefined || version === "") {
+    return imageUrl;
+  }
+
+  try {
+    const url = new URL(imageUrl);
+    url.searchParams.set("v", String(version));
+    return url.toString();
+  } catch {
+    return imageUrl;
+  }
+}
+
 export function HistoryView(props: HistoryViewProps) {
   const { historyGroups, isLoadingHistory, selectedHistoryGroup, selectedHistorySessionKey, historySessionPage, visibleHistoryMonthKey, editingSessionTitleKey, sessionTitleDraft, savingSessionTitleKey, sessionTitleErrors, expandedHistoryImageSessions, onSelectSession, onOpenDelete, onShiftMonth, onSelectDate, onCloseSession, onChangePage, onTitleDraftChange, onCancelTitleEdit, onBeginTitleEdit, onToggleImages, onSaveTitle } = props;
     const missingScoreBadge = (
@@ -528,9 +542,10 @@ export function HistoryView(props: HistoryViewProps) {
                                       y={sessionTrendSummary.selectedAverageScore}
                                       stroke={selectedAverageReferenceTone?.stroke}
                                       strokeWidth={3}
+                                      strokeDasharray="5 4"
                                       ifOverflow="extendDomain"
                                       label={{
-                                        value: `선택 평균 ${sessionTrendSummary.selectedAverageScore}`,
+                                        value: `해당 세션 ${sessionTrendSummary.selectedAverageScore}점`,
                                         position: "insideTopRight",
                                         fill: selectedAverageReferenceTone?.label,
                                         fontSize: 10,
@@ -578,7 +593,11 @@ export function HistoryView(props: HistoryViewProps) {
                       <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
                         <div className="overflow-hidden border border-gray-200 bg-white">
                           {session.bestImageUrl ? (
-                            <img src={session.bestImageUrl} alt="최고 자세" className="aspect-video w-full object-cover" />
+                            <img
+                              src={appendImageVersion(session.bestImageUrl, session.bestImageCapturedAt ?? session.bestImageScore)}
+                              alt="최고 자세"
+                              className="aspect-video w-full object-cover"
+                            />
                           ) : (
                             <div className="flex aspect-video items-center justify-center text-sm text-gray-400">
                               최고 자세 이미지 없음
@@ -588,7 +607,11 @@ export function HistoryView(props: HistoryViewProps) {
                         </div>
                         <div className="overflow-hidden border border-gray-200 bg-white">
                           {session.worstImageUrl ? (
-                            <img src={session.worstImageUrl} alt="최저 자세" className="aspect-video w-full object-cover" />
+                            <img
+                              src={appendImageVersion(session.worstImageUrl, session.worstImageCapturedAt ?? session.worstImageScore)}
+                              alt="최저 자세"
+                              className="aspect-video w-full object-cover"
+                            />
                           ) : (
                             <div className="flex aspect-video items-center justify-center text-sm text-gray-400">
                               최저 자세 이미지 없음
