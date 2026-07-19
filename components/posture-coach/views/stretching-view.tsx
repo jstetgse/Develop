@@ -285,7 +285,7 @@ export function StretchingView(props: StretchingViewProps) {
         </section>
       )}
 
-      <div className="grid grid-cols-1 items-stretch gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(320px,1fr)]">
+      <div className="grid grid-cols-1 items-stretch gap-4 lg:grid-cols-[minmax(0,1.6fr)_minmax(380px,0.9fr)]">
         <section className="app-surface flex h-full flex-col p-4">
           <div className="mb-2 flex flex-col justify-between gap-2 sm:flex-row sm:items-start">
             <div>
@@ -483,22 +483,18 @@ export function StretchingView(props: StretchingViewProps) {
             )}
           </section>
 
-          <section className="app-surface flex min-h-[170px] flex-1 flex-col p-4">
-            <h3 className="mb-2 text-lg font-bold text-gray-900">다음 단계</h3>
-            {isStretchingMode && selectedStretch ? (
-              nextStretchStep ? (
+          {isStretchingMode && selectedStretch && (
+            <section className="app-surface flex min-h-[170px] flex-1 flex-col p-4">
+              <h3 className="mb-2 text-lg font-bold text-gray-900">다음 단계</h3>
+              {nextStretchStep ? (
                 renderStepCard(nextStretchStep, activeStretchStepIndex + 1, true)
               ) : (
                 <p className="border border-[#18755B]/15 bg-[#E7FFF7]/45 px-3 py-3 text-sm font-bold text-[#18755B]">
                   마지막 단계입니다. 현재 안내에 맞춰 마무리하세요.
                 </p>
-              )
-            ) : (
-              <p className="text-sm leading-6 text-gray-600">
-                분석을 시작하면 현재 단계 이후의 다음 동작이 이곳에 표시됩니다.
-              </p>
-            )}
-          </section>
+              )}
+            </section>
+          )}
         </div>
       </div>
     </div>
