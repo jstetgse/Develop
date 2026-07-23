@@ -62,18 +62,20 @@ export function HomeView({ homePostureSummary, homeAttentionTone, homeScoreInsig
                     return (
                       <div
                         key={area.area}
-                        className="grid grid-cols-[max-content_max-content] gap-x-3 gap-y-1 leading-5 sm:grid-cols-[76px_72px_minmax(140px,220px)] sm:items-center"
+                        className="grid grid-cols-[76px_minmax(0,260px)] items-center gap-x-3 gap-y-1 leading-5"
                       >
                         <span className="inline-flex items-center gap-1.5 whitespace-nowrap text-gray-500">
                           {getPostureAreaIcon(area.area, "h-3.5 w-3.5")}
                           {area.label}
                         </span>
-                        <strong className="whitespace-nowrap tabular-nums text-gray-900">{areaValue}</strong>
-                        <div className={`col-span-2 h-1.5 w-full max-w-[220px] ${areaTone.trackClass} sm:col-span-1`}>
-                          <div
-                            className={`block h-full ${areaTone.barClass}`}
-                            style={{ width: `${area.score ?? 0}%` }}
-                          />
+                        <div className="flex min-w-0 flex-wrap items-center gap-4">
+                          <strong className="whitespace-nowrap tabular-nums text-gray-900">{areaValue}</strong>
+                          <div className={`h-1.5 w-[170px] max-w-full ${areaTone.trackClass}`}>
+                            <div
+                              className={`block h-full ${areaTone.barClass}`}
+                              style={{ width: `${area.score ?? 0}%` }}
+                            />
+                          </div>
                         </div>
                       </div>
                     );

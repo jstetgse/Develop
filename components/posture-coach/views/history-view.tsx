@@ -1,5 +1,5 @@
-import type { ReactNode } from "react";
-import { Activity, AlertTriangle, Bell, CheckCircle, ChevronLeft, ChevronRight, Clock, Pencil, Trash2 } from "lucide-react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { Activity, AlertTriangle, Bell, CheckCircle, ChevronLeft, ChevronRight, Clock, HelpCircle, Pencil, Trash2 } from "lucide-react";
 import { CartesianGrid, Line, LineChart, ReferenceDot, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import type { HistoryGroup, SessionSummary } from "@/lib/types";
 import { SESSION_TITLE_MAX_LENGTH, getSessionTitleKey } from "@/lib/session-title";
@@ -76,6 +76,72 @@ function renderHistoryTrendActiveDot(props: HistoryTrendDotProps) {
 
 export function HistoryView(props: HistoryViewProps) {
   const { historyGroups, isLoadingHistory, selectedHistoryGroup, selectedHistorySessionKey, historySessionPage, visibleHistoryMonthKey, editingSessionTitleKey, sessionTitleDraft, savingSessionTitleKey, sessionTitleErrors, expandedHistoryImageSessions, onSelectSession, onOpenDelete, onShiftMonth, onSelectDate, onCloseSession, onChangePage, onTitleDraftChange, onCancelTitleEdit, onBeginTitleEdit, onToggleImages, onSaveTitle } = props;
+    const [isCalendarHelpOpen, setIsCalendarHelpOpen] = useState(false);
+    const [calendarHelpPosition, setCalendarHelpPosition] = useState<{ left: number; top: number } | null>(null);
+    const calendarHelpRef = useRef<HTMLDivElement>(null);
+    const calendarHelpPopoverRef = useRef<HTMLDivElement>(null);
+
+    const closeCalendarHelp = () => {
+      setIsCalendarHelpOpen(false);
+      setCalendarHelpPosition(null);
+    };
+
+    const updateCalendarHelpPosition = () => {
+      const triggerRect = calendarHelpRef.current?.getBoundingClientRect();
+      if (!triggerRect) {
+        return;
+      }
+
+      const viewportPadding = 12;
+      const popoverGap = 8;
+      const popoverWidth = 256;
+      const popoverHeight = calendarHelpPopoverRef.current?.offsetHeight ?? 236;
+      const maxLeft = window.innerWidth - popoverWidth - viewportPadding;
+      const left = Math.max(viewportPadding, Math.min(triggerRect.right - popoverWidth, maxLeft));
+      const bottomTop = triggerRect.bottom + popoverGap;
+      const top =
+        bottomTop + popoverHeight > window.innerHeight - viewportPadding
+          ? Math.max(viewportPadding, triggerRect.top - popoverHeight - popoverGap)
+          : bottomTop;
+
+      setCalendarHelpPosition({ left, top });
+    };
+
+    const toggleCalendarHelp = () => {
+      if (isCalendarHelpOpen) {
+        closeCalendarHelp();
+        return;
+      }
+
+      updateCalendarHelpPosition();
+      setIsCalendarHelpOpen(true);
+    };
+
+    useEffect(() => {
+      if (!isCalendarHelpOpen) {
+        return;
+      }
+
+      const handlePointerDown = (event: MouseEvent | TouchEvent) => {
+        const target = event.target as Node;
+        if (!calendarHelpRef.current?.contains(target) && !calendarHelpPopoverRef.current?.contains(target)) {
+          closeCalendarHelp();
+        }
+      };
+
+      document.addEventListener("mousedown", handlePointerDown);
+      document.addEventListener("touchstart", handlePointerDown);
+      window.addEventListener("resize", closeCalendarHelp);
+      window.addEventListener("scroll", closeCalendarHelp, true);
+
+      return () => {
+        document.removeEventListener("mousedown", handlePointerDown);
+        document.removeEventListener("touchstart", handlePointerDown);
+        window.removeEventListener("resize", closeCalendarHelp);
+        window.removeEventListener("scroll", closeCalendarHelp, true);
+      };
+    }, [isCalendarHelpOpen]);
+
     const missingScoreBadge = (
       <span className="inline-flex items-center border border-gray-200 bg-white px-2 py-0.5 text-[11px] font-bold text-gray-500">
         측정 부족
@@ -135,7 +201,10 @@ export function HistoryView(props: HistoryViewProps) {
         <button
           key={sessionTitleKey}
           type="button"
-          onClick={() => onSelectSession(sessionTitleKey, index, historySessionsPerPage)}
+          onClick={() => {
+            closeCalendarHelp();
+            onSelectSession(sessionTitleKey, index, historySessionsPerPage);
+          }}
           className={`w-full border px-3 py-2.5 text-left transition-colors ${
             isSelected
               ? "border-[#18755B] bg-[#C4F6E8] text-[#001A12]"
@@ -173,6 +242,41 @@ export function HistoryView(props: HistoryViewProps) {
           <h1 className="text-3xl font-bold text-gray-900">기록</h1>
         </div>
 
+        {isCalendarHelpOpen && calendarHelpPosition && (
+          <div
+            ref={calendarHelpPopoverRef}
+            className="fixed z-50 w-64 max-w-[calc(100vw-1.5rem)] border border-[rgba(18,100,76,0.18)] bg-white p-3 text-left text-xs shadow-lg"
+            style={{ left: calendarHelpPosition.left, top: calendarHelpPosition.top }}
+          >
+            <p className="mb-2 font-bold text-gray-900">날짜 색상 의미</p>
+            <div className="space-y-2 text-gray-600">
+              <div className="flex items-center gap-2">
+                <span className="h-3 w-3 border border-[#39AF8E] bg-[#E7FFF7]" />
+                <span>좋음 · 80점 이상</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="h-3 w-3 border border-yellow-400 bg-yellow-50" />
+                <span>주의 · 60~79점</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="h-3 w-3 border border-red-300 bg-red-50" />
+                <span>위험 · 60점 미만</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="h-3 w-3 border border-gray-300 bg-gray-50" />
+                <span>평균 -- · 측정 부족</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="h-3 w-3 border border-transparent bg-transparent ring-1 ring-gray-200" />
+                <span>기록 없는 날짜</span>
+              </div>
+            </div>
+            <p className="mt-3 border-t border-gray-100 pt-2 font-medium text-gray-500">
+              날짜 색상은 그날 평균 점수 기준이에요.
+            </p>
+          </div>
+        )}
+
         {isLoadingHistory ? (
           <div className="app-surface p-6 text-gray-600">
             기록을 불러오는 중입니다...
@@ -191,18 +295,36 @@ export function HistoryView(props: HistoryViewProps) {
                   <p className="mt-1 text-xs font-medium text-gray-500">{historyGroups.length}일 기록</p>
                 </div>
                 <div className="flex items-center gap-1">
+                  <div ref={calendarHelpRef} className="relative">
+                    <button
+                      type="button"
+                      onClick={toggleCalendarHelp}
+                      className="flex h-8 w-8 items-center justify-center border border-[rgba(18,100,76,0.2)] bg-white text-[#18755B] transition-colors hover:border-[#18755B]"
+                      aria-label="날짜 색상 설명"
+                      aria-expanded={isCalendarHelpOpen}
+                    >
+                      <HelpCircle className="h-4 w-4" />
+                    </button>
+                  </div>
                   <button
                     type="button"
-                    onClick={onOpenDelete}
+                    onClick={() => {
+                      closeCalendarHelp();
+                      onOpenDelete();
+                    }}
                     disabled={selectedHistorySessions.length === 0}
                     className="flex h-8 items-center justify-center gap-1.5 border border-red-200 bg-white px-2.5 text-xs font-bold text-red-700 disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-300"
                     aria-label="기록 삭제"
                   >
                     <Trash2 className="h-3.5 w-3.5" />
+                    <span>기록 삭제</span>
                   </button>
                   <button
                     type="button"
-                    onClick={() => onShiftMonth(-1)}
+                    onClick={() => {
+                      closeCalendarHelp();
+                      onShiftMonth(-1);
+                    }}
                     className="flex h-8 w-8 items-center justify-center border border-[rgba(18,100,76,0.2)] bg-white text-[#18755B]"
                     aria-label="이전 달"
                   >
@@ -210,7 +332,10 @@ export function HistoryView(props: HistoryViewProps) {
                   </button>
                   <button
                     type="button"
-                    onClick={() => onShiftMonth(1)}
+                    onClick={() => {
+                      closeCalendarHelp();
+                      onShiftMonth(1);
+                    }}
                     disabled={!canGoNextHistoryMonth}
                     className={`flex h-8 w-8 items-center justify-center border border-[rgba(18,100,76,0.2)] ${
                       canGoNextHistoryMonth
@@ -250,7 +375,13 @@ export function HistoryView(props: HistoryViewProps) {
                       key={dateKey}
                       type="button"
                       disabled={!dayGroup}
-                      onClick={() => dayGroup && onSelectDate(dateKey)}
+                      onClick={() => {
+                        if (!dayGroup) {
+                          return;
+                        }
+                        closeCalendarHelp();
+                        onSelectDate(dateKey);
+                      }}
                       className={`relative flex aspect-square min-h-9 items-center justify-center border text-sm font-bold transition-colors ${
                         isSelected
                           ? isToday
