@@ -356,11 +356,11 @@ export function StretchingView(props: StretchingViewProps) {
               type="button"
               onClick={() => (isStretchingMode ? void handleStopStretchingMode() : void handleStartStretchingMode())}
               disabled={!activeStretchId || isSelectedStretchComplete}
-              className={`min-h-11 flex-1 px-6 py-2.5 font-bold text-white disabled:cursor-not-allowed disabled:bg-gray-300 disabled:text-gray-500 ${
-                isStretchingMode ? "bg-red-600" : "bg-blue-600"
+              className={`min-h-11 flex-1 px-6 py-2.5 font-bold text-white disabled:cursor-not-allowed ${
+                !activeStretchId || isSelectedStretchComplete ? "bg-gray-400" : isStretchingMode ? "bg-red-600" : "bg-blue-600"
               }`}
             >
-              {isStretchingMode ? "스트레칭 중지" : "스트레칭 분석 시작"}
+              {!activeStretchId ? "스트레칭을 선택해주세요" : isStretchingMode ? "스트레칭 중지" : "스트레칭 분석 시작"}
             </button>
             
           </div>
@@ -498,7 +498,7 @@ export function StretchingView(props: StretchingViewProps) {
                     </div>
                   </div>
                   <div className="mt-3 flex items-center justify-between border-t border-gray-100 pt-2 text-sm font-bold text-[#18755B]">
-                    <span>이 단계로 넘어가기</span>
+                    <span>다음 단계로 넘어가기</span>
                     <ChevronRight className="h-4 w-4 shrink-0" />
                   </div>
                 </button>
