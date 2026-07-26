@@ -20,7 +20,7 @@ type HistoryViewProps = {
   sessionTitleErrors: Record<string, string>;
   expandedHistoryImageSessions: Set<string>;
   onSelectSession: (sessionTitleKey: string, index: number, pageSize: number) => void;
-  onOpenDelete: () => void;
+  onOpenDeleteSession: (sessionTitleKey: string) => void;
   onShiftMonth: (offset: number) => void;
   onSelectDate: (dateKey: string) => void;
   onCloseSession: () => void;
@@ -145,30 +145,86 @@ function getSnapshotOrFallbackScore(
   return typeof score === "number" ? score : getFallbackAreaScore(session, area);
 }
 
-function createNeckExplanation(score: number | null) {
-  if (typeof score !== "number") {
-    return "이 기록에는 자세 세부 정보가 적어서 점수 중심으로만 설명했어요.";
+function calculatePhotoDisplayScore(neckScore: number | null, trunkScore: number | null, fallbackScore: number | null) {
+  if (typeof neckScore === "number" && typeof trunkScore === "number") {
+    return Math.round((neckScore * 55 + trunkScore * 30) / 85);
   }
-  if (score >= 85) {
-    return "목이 앞으로 많이 나오지 않았어요.";
+
+  if (typeof neckScore === "number") {
+    return Math.round(neckScore);
   }
-  if (score >= 70) {
-    return "목이 살짝 앞으로 나온 모습이 점수에 반영됐어요.";
+
+  if (typeof trunkScore === "number") {
+    return Math.round(trunkScore);
   }
-  return "머리가 앞으로 많이 나와 목 자세를 고치면 좋아요.";
+
+  return typeof fallbackScore === "number" ? Math.round(fallbackScore) : null;
 }
 
-function createTrunkExplanation(score: number | null) {
+function getPhotoDisplayScore(session: SessionSummary, kind: ExtremaImageKind) {
+  const analysis = getImageAnalysis(session, kind);
+  const neckScore = getSnapshotOrFallbackScore(analysis, session, "neck");
+  const trunkScore = getSnapshotOrFallbackScore(analysis, session, "torso");
+  return calculatePhotoDisplayScore(neckScore, trunkScore, getImageScore(session, kind));
+}
+
+
+function createNeckExplanation(score: number | null, isBest: boolean) {
   if (typeof score !== "number") {
     return "이 기록에는 자세 세부 정보가 적어서 점수 중심으로만 설명했어요.";
   }
   if (score >= 85) {
-    return "상체가 비교적 바르게 유지됐어요.";
+    return isBest
+      ? "목이 앞으로 나오지 않고 안정적으로 유지됐어요."
+      : "이 장면에서도 목 정렬은 비교적 잘 유지됐어요.";
   }
   if (score >= 70) {
-    return "상체가 조금 기울어진 모습이 점수에 반영됐어요.";
+    return isBest
+      ? "목이 살짝 앞으로 나왔지만 세션에서 가장 좋은 편이었어요."
+      : "목이 살짝 앞으로 나온 모습이 이 장면의 점수에 반영됐어요.";
   }
-  return "허리/상체가 많이 기울어 자세를 고치면 좋아요.";
+  return isBest
+    ? "이 장면에서도 머리가 앞으로 나와 목 정렬을 확인하면 좋아요."
+    : "머리가 앞으로 많이 나와 목 자세를 보정하면 좋아요.";
+}
+
+function createTrunkExplanation(score: number | null, isBest: boolean) {
+  if (typeof score !== "number") {
+    return "이 기록에는 자세 세부 정보가 적어서 점수 중심으로만 설명했어요.";
+  }
+  if (score >= 85) {
+    return isBest
+      ? "상체가 바르게 세워진 상태로 유지됐어요."
+      : "이 장면에서도 상체 정렬은 비교적 잘 유지됐어요.";
+  }
+  if (score >= 70) {
+    return isBest
+      ? "상체가 조금 기울었지만 세션에서 가장 좋은 편이었어요."
+      : "상체가 조금 기울어진 모습이 이 장면의 점수에 반영됐어요.";
+  }
+  return isBest
+    ? "이 장면에서도 상체 기울기가 있어 자세를 확인하면 좋아요."
+    : "허리와 상체가 많이 기울어 자세를 보정하면 좋아요.";
+}
+
+function createOtherFactorsExplanation(imageScore: number) {
+  if (imageScore >= 85) {
+    return "목과 상체 정렬은 안정적으로 기록됐어요.";
+  }
+  if (imageScore >= 70) {
+    return "목과 상체는 크게 나쁘지 않았지만, 이 세션에서는 상대적으로 낮은 점수로 기록됐어요.";
+  }
+  return "목과 상체만으로는 낮은 점수의 이유를 충분히 설명하기 어려워요.";
+}
+
+function createLegacyAnalysisExplanation(imageScore: number) {
+  if (imageScore >= 85) {
+    return "사진 세부 정보가 적지만, 목/상체 기준으로는 큰 문제를 찾기 어려워요.";
+  }
+  if (imageScore >= 70) {
+    return "사진 세부 정보가 적어 목/상체 기준 점수로 안내해요.";
+  }
+  return "사진별 세부 정보가 적어, 이 장면의 자세를 전반적으로 확인하면 좋아요.";
 }
 
 function createDeductionExplanation(
@@ -181,28 +237,30 @@ function createDeductionExplanation(
   if (typeof imageScore !== "number") {
     return "이 기록에는 자세 세부 정보가 적어서 점수 중심으로만 설명했어요.";
   }
-  if (imageScore >= 85 && isBest) {
-    return "큰 문제는 없지만, 작은 자세 차이가 점수에 반영됐어요.";
-  }
 
   const hasNeck = typeof neckScore === "number";
   const hasTrunk = typeof trunkScore === "number";
   if (hasNeck && hasTrunk) {
-    if (neckScore <= trunkScore - 5 || analysis?.mainIssue === "neck") {
+    if (neckScore >= 85 && trunkScore >= 85) {
+      return createOtherFactorsExplanation(imageScore);
+    }
+    if (neckScore <= trunkScore || (analysis?.mainIssue === "neck" && neckScore < 85)) {
       return "목 위치가 점수를 낮춘 가장 큰 이유예요.";
     }
-    if (trunkScore <= neckScore - 5 || analysis?.mainIssue === "torso") {
+    if (trunkScore < neckScore || (analysis?.mainIssue === "torso" && trunkScore < 85)) {
       return "상체 기울기가 점수를 낮춘 가장 큰 이유예요.";
     }
+    if (analysis?.mainIssue === "stability") {
+      return createOtherFactorsExplanation(imageScore);
+    }
     return imageScore >= 70
-      ? "큰 문제는 없지만, 작은 자세 차이가 점수에 반영됐어요."
+      ? isBest
+        ? "목과 상체의 작은 자세 차이가 점수에 반영됐어요."
+        : "목과 상체 자세가 함께 이 장면의 점수에 영향을 줬어요."
       : "목과 상체 자세가 함께 점수에 영향을 줬어요.";
   }
 
-  if (imageScore >= 70) {
-    return "큰 문제는 없지만, 작은 자세 차이가 점수에 반영됐어요.";
-  }
-  return "목이나 상체 자세를 조금 더 고치면 좋아요.";
+  return createLegacyAnalysisExplanation(imageScore);
 }
 
 function createFinalExplanation(score: number | null, isBest: boolean) {
@@ -210,37 +268,46 @@ function createFinalExplanation(score: number | null, isBest: boolean) {
     return "이 기록에는 자세 세부 정보가 적어서 점수 중심으로만 설명했어요.";
   }
 
-  return isBest
-    ? "이 순간은 자세가 가장 좋게 나온 장면이에요."
-    : "이 순간은 자세를 조금 더 고치면 좋은 장면이에요.";
+  if (isBest) {
+    return "이 세션에서 가장 자세가 좋았던 순간이에요.";
+  }
+  if (score >= 85) {
+    return "기록 점수 기준으로 안정적인 장면이에요.";
+  }
+  if (score >= 70) {
+    return "이 세션에서는 상대적으로 낮게 저장된 장면이에요.";
+  }
+  return "기록 점수 기준으로 자세 보정이 필요한 장면이에요.";
 }
 
 function createPhotoScoreExplanation(session: SessionSummary, kind: ExtremaImageKind) {
-  const score = getImageScore(session, kind);
   const isBest = kind === "best";
   const analysis = getImageAnalysis(session, kind);
   const neckScore = getSnapshotOrFallbackScore(analysis, session, "neck");
   const trunkScore = getSnapshotOrFallbackScore(analysis, session, "torso");
+  const score = getImageScore(session, kind);
   const finalStatus = getExplanationStatus(score);
 
   return [
     {
       label: "목 정렬",
       score: neckScore,
-      message: createNeckExplanation(neckScore),
+      message: createNeckExplanation(neckScore, isBest),
     },
     {
       label: "상체 정렬",
       score: trunkScore,
-      message: createTrunkExplanation(trunkScore),
+      message: createTrunkExplanation(trunkScore, isBest),
     },
     {
-      label: "감점 요인",
+      label: "점수에 영향 준 부분",
       score,
       message: createDeductionExplanation(score, neckScore, trunkScore, analysis, isBest),
+      showStatus: false,
+      showScore: false,
     },
     {
-      label: "최종 판단",
+      label: "요약",
       score,
       message: createFinalExplanation(score, isBest),
       overrideStatus: finalStatus,
@@ -249,284 +316,291 @@ function createPhotoScoreExplanation(session: SessionSummary, kind: ExtremaImage
 }
 
 export function HistoryView(props: HistoryViewProps) {
-  const { historyGroups, isLoadingHistory, selectedHistoryGroup, selectedHistorySessionKey, historySessionPage, visibleHistoryMonthKey, editingSessionTitleKey, sessionTitleDraft, savingSessionTitleKey, sessionTitleErrors, expandedHistoryImageSessions, onSelectSession, onOpenDelete, onShiftMonth, onSelectDate, onCloseSession, onChangePage, onTitleDraftChange, onCancelTitleEdit, onBeginTitleEdit, onToggleImages, onSaveTitle } = props;
-    const [isCalendarHelpOpen, setIsCalendarHelpOpen] = useState(false);
-    const [visibleGuidelineImages, setVisibleGuidelineImages] = useState<Set<string>>(new Set());
-    const [calendarHelpPosition, setCalendarHelpPosition] = useState<{ left: number; top: number } | null>(null);
-    const calendarHelpRef = useRef<HTMLDivElement>(null);
-    const calendarHelpPopoverRef = useRef<HTMLDivElement>(null);
+  const { historyGroups, isLoadingHistory, selectedHistoryGroup, selectedHistorySessionKey, historySessionPage, visibleHistoryMonthKey, editingSessionTitleKey, sessionTitleDraft, savingSessionTitleKey, sessionTitleErrors, expandedHistoryImageSessions, onSelectSession, onOpenDeleteSession, onShiftMonth, onSelectDate, onCloseSession, onChangePage, onTitleDraftChange, onCancelTitleEdit, onBeginTitleEdit, onToggleImages, onSaveTitle } = props;
+  const [isCalendarHelpOpen, setIsCalendarHelpOpen] = useState(false);
+  const [visibleGuidelineImages, setVisibleGuidelineImages] = useState<Set<string>>(new Set());
+  const [calendarHelpPosition, setCalendarHelpPosition] = useState<{ left: number; top: number } | null>(null);
+  const calendarHelpRef = useRef<HTMLDivElement>(null);
+  const calendarHelpPopoverRef = useRef<HTMLDivElement>(null);
 
-    const closeCalendarHelp = () => {
-      setIsCalendarHelpOpen(false);
-      setCalendarHelpPosition(null);
-    };
+  const closeCalendarHelp = () => {
+    setIsCalendarHelpOpen(false);
+    setCalendarHelpPosition(null);
+  };
 
-    const updateCalendarHelpPosition = () => {
-      const triggerRect = calendarHelpRef.current?.getBoundingClientRect();
-      if (!triggerRect) {
-        return;
-      }
+  const updateCalendarHelpPosition = () => {
+    const triggerRect = calendarHelpRef.current?.getBoundingClientRect();
+    if (!triggerRect) {
+      return;
+    }
 
-      const viewportPadding = 12;
-      const popoverGap = 8;
-      const popoverWidth = 256;
-      const popoverHeight = calendarHelpPopoverRef.current?.offsetHeight ?? 236;
-      const maxLeft = window.innerWidth - popoverWidth - viewportPadding;
-      const left = Math.max(viewportPadding, Math.min(triggerRect.right - popoverWidth, maxLeft));
-      const bottomTop = triggerRect.bottom + popoverGap;
-      const top =
-        bottomTop + popoverHeight > window.innerHeight - viewportPadding
-          ? Math.max(viewportPadding, triggerRect.top - popoverHeight - popoverGap)
-          : bottomTop;
+    const viewportPadding = 12;
+    const popoverGap = 8;
+    const popoverWidth = 256;
+    const popoverHeight = calendarHelpPopoverRef.current?.offsetHeight ?? 236;
+    const maxLeft = window.innerWidth - popoverWidth - viewportPadding;
+    const left = Math.max(viewportPadding, Math.min(triggerRect.right - popoverWidth, maxLeft));
+    const bottomTop = triggerRect.bottom + popoverGap;
+    const top =
+      bottomTop + popoverHeight > window.innerHeight - viewportPadding
+        ? Math.max(viewportPadding, triggerRect.top - popoverHeight - popoverGap)
+        : bottomTop;
 
-      setCalendarHelpPosition({ left, top });
-    };
+    setCalendarHelpPosition({ left, top });
+  };
 
-    const toggleCalendarHelp = () => {
-      if (isCalendarHelpOpen) {
+  const toggleCalendarHelp = () => {
+    if (isCalendarHelpOpen) {
+      closeCalendarHelp();
+      return;
+    }
+
+    updateCalendarHelpPosition();
+    setIsCalendarHelpOpen(true);
+  };
+
+  useEffect(() => {
+    if (!isCalendarHelpOpen) {
+      return;
+    }
+
+    const handlePointerDown = (event: MouseEvent | TouchEvent) => {
+      const target = event.target as Node;
+      if (!calendarHelpRef.current?.contains(target) && !calendarHelpPopoverRef.current?.contains(target)) {
         closeCalendarHelp();
-        return;
       }
-
-      updateCalendarHelpPosition();
-      setIsCalendarHelpOpen(true);
     };
 
-    useEffect(() => {
-      if (!isCalendarHelpOpen) {
-        return;
-      }
+    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("touchstart", handlePointerDown);
+    window.addEventListener("resize", closeCalendarHelp);
+    window.addEventListener("scroll", closeCalendarHelp, true);
 
-      const handlePointerDown = (event: MouseEvent | TouchEvent) => {
-        const target = event.target as Node;
-        if (!calendarHelpRef.current?.contains(target) && !calendarHelpPopoverRef.current?.contains(target)) {
-          closeCalendarHelp();
-        }
-      };
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("touchstart", handlePointerDown);
+      window.removeEventListener("resize", closeCalendarHelp);
+      window.removeEventListener("scroll", closeCalendarHelp, true);
+    };
+  }, [isCalendarHelpOpen]);
 
-      document.addEventListener("mousedown", handlePointerDown);
-      document.addEventListener("touchstart", handlePointerDown);
-      window.addEventListener("resize", closeCalendarHelp);
-      window.addEventListener("scroll", closeCalendarHelp, true);
+  const missingScoreBadge = (
+    <span className="inline-flex items-center border border-gray-200 bg-white px-2 py-0.5 text-[11px] font-bold text-gray-500">
+      측정 부족
+    </span>
+  );
 
-      return () => {
-        document.removeEventListener("mousedown", handlePointerDown);
-        document.removeEventListener("touchstart", handlePointerDown);
-        window.removeEventListener("resize", closeCalendarHelp);
-        window.removeEventListener("scroll", closeCalendarHelp, true);
-      };
-    }, [isCalendarHelpOpen]);
-
-    const missingScoreBadge = (
-      <span className="inline-flex items-center border border-gray-200 bg-white px-2 py-0.5 text-[11px] font-bold text-gray-500">
-        측정 부족
-      </span>
-    );
-
-    const renderStatCard = (
-      label: string,
-      value: ReactNode,
-      icon: ReactNode,
-      options?: { tone?: "neutral" | "warning"; badge?: ReactNode }
-    ) => {
-      const isWarning = options?.tone === "warning";
-      return (
-        <div
-          className={`border px-4 py-3 ${
-            isWarning ? "border-orange-200 bg-orange-50 text-orange-800" : "border-[rgba(18,100,76,0.2)] bg-white text-gray-900"
+  const renderStatCard = (
+    label: string,
+    value: ReactNode,
+    icon: ReactNode,
+    options?: { tone?: "neutral" | "warning"; badge?: ReactNode }
+  ) => {
+    const isWarning = options?.tone === "warning";
+    return (
+      <div
+        className={`border px-4 py-3 ${isWarning ? "border-orange-200 bg-orange-50 text-orange-800" : "border-[rgba(18,100,76,0.2)] bg-white text-gray-900"
           }`}
-        >
-          <div className="mb-2 flex items-center justify-between gap-2 text-xs font-bold text-gray-500">
-            <span>{label}</span>
-            <span className={isWarning ? "text-orange-600" : "text-[#18755B]"}>{icon}</span>
-          </div>
-          <div className="flex items-end justify-between gap-2">
-            <strong className="text-xl leading-none tabular-nums">{value}</strong>
-            {options?.badge}
-          </div>
+      >
+        <div className="mb-2 flex items-center justify-between gap-2 text-xs font-bold text-gray-500">
+          <span>{label}</span>
+          <span className={isWarning ? "text-orange-600" : "text-[#18755B]"}>{icon}</span>
         </div>
-      );
-    };
-
-    const toggleImageGuideline = (key: string) => {
-      setVisibleGuidelineImages((current) => {
-        const next = new Set(current);
-        if (next.has(key)) {
-          next.delete(key);
-        } else {
-          next.add(key);
-        }
-        return next;
-      });
-    };
-
-    const getPipelinePoint = (landmarks: SerializedPoseLandmark[], index: number) => {
-      const landmark = landmarks[index];
-      if (!landmark || !Number.isFinite(landmark.x) || !Number.isFinite(landmark.y) || (landmark.visibility ?? 1) < 0.35) {
-        return null;
-      }
-
-      return {
-        x: Math.max(0, Math.min(100, 100 - landmark.x * 100)),
-        y: Math.max(0, Math.min(100, landmark.y * 100)),
-      };
-    };
-
-    const renderPosePipeline = (landmarks: SerializedPoseLandmark[]) => (
-      <svg className="pointer-events-none absolute inset-0 h-full w-full" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
-        {POSE_PIPELINE_CONNECTIONS.map(([from, to]) => {
-          const start = getPipelinePoint(landmarks, from);
-          const end = getPipelinePoint(landmarks, to);
-          if (!start || !end) {
-            return null;
-          }
-
-          return (
-            <line
-              key={`${from}-${to}`}
-              x1={start.x}
-              y1={start.y}
-              x2={end.x}
-              y2={end.y}
-              stroke="rgba(59, 130, 246, 0.88)"
-              strokeWidth="0.9"
-              strokeLinecap="round"
-              vectorEffect="non-scaling-stroke"
-            />
-          );
-        })}
-        {POSE_PIPELINE_POINTS.map((index) => {
-          const point = getPipelinePoint(landmarks, index);
-          if (!point) {
-            return null;
-          }
-
-          return (
-            <circle
-              key={index}
-              cx={point.x}
-              cy={point.y}
-              r="1.1"
-              fill="rgba(219, 234, 254, 0.95)"
-              stroke="rgba(37, 99, 235, 0.95)"
-              strokeWidth="0.45"
-              vectorEffect="non-scaling-stroke"
-            />
-          );
-        })}
-      </svg>
+        <div className="flex items-end justify-between gap-2">
+          <strong className="text-xl leading-none tabular-nums">{value}</strong>
+          {options?.badge}
+        </div>
+      </div>
     );
+  };
 
-    const renderExtremaImageCard = (session: SessionSummary, kind: ExtremaImageKind) => {
-      const isBest = kind === "best";
-      const imageUrl = isBest ? session.bestImageUrl : session.worstImageUrl;
-      const score = getImageScore(session, kind);
-      const imageVersion = isBest
-        ? session.bestImageCapturedAt ?? session.bestImageScore
-        : session.worstImageCapturedAt ?? session.worstImageScore;
-      const title = isBest ? "최고 자세" : "최저 자세";
-      const scoreLabel = isBest ? "최고 점수" : "최저 점수";
-      const landmarks = isBest ? session.bestImageLandmarks : session.worstImageLandmarks;
-      const hasPosePipeline = Boolean(landmarks?.length);
-      const guidelineKey = `${session.sessionId}:${kind}`;
-      const isGuidelineVisible = visibleGuidelineImages.has(guidelineKey);
-      const canShowExplanation = Boolean(imageUrl) && typeof score === "number";
-      const explanation = canShowExplanation ? createPhotoScoreExplanation(session, kind) : [];
+  const toggleImageGuideline = (key: string) => {
+    setVisibleGuidelineImages((current) => {
+      const next = new Set(current);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+      return next;
+    });
+  };
 
-      return (
-        <div className="overflow-hidden border border-gray-200 bg-white">
-          {imageUrl ? (
-            <div className="relative">
-              <img
-                src={appendImageVersion(imageUrl, imageVersion)}
-                alt={title}
-                className="aspect-video w-full object-cover"
-              />
-              {isGuidelineVisible && landmarks?.length ? renderPosePipeline(landmarks) : null}
-              {hasPosePipeline && (
-                <button
-                  type="button"
-                  onClick={() => toggleImageGuideline(guidelineKey)}
-                  className="absolute right-2 top-2 border border-[#70E5C4]/60 bg-[#001A12]/75 px-2.5 py-1 text-xs font-bold text-[#D6F3EB]"
-                >
-                  {isGuidelineVisible ? "자세 파이프라인 끄기" : "자세 파이프라인 보기"}
-                </button>
-              )}
-            </div>
-          ) : (
-            <div className="flex aspect-video items-center justify-center text-sm text-gray-400">
-              {title} 이미지 없음
-            </div>
-          )}
-          <div className="border-t border-gray-100 p-3">
-            <div className="mb-3 flex items-center justify-between gap-3 text-sm font-medium text-gray-900">
-              <span>{scoreLabel}</span>
-              <strong className="tabular-nums">{score ?? "--"}</strong>
-            </div>
-            {canShowExplanation && (
-              <div className="space-y-2">
-                <p className="text-xs font-bold uppercase tracking-[0.16em] text-blue-600">왜 이 점수가 나왔나요?</p>
-                {explanation.map((step) => {
-                  const status = step.overrideStatus ?? getExplanationStatus(step.score);
-                  return (
-                    <div key={step.label} className="border-t border-gray-100 pt-2 text-sm">
-                      <div className="mb-1 flex flex-wrap items-center gap-2">
-                        <span className="font-bold text-gray-900">{step.label}</span>
+  const getPipelinePoint = (landmarks: SerializedPoseLandmark[], index: number) => {
+    const landmark = landmarks[index];
+    if (!landmark || !Number.isFinite(landmark.x) || !Number.isFinite(landmark.y) || (landmark.visibility ?? 1) < 0.35) {
+      return null;
+    }
+
+    return {
+      x: Math.max(0, Math.min(100, 100 - landmark.x * 100)),
+      y: Math.max(0, Math.min(100, landmark.y * 100)),
+    };
+  };
+
+  const renderPosePipeline = (landmarks: SerializedPoseLandmark[]) => (
+    <svg className="pointer-events-none absolute inset-0 h-full w-full" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+      {POSE_PIPELINE_CONNECTIONS.map(([from, to]) => {
+        const start = getPipelinePoint(landmarks, from);
+        const end = getPipelinePoint(landmarks, to);
+        if (!start || !end) {
+          return null;
+        }
+
+        return (
+          <line
+            key={`${from}-${to}`}
+            x1={start.x}
+            y1={start.y}
+            x2={end.x}
+            y2={end.y}
+            stroke="rgba(59, 130, 246, 0.88)"
+            strokeWidth="0.9"
+            strokeLinecap="round"
+            vectorEffect="non-scaling-stroke"
+          />
+        );
+      })}
+      {POSE_PIPELINE_POINTS.map((index) => {
+        const point = getPipelinePoint(landmarks, index);
+        if (!point) {
+          return null;
+        }
+
+        return (
+          <circle
+            key={index}
+            cx={point.x}
+            cy={point.y}
+            r="1.1"
+            fill="rgba(219, 234, 254, 0.95)"
+            stroke="rgba(37, 99, 235, 0.95)"
+            strokeWidth="0.45"
+            vectorEffect="non-scaling-stroke"
+          />
+        );
+      })}
+    </svg>
+  );
+
+  const renderExtremaImageCard = (session: SessionSummary, kind: ExtremaImageKind) => {
+    const isBest = kind === "best";
+    const imageUrl = isBest ? session.bestImageUrl : session.worstImageUrl;
+    const score = getPhotoDisplayScore(session, kind);
+    const imageVersion = isBest
+      ? session.bestImageCapturedAt ?? session.bestImageScore
+      : session.worstImageCapturedAt ?? session.worstImageScore;
+    const title = isBest ? "최고 자세" : "최저 자세";
+    const landmarks = isBest ? session.bestImageLandmarks : session.worstImageLandmarks;
+    const hasPosePipeline = Boolean(landmarks?.length);
+    const guidelineKey = `${session.sessionId}:${kind}`;
+    const isGuidelineVisible = visibleGuidelineImages.has(guidelineKey);
+    const canShowExplanation = Boolean(imageUrl) && typeof score === "number";
+    const explanation = canShowExplanation ? createPhotoScoreExplanation(session, kind) : [];
+
+    return (
+      <div className="overflow-hidden border border-gray-200 bg-white">
+        {imageUrl ? (
+          <div className="relative">
+            <img
+              src={appendImageVersion(imageUrl, imageVersion)}
+              alt={title}
+              className="aspect-video w-full object-cover"
+            />
+            {isGuidelineVisible && landmarks?.length ? renderPosePipeline(landmarks) : null}
+            {hasPosePipeline && (
+              <button
+                type="button"
+                onClick={() => toggleImageGuideline(guidelineKey)}
+                className="absolute right-2 top-2 border border-[#70E5C4]/60 bg-[#001A12]/75 px-2.5 py-1 text-xs font-bold text-[#D6F3EB]"
+              >
+                {isGuidelineVisible ? "자세 파이프라인 끄기" : "자세 파이프라인 보기"}
+              </button>
+            )}
+          </div>
+        ) : (
+          <div className="flex aspect-video items-center justify-center text-sm text-gray-400">
+            {title} 이미지 없음
+          </div>
+        )}
+        <div className="border-t border-gray-100 p-3">
+          <div className="mb-3 flex items-center justify-between gap-3 text-sm font-medium text-gray-900">
+            <span>{title}</span>
+            <span className="text-right">
+              <span className="block text-[11px] font-bold text-gray-500">목/상체 기준</span>
+              <strong className="tabular-nums">{score !== null ? `${score}점` : "--"}</strong>
+            </span>
+          </div>
+          {canShowExplanation && (
+            <div className="space-y-2">
+              <p className="text-xs font-bold uppercase tracking-[0.16em] text-blue-600">왜 이 점수가 나왔나요?</p>
+              {explanation.map((step) => {
+                const status = step.overrideStatus ?? getExplanationStatus(step.score);
+                const showStatus = step.showStatus !== false;
+                const showScore = step.showScore !== false;
+                return (
+                  <div key={step.label} className="border-t border-gray-100 pt-2 text-sm">
+                    <div className="mb-1 flex flex-wrap items-center gap-2">
+                      <span className="font-bold text-gray-900">{step.label}</span>
+                      {showStatus && (
                         <span className={`border px-2 py-0.5 text-[11px] font-bold ${status.className}`}>
                           {status.label}
                         </span>
-                        {typeof step.score === "number" && (
-                          <span className="text-xs font-bold tabular-nums text-gray-500">{Math.round(step.score)}점</span>
-                        )}
-                      </div>
-                      <p className="leading-5 text-gray-600">{step.message}</p>
+                      )}
+                      {showScore && typeof step.score === "number" && (
+                        <span className="text-xs font-bold tabular-nums text-gray-500">{Math.round(step.score)}점</span>
+                      )}
                     </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
+                    <p className="leading-5 text-gray-600">{step.message}</p>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
-      );
-    };
+      </div>
+    );
+  };
 
-    const historyGroupByDate = new Map(historyGroups.map((group) => [group.dateKey, group]));
-    const calendarDays = getCalendarDays(visibleHistoryMonthKey);
-    const todayDateKey = getKoreaDateKey();
-    const currentHistoryMonthKey = getMonthKey(todayDateKey);
-    const canGoNextHistoryMonth = visibleHistoryMonthKey < currentHistoryMonthKey;
+  const historyGroupByDate = new Map(historyGroups.map((group) => [group.dateKey, group]));
+  const calendarDays = getCalendarDays(visibleHistoryMonthKey);
+  const todayDateKey = getKoreaDateKey();
+  const currentHistoryMonthKey = getMonthKey(todayDateKey);
+  const canGoNextHistoryMonth = visibleHistoryMonthKey < currentHistoryMonthKey;
 
-    const historySessionsPerPage = 3;
-    const selectedHistorySessions = selectedHistoryGroup
-      ? [...selectedHistoryGroup.sessions].sort((left, right) => {
-          const rightTime = new Date(right.startedAt).getTime();
-          const leftTime = new Date(left.startedAt).getTime();
-          return (Number.isFinite(rightTime) ? rightTime : 0) - (Number.isFinite(leftTime) ? leftTime : 0);
-        })
-      : [];
-    const renderSelectedHistorySessionItem = (session: SessionSummary, index: number) => {
-      if (!selectedHistoryGroup) {
-        return null;
-      }
+  const historySessionsPerPage = 3;
+  const selectedHistorySessions = selectedHistoryGroup
+    ? [...selectedHistoryGroup.sessions].sort((left, right) => {
+      const rightTime = new Date(right.startedAt).getTime();
+      const leftTime = new Date(left.startedAt).getTime();
+      return (Number.isFinite(rightTime) ? rightTime : 0) - (Number.isFinite(leftTime) ? leftTime : 0);
+    })
+    : [];
+  const renderSelectedHistorySessionItem = (session: SessionSummary, index: number) => {
+    if (!selectedHistoryGroup) {
+      return null;
+    }
 
-      const sessionTitleKey = session.sessionTitleKey ?? getSessionTitleKey(session, selectedHistoryGroup.dateKey);
-      const isSelected = selectedHistorySessionKey === sessionTitleKey;
-      const sessionDuration = formatMinutes(session.durationMinutes ?? 0);
-      const averageText = session.averageScore === null ? "측정 부족" : `평균 ${session.averageScore}`;
+    const sessionTitleKey = session.sessionTitleKey ?? getSessionTitleKey(session, selectedHistoryGroup.dateKey);
+    const isSelected = selectedHistorySessionKey === sessionTitleKey;
+    const sessionDuration = formatMinutes(session.durationMinutes ?? 0);
+    const averageText = session.averageScore === null ? "측정 부족" : `평균 ${session.averageScore}`;
 
-      return (
+    return (
+      <div
+        key={sessionTitleKey}
+        className={`flex w-full items-stretch border transition-colors ${isSelected
+            ? "border-[#18755B] bg-[#C4F6E8] text-[#001A12]"
+            : "border-[rgba(18,100,76,0.18)] bg-white text-gray-700 hover:border-[#18755B]"
+          }`}
+      >
         <button
-          key={sessionTitleKey}
           type="button"
           onClick={() => {
             closeCalendarHelp();
             onSelectSession(sessionTitleKey, index, historySessionsPerPage);
           }}
-          className={`w-full border px-3 py-2.5 text-left transition-colors ${
-            isSelected
-              ? "border-[#18755B] bg-[#C4F6E8] text-[#001A12]"
-              : "border-[rgba(18,100,76,0.18)] bg-white text-gray-700 hover:border-[#18755B]"
-          }`}
+          className="min-w-0 flex-1 px-3 py-2.5 text-left"
         >
           <span className="block truncate text-sm font-bold">{getHistorySessionDisplayTitle(session)}</span>
           <span className="mt-1 block truncate text-xs text-gray-500">
@@ -537,227 +611,224 @@ export function HistoryView(props: HistoryViewProps) {
             {averageText}
           </span>
         </button>
-      );
-    };
-    const historySessionTotalPages = selectedHistoryGroup
-      ? Math.max(1, Math.ceil(selectedHistorySessions.length / historySessionsPerPage))
-      : 1;
-    const currentHistorySessionPage = Math.min(historySessionPage, historySessionTotalPages - 1);
-    const focusedHistorySession = selectedHistorySessionKey
-      ? selectedHistorySessions.find((session) => {
-          const sessionTitleKey = session.sessionTitleKey ?? getSessionTitleKey(session, selectedHistoryGroup?.dateKey ?? "");
-          return sessionTitleKey === selectedHistorySessionKey;
-        }) ?? null
-      : null;
-    const visibleHistorySessions = focusedHistorySession ? [focusedHistorySession] : [];
-    const canGoPreviousHistoryPage = !focusedHistorySession && currentHistorySessionPage > 0;
-    const canGoNextHistoryPage = !focusedHistorySession && currentHistorySessionPage < historySessionTotalPages - 1;
+        <button
+          type="button"
+          onClick={(event) => {
+            event.stopPropagation();
+            closeCalendarHelp();
+            onOpenDeleteSession(sessionTitleKey);
+          }}
+          className="flex w-10 shrink-0 items-center justify-center border-l border-red-100 bg-white text-red-500 transition-colors hover:border-red-200 hover:bg-red-50 hover:text-red-700"
+          aria-label="세션 삭제"
+        >
+          <Trash2 className="h-3.5 w-3.5" />
+        </button>
+      </div>
+    );
+  };
+  const historySessionTotalPages = selectedHistoryGroup
+    ? Math.max(1, Math.ceil(selectedHistorySessions.length / historySessionsPerPage))
+    : 1;
+  const currentHistorySessionPage = Math.min(historySessionPage, historySessionTotalPages - 1);
+  const focusedHistorySession = selectedHistorySessionKey
+    ? selectedHistorySessions.find((session) => {
+      const sessionTitleKey = session.sessionTitleKey ?? getSessionTitleKey(session, selectedHistoryGroup?.dateKey ?? "");
+      return sessionTitleKey === selectedHistorySessionKey;
+    }) ?? null
+    : null;
+  const visibleHistorySessions = focusedHistorySession ? [focusedHistorySession] : [];
+  const canGoPreviousHistoryPage = !focusedHistorySession && currentHistorySessionPage > 0;
+  const canGoNextHistoryPage = !focusedHistorySession && currentHistorySessionPage < historySessionTotalPages - 1;
 
-    return (
-      <div className="space-y-6">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">기록</h1>
+  return (
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-3xl font-bold text-gray-900">기록</h1>
+      </div>
+
+      {isCalendarHelpOpen && calendarHelpPosition && (
+        <div
+          ref={calendarHelpPopoverRef}
+          className="fixed z-50 w-64 max-w-[calc(100vw-1.5rem)] border border-[rgba(18,100,76,0.18)] bg-white p-3 text-left text-xs shadow-lg"
+          style={{ left: calendarHelpPosition.left, top: calendarHelpPosition.top }}
+        >
+          <p className="mb-2 font-bold text-gray-900">날짜 색상 의미</p>
+          <div className="space-y-2 text-gray-600">
+            <div className="flex items-center gap-2">
+              <span className="h-3 w-3 border border-[#39AF8E] bg-[#E7FFF7]" />
+              <span>좋음 · 80점 이상</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="h-3 w-3 border border-yellow-400 bg-yellow-50" />
+              <span>주의 · 60~79점</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="h-3 w-3 border border-red-300 bg-red-50" />
+              <span>위험 · 60점 미만</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="h-3 w-3 border border-gray-300 bg-gray-50" />
+              <span>평균 -- · 측정 부족</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="h-3 w-3 border border-transparent bg-transparent ring-1 ring-gray-200" />
+              <span>기록 없는 날짜</span>
+            </div>
+          </div>
+          <p className="mt-3 border-t border-gray-100 pt-2 font-medium text-gray-500">
+            날짜 색상은 그날 평균 점수 기준이에요.
+          </p>
         </div>
+      )}
 
-        {isCalendarHelpOpen && calendarHelpPosition && (
-          <div
-            ref={calendarHelpPopoverRef}
-            className="fixed z-50 w-64 max-w-[calc(100vw-1.5rem)] border border-[rgba(18,100,76,0.18)] bg-white p-3 text-left text-xs shadow-lg"
-            style={{ left: calendarHelpPosition.left, top: calendarHelpPosition.top }}
-          >
-            <p className="mb-2 font-bold text-gray-900">날짜 색상 의미</p>
-            <div className="space-y-2 text-gray-600">
-              <div className="flex items-center gap-2">
-                <span className="h-3 w-3 border border-[#39AF8E] bg-[#E7FFF7]" />
-                <span>좋음 · 80점 이상</span>
+      {isLoadingHistory ? (
+        <div className="app-surface p-6 text-gray-600">
+          기록을 불러오는 중입니다...
+        </div>
+      ) : historyGroups.length === 0 ? (
+        <div className="app-surface border-l-4 border-l-[#18755B] p-6">
+          <p className="font-bold text-gray-900">아직 기록이 없습니다</p>
+          <p className="mt-1 text-sm text-gray-600">분석을 시작하면 날짜별 기록과 세션 요약이 여기에 표시됩니다.</p>
+        </div>
+      ) : selectedHistoryGroup ? (
+        <div className="grid gap-4 lg:grid-cols-[minmax(280px,340px)_minmax(0,1fr)] lg:items-start">
+          <section className="app-surface p-5 lg:sticky lg:top-4 lg:max-h-[calc(100vh-8rem)] lg:overflow-y-auto">
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <div>
+                <h2 className="text-base font-bold text-gray-900">기록 달력</h2>
+                <p className="mt-1 text-xs font-medium text-gray-500">{historyGroups.length}일 기록</p>
               </div>
-              <div className="flex items-center gap-2">
-                <span className="h-3 w-3 border border-yellow-400 bg-yellow-50" />
-                <span>주의 · 60~79점</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="h-3 w-3 border border-red-300 bg-red-50" />
-                <span>위험 · 60점 미만</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="h-3 w-3 border border-gray-300 bg-gray-50" />
-                <span>평균 -- · 측정 부족</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="h-3 w-3 border border-transparent bg-transparent ring-1 ring-gray-200" />
-                <span>기록 없는 날짜</span>
+              <div className="flex items-center gap-1">
+                <div ref={calendarHelpRef} className="relative">
+                  <button
+                    type="button"
+                    onClick={toggleCalendarHelp}
+                    className="flex h-8 w-8 items-center justify-center border border-[rgba(18,100,76,0.2)] bg-white text-[#18755B] transition-colors hover:border-[#18755B]"
+                    aria-label="날짜 색상 설명"
+                    aria-expanded={isCalendarHelpOpen}
+                  >
+                    <HelpCircle className="h-4 w-4" />
+                  </button>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    closeCalendarHelp();
+                    onShiftMonth(-1);
+                  }}
+                  className="flex h-8 w-8 items-center justify-center border border-[rgba(18,100,76,0.2)] bg-white text-[#18755B]"
+                  aria-label="이전 달"
+                >
+                  <ChevronRight className="h-4 w-4 rotate-180" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    closeCalendarHelp();
+                    onShiftMonth(1);
+                  }}
+                  disabled={!canGoNextHistoryMonth}
+                  className={`flex h-8 w-8 items-center justify-center border border-[rgba(18,100,76,0.2)] ${canGoNextHistoryMonth
+                      ? "bg-white text-[#18755B]"
+                      : "cursor-not-allowed bg-gray-100 text-gray-300"
+                    }`}
+                  aria-label="다음 달"
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </button>
               </div>
             </div>
-            <p className="mt-3 border-t border-gray-100 pt-2 font-medium text-gray-500">
-              날짜 색상은 그날 평균 점수 기준이에요.
-            </p>
-          </div>
-        )}
+            <div className="mb-3 text-center text-sm font-bold text-gray-900">
+              {formatHistoryMonthLabel(visibleHistoryMonthKey)}
+            </div>
+            <div className="grid grid-cols-7 gap-1 text-center text-[11px] font-bold text-gray-500">
+              {["일", "월", "화", "수", "목", "금", "토"].map((dayName) => (
+                <span key={dayName} className="py-1">
+                  {dayName}
+                </span>
+              ))}
+            </div>
+            <div className="mt-1 grid grid-cols-7 gap-1">
+              {calendarDays.map((dateKey, index) => {
+                const dayGroup = dateKey ? historyGroupByDate.get(dateKey) : null;
+                const isSelected = Boolean(dateKey && selectedHistoryGroup?.dateKey === dateKey);
+                const isToday = dateKey === todayDateKey;
+                const dayNumber = dateKey ? Number(dateKey.slice(-2)) : null;
+                const calendarTone = dayGroup ? getHistoryCalendarToneClass(dayGroup.averageScore) : null;
 
-        {isLoadingHistory ? (
-          <div className="app-surface p-6 text-gray-600">
-            기록을 불러오는 중입니다...
-          </div>
-        ) : historyGroups.length === 0 ? (
-          <div className="app-surface border-l-4 border-l-[#18755B] p-6">
-            <p className="font-bold text-gray-900">아직 기록이 없습니다</p>
-            <p className="mt-1 text-sm text-gray-600">분석을 시작하면 날짜별 기록과 세션 요약이 여기에 표시됩니다.</p>
-          </div>
-        ) : selectedHistoryGroup ? (
-          <div className="grid gap-4 lg:grid-cols-[minmax(280px,340px)_minmax(0,1fr)] lg:items-start">
-            <section className="app-surface p-5 lg:sticky lg:top-4 lg:max-h-[calc(100vh-8rem)] lg:overflow-y-auto">
-              <div className="mb-4 flex items-center justify-between gap-3">
-                <div>
-                  <h2 className="text-base font-bold text-gray-900">기록 달력</h2>
-                  <p className="mt-1 text-xs font-medium text-gray-500">{historyGroups.length}일 기록</p>
-                </div>
-                <div className="flex items-center gap-1">
-                  <div ref={calendarHelpRef} className="relative">
-                    <button
-                      type="button"
-                      onClick={toggleCalendarHelp}
-                      className="flex h-8 w-8 items-center justify-center border border-[rgba(18,100,76,0.2)] bg-white text-[#18755B] transition-colors hover:border-[#18755B]"
-                      aria-label="날짜 색상 설명"
-                      aria-expanded={isCalendarHelpOpen}
-                    >
-                      <HelpCircle className="h-4 w-4" />
-                    </button>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      closeCalendarHelp();
-                      onOpenDelete();
-                    }}
-                    disabled={selectedHistorySessions.length === 0}
-                    className="flex h-8 items-center justify-center gap-1.5 border border-red-200 bg-white px-2.5 text-xs font-bold text-red-700 disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-300"
-                    aria-label="기록 삭제"
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                    <span>기록 삭제</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      closeCalendarHelp();
-                      onShiftMonth(-1);
-                    }}
-                    className="flex h-8 w-8 items-center justify-center border border-[rgba(18,100,76,0.2)] bg-white text-[#18755B]"
-                    aria-label="이전 달"
-                  >
-                    <ChevronRight className="h-4 w-4 rotate-180" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      closeCalendarHelp();
-                      onShiftMonth(1);
-                    }}
-                    disabled={!canGoNextHistoryMonth}
-                    className={`flex h-8 w-8 items-center justify-center border border-[rgba(18,100,76,0.2)] ${
-                      canGoNextHistoryMonth
-                        ? "bg-white text-[#18755B]"
-                        : "cursor-not-allowed bg-gray-100 text-gray-300"
-                    }`}
-                    aria-label="다음 달"
-                  >
-                    <ChevronRight className="h-4 w-4" />
-                  </button>
-                </div>
-              </div>
-              <div className="mb-3 text-center text-sm font-bold text-gray-900">
-                {formatHistoryMonthLabel(visibleHistoryMonthKey)}
-              </div>
-              <div className="grid grid-cols-7 gap-1 text-center text-[11px] font-bold text-gray-500">
-                {["일", "월", "화", "수", "목", "금", "토"].map((dayName) => (
-                  <span key={dayName} className="py-1">
-                    {dayName}
-                  </span>
-                ))}
-              </div>
-              <div className="mt-1 grid grid-cols-7 gap-1">
-                {calendarDays.map((dateKey, index) => {
-                  const dayGroup = dateKey ? historyGroupByDate.get(dateKey) : null;
-                  const isSelected = Boolean(dateKey && selectedHistoryGroup?.dateKey === dateKey);
-                  const isToday = dateKey === todayDateKey;
-                  const dayNumber = dateKey ? Number(dateKey.slice(-2)) : null;
-                  const calendarTone = dayGroup ? getHistoryCalendarToneClass(dayGroup.averageScore) : null;
+                if (!dateKey) {
+                  return <span key={`empty-${index}`} className="aspect-square" />;
+                }
 
-                  if (!dateKey) {
-                    return <span key={`empty-${index}`} className="aspect-square" />;
-                  }
-
-                  return (
-                    <button
-                      key={dateKey}
-                      type="button"
-                      disabled={!dayGroup}
-                      onClick={() => {
-                        if (!dayGroup) {
-                          return;
-                        }
-                        closeCalendarHelp();
-                        onSelectDate(dateKey);
-                      }}
-                      className={`relative flex aspect-square min-h-9 items-center justify-center border text-sm font-bold transition-colors ${
-                        isSelected
-                          ? isToday
-                            ? "border-[#003D2B] bg-[#003D2B] text-white ring-2 ring-[#001A12]"
-                            : `${calendarTone?.border ?? "border-[#18755B]"} ${calendarTone?.bg ?? "bg-[#E7FFF7]"} ${
-                                calendarTone?.text ?? "text-[#12644C]"
-                              } ring-2 ${calendarTone?.ring ?? "ring-[#39AF8E]"}`
-                          : isToday
-                            ? "border-[#003D2B] bg-[#003D2B] text-white ring-2 ring-[#001A12]"
-                            : dayGroup
+                return (
+                  <button
+                    key={dateKey}
+                    type="button"
+                    disabled={!dayGroup}
+                    onClick={() => {
+                      if (!dayGroup) {
+                        return;
+                      }
+                      closeCalendarHelp();
+                      onSelectDate(dateKey);
+                    }}
+                    className={`relative flex aspect-square min-h-9 items-center justify-center border text-sm font-bold transition-colors ${isSelected
+                        ? isToday
+                          ? "border-[#003D2B] bg-[#003D2B] text-white ring-2 ring-[#001A12]"
+                          : `${calendarTone?.border ?? "border-[#18755B]"} ${calendarTone?.bg ?? "bg-[#E7FFF7]"} ${calendarTone?.text ?? "text-[#12644C]"
+                          } ring-2 ${calendarTone?.ring ?? "ring-[#39AF8E]"}`
+                        : isToday
+                          ? "border-[#003D2B] bg-[#003D2B] text-white ring-2 ring-[#001A12]"
+                          : dayGroup
                             ? `${calendarTone?.border} ${calendarTone?.bg} ${calendarTone?.text} hover:border-[#18755B]`
                             : "border-transparent bg-transparent text-gray-300"
                       }`}
-                    >
-                      {dayNumber}
-                    </button>
-                  );
-                })}
+                  >
+                    {dayNumber}
+                  </button>
+                );
+              })}
+            </div>
+            <div className="mt-5 border-t border-[rgba(18,100,76,0.14)] pb-2 pt-4 lg:pr-1">
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <h3 className="text-sm font-bold text-gray-900">선택한 날짜의 세션</h3>
+                <span className="text-xs font-medium text-gray-500">{selectedHistorySessions.length}개</span>
               </div>
-              <div className="mt-5 border-t border-[rgba(18,100,76,0.14)] pb-2 pt-4 lg:pr-1">
-                <div className="mb-2 flex items-center justify-between gap-2">
-                  <h3 className="text-sm font-bold text-gray-900">선택한 날짜의 세션</h3>
-                  <span className="text-xs font-medium text-gray-500">{selectedHistorySessions.length}개</span>
+              {selectedHistorySessions.length > 0 ? (
+                <div className="grid gap-2">
+                  {selectedHistorySessions.map(renderSelectedHistorySessionItem)}
                 </div>
-                {selectedHistorySessions.length > 0 ? (
-                  <div className="grid gap-2">
-                    {selectedHistorySessions.map(renderSelectedHistorySessionItem)}
-                  </div>
-                ) : (
-                  <p className="border border-dashed border-gray-200 bg-white px-3 py-3 text-sm text-gray-500">
-                    선택한 날짜의 세션이 없습니다.
-                  </p>
+              ) : (
+                <p className="border border-dashed border-gray-200 bg-white px-3 py-3 text-sm text-gray-500">
+                  선택한 날짜의 세션이 없습니다.
+                </p>
+              )}
+            </div>
+          </section>
+
+          <div className="min-w-0 space-y-4">
+            <section className="app-surface p-6">
+              <div className="mb-4">
+                <h3 className="text-lg font-bold text-gray-900">{formatDateKey(selectedHistoryGroup.dateKey)}</h3>
+                <p className="text-sm text-gray-500">선택한 날짜의 자세 기록</p>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                {renderStatCard("총 측정", `${selectedHistoryGroup.sessionCount}회`, <Activity className="h-4 w-4" />)}
+                {renderStatCard(
+                  "평균",
+                  selectedHistoryGroup.averageScore ?? "--",
+                  <CheckCircle className="h-4 w-4" />,
+                  { badge: selectedHistoryGroup.averageScore === null ? missingScoreBadge : null }
+                )}
+                {renderStatCard("사용 시간", formatMinutes(selectedHistoryGroup.totalUsageMinutes), <Clock className="h-4 w-4" />)}
+                {renderStatCard(
+                  "알림",
+                  `${selectedHistoryGroup.alertCount}회`,
+                  <Bell className="h-4 w-4" />,
+                  { tone: selectedHistoryGroup.alertCount > 0 ? "warning" : "neutral" }
                 )}
               </div>
             </section>
-
-            <div className="min-w-0 space-y-4">
-              <section className="app-surface p-6">
-                <div className="mb-4">
-                  <h3 className="text-lg font-bold text-gray-900">{formatDateKey(selectedHistoryGroup.dateKey)}</h3>
-                  <p className="text-sm text-gray-500">선택한 날짜의 자세 기록</p>
-                </div>
-                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                  {renderStatCard("총 측정", `${selectedHistoryGroup.sessionCount}회`, <Activity className="h-4 w-4" />)}
-                  {renderStatCard(
-                    "평균",
-                    selectedHistoryGroup.averageScore ?? "--",
-                    <CheckCircle className="h-4 w-4" />,
-                    { badge: selectedHistoryGroup.averageScore === null ? missingScoreBadge : null }
-                  )}
-                  {renderStatCard("사용 시간", formatMinutes(selectedHistoryGroup.totalUsageMinutes), <Clock className="h-4 w-4" />)}
-                  {renderStatCard(
-                    "알림",
-                    `${selectedHistoryGroup.alertCount}회`,
-                    <Bell className="h-4 w-4" />,
-                    { tone: selectedHistoryGroup.alertCount > 0 ? "warning" : "neutral" }
-                  )}
-                </div>
-              </section>
 
             <section className="space-y-3">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -778,25 +849,25 @@ export function HistoryView(props: HistoryViewProps) {
                     >
                       닫기
                     </button>
-                  <button
-                    type="button"
-                    onClick={() => onChangePage(-1)}
-                    disabled={!canGoPreviousHistoryPage}
-                    className="flex h-9 w-9 items-center justify-center border border-gray-300 bg-white text-gray-700 disabled:cursor-not-allowed disabled:opacity-40"
-                    aria-label="이전 세션 페이지"
-                  >
-                    <ChevronLeft className="h-4 w-4" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => onChangePage(1)}
-                    disabled={!canGoNextHistoryPage}
-                    className="flex h-9 w-9 items-center justify-center border border-gray-300 bg-white text-gray-700 disabled:cursor-not-allowed disabled:opacity-40"
-                    aria-label="다음 세션 페이지"
-                  >
-                    <ChevronRight className="h-4 w-4" />
-                  </button>
-                </div>
+                    <button
+                      type="button"
+                      onClick={() => onChangePage(-1)}
+                      disabled={!canGoPreviousHistoryPage}
+                      className="flex h-9 w-9 items-center justify-center border border-gray-300 bg-white text-gray-700 disabled:cursor-not-allowed disabled:opacity-40"
+                      aria-label="이전 세션 페이지"
+                    >
+                      <ChevronLeft className="h-4 w-4" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onChangePage(1)}
+                      disabled={!canGoNextHistoryPage}
+                      className="flex h-9 w-9 items-center justify-center border border-gray-300 bg-white text-gray-700 disabled:cursor-not-allowed disabled:opacity-40"
+                      aria-label="다음 세션 페이지"
+                    >
+                      <ChevronRight className="h-4 w-4" />
+                    </button>
+                  </div>
                 )}
               </div>
 
@@ -833,9 +904,8 @@ export function HistoryView(props: HistoryViewProps) {
                 return (
                   <article
                     key={session.sessionId}
-                    className={`app-surface p-5 transition-colors ${
-                      isSelectedHistorySession ? "border-[#18755B] bg-[#F0FBF7]" : ""
-                    }`}
+                    className={`app-surface p-5 transition-colors ${isSelectedHistorySession ? "border-[#18755B] bg-[#F0FBF7]" : ""
+                      }`}
                   >
                     <div className="flex flex-col justify-between gap-3 border-b border-[rgba(18,100,76,0.16)] pb-4 md:flex-row md:items-start">
                       <div className="min-w-0 flex-1">
@@ -1074,15 +1144,15 @@ export function HistoryView(props: HistoryViewProps) {
                 );
               })}
             </section>
-            </div>
           </div>
-        ) : (
-          <div className="app-surface p-6 text-gray-600">
-            기록을 불러오는 중입니다...
-          </div>
-        )}
-      </div>
-    );
-  };
+        </div>
+      ) : (
+        <div className="app-surface p-6 text-gray-600">
+          기록을 불러오는 중입니다...
+        </div>
+      )}
+    </div>
+  );
+};
 
 

@@ -107,7 +107,7 @@ export function PostureCoachApp() {
     openPendingTitle,
     saveHistoryTitle: handleSaveHistorySessionTitle,
     savePendingTitle: handleSavePendingSessionTitle,
-    openDelete: openHistoryDeleteModal,
+    openDeleteForSession: openHistoryDeleteForSession,
     closeDelete: closeHistoryDeleteModal,
     deleteRecords: handleDeleteHistoryRecords,
     setSelectedHistoryDateKey,
@@ -401,7 +401,7 @@ export function PostureCoachApp() {
               setHistorySessionPage(Math.floor(index / pageSize));
               setSelectedHistorySessionKey(sessionTitleKey);
             }}
-            onOpenDelete={openHistoryDeleteModal}
+            onOpenDeleteSession={openHistoryDeleteForSession}
             onShiftMonth={(offset) =>
               setVisibleHistoryMonthKey((current) => {
                 const next = shiftMonthKey(current, offset);

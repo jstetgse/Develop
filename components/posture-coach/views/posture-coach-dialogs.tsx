@@ -123,7 +123,6 @@ export function PostureCoachDialogs(props: PostureCoachDialogsProps) {
       ? "1분부터 10분까지 입력해주세요"
       : "";
   const canApplySettings = !badPostureDurationError && settingsSaveStatus !== "saving";
-  const isWindowsNotificationBlocked = settingsDraft.notificationPermissionStatus === "denied";
 
   const ToggleControl = ({
     checked,
@@ -354,39 +353,36 @@ export function PostureCoachDialogs(props: PostureCoachDialogsProps) {
                   onChange={(checked) => onUpdateSettingsDraft({ badPostureTestAlertEnabled: checked })}
                   label="테스트 모드: 나쁜 자세가 1초 이상 지속되면 알림"
                 />
-                <div className="border border-gray-100 bg-[rgba(196,246,232,0.24)] p-4">
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                    <div>
-                      <p className="font-medium text-gray-900">Windows 알림</p>
-                      <p className="mt-1 text-sm text-gray-600">
-                        현재 상태:{" "}
-                        {settingsDraft.notificationPermissionStatus === "granted"
-                          ? "허용됨"
-                          : settingsDraft.notificationPermissionStatus === "denied"
+                {settingsDraft.notificationPermissionStatus !== "granted" && (
+                  <div className="border border-gray-100 bg-[rgba(196,246,232,0.24)] p-4">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                      <div>
+                        <p className="font-medium text-gray-900">Windows 알림</p>
+                        <p className="mt-1 text-sm text-gray-600">
+                          현재 상태:{" "}
+                          {settingsDraft.notificationPermissionStatus === "denied"
                             ? "차단됨"
                             : settingsDraft.notificationPermissionStatus === "unsupported"
                               ? "지원 안 됨"
                               : "권한 필요"}
-                      </p>
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => void onRequestNotificationPermission()}
+                        disabled={settingsDraft.notificationPermissionStatus === "unsupported"}
+                        className="inline-flex min-h-10 items-center justify-center border border-blue-200 bg-white px-4 py-2 text-sm font-bold text-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        Windows 알림 허용
+                      </button>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => void onRequestNotificationPermission()}
-                      disabled={
-                        settingsDraft.notificationPermissionStatus === "granted" ||
-                        settingsDraft.notificationPermissionStatus === "unsupported"
-                      }
-                      className="inline-flex min-h-10 items-center justify-center border border-blue-200 bg-white px-4 py-2 text-sm font-bold text-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
-                    >
-                      Windows 알림 허용
-                    </button>
+                    {settingsDraft.notificationPermissionStatus === "denied" && (
+                      <p className="mt-3 text-sm leading-6 text-red-600">
+                        브라우저에서 알림이 차단되어 있습니다. 주소창 왼쪽 사이트 설정에서 알림 권한을 허용해주세요.
+                      </p>
+                    )}
                   </div>
-                  {isWindowsNotificationBlocked && (
-                    <p className="mt-3 text-sm leading-6 text-red-600" role="alert">
-                      브라우저에서 알림이 차단되어 있습니다. 주소창 왼쪽 사이트 설정에서 알림 권한을 허용해주세요.
-                    </p>
-                  )}
-                </div>
+                )}
                 <div className="grid gap-3 sm:grid-cols-2">
                   <label className="block">
                     <span className="text-sm font-medium text-gray-700">
@@ -774,3 +770,4 @@ export function PostureCoachDialogs(props: PostureCoachDialogsProps) {
     </>
   );
 }
+

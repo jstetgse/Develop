@@ -84,6 +84,14 @@ export function useHistoryRecords(uid: string | null, onClearLiveScores: () => v
 
   const openPendingTitle = useCallback((session: PendingTitleSession) => { setPendingTitleSession(session); setPendingTitleDraft(""); setPendingTitleError(null); }, []);
   const openDelete = useCallback(() => { setHistoryDeleteScope(null); setHistoryDeleteStep("scope"); setHistoryDeleteSessionKeys([]); setHistoryDeleteError(null); setIsHistoryDeleteModalOpen(true); }, []);
+  const openDeleteForSession = useCallback((sessionTitleKey: string) => {
+    if (isDeletingHistory) return;
+    setHistoryDeleteScope("sessions");
+    setHistoryDeleteStep("confirm");
+    setHistoryDeleteSessionKeys([sessionTitleKey]);
+    setHistoryDeleteError(null);
+    setIsHistoryDeleteModalOpen(true);
+  }, [isDeletingHistory]);
   const closeDelete = useCallback(() => { if (isDeletingHistory) return; setIsHistoryDeleteModalOpen(false); setHistoryDeleteScope(null); setHistoryDeleteStep("scope"); setHistoryDeleteSessionKeys([]); setHistoryDeleteError(null); }, [isDeletingHistory]);
   const selectedHistoryGroup = useMemo(() => historyGroups.find((group) => group.dateKey === selectedHistoryDateKey) ?? historyGroups[0] ?? null, [historyGroups, selectedHistoryDateKey]);
 
@@ -112,7 +120,7 @@ export function useHistoryRecords(uid: string | null, onClearLiveScores: () => v
     sessionTitleErrors, pendingTitleSession, pendingTitleDraft, pendingTitleSaving, pendingTitleError,
     isHistoryDeleteModalOpen, historyDeleteScope, historyDeleteStep, historyDeleteSessionKeys,
     isDeletingHistory, historyDeleteError, refreshHistory, openPendingTitle, saveHistoryTitle,
-    savePendingTitle, openDelete, closeDelete, deleteRecords, setSelectedHistoryDateKey,
+    savePendingTitle, openDelete, openDeleteForSession, closeDelete, deleteRecords, setSelectedHistoryDateKey,
     setVisibleHistoryMonthKey, setHistorySessionPage, setSelectedHistorySessionKey,
     setExpandedHistoryImageSessions, setEditingSessionTitleKey, setSessionTitleDraft,
     setSessionTitleErrors, setPendingTitleDraft, setHistoryDeleteScope, setHistoryDeleteStep,

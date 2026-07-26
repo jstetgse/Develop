@@ -289,7 +289,7 @@ export function StretchingView(props: StretchingViewProps) {
         <section className="app-surface flex h-full flex-col p-4">
           <div className="mb-2 flex flex-col justify-between gap-2 sm:flex-row sm:items-start">
             <div>
-              <p className="mb-1 text-xs font-bold uppercase tracking-[0.18em] text-blue-600">실시간 카메라 이거 좀 바꾸고 싶은데</p>
+              <p className="mb-1 text-xs font-bold uppercase tracking-[0.18em] text-blue-600">카메라 분석</p>
               <div className="flex flex-wrap items-center gap-2">
                 <h2 className="text-2xl font-bold text-gray-900">스트레칭 분석</h2>
                 <button
@@ -478,7 +478,7 @@ export function StretchingView(props: StretchingViewProps) {
 
           {isStretchingMode && selectedStretch && (
             <section className="app-surface flex min-h-[170px] flex-1 flex-col p-4">
-              <h3 className="mb-2 text-lg font-bold text-gray-900">다음 단계</h3>
+              <h3 className="mb-2 text-lg font-bold text-gray-900">{nextStretchStep ? "다음 단계" : "마무리"}</h3>
               {nextStretchStep ? (
                 <button
                   type="button"
@@ -503,9 +503,19 @@ export function StretchingView(props: StretchingViewProps) {
                   </div>
                 </button>
               ) : (
-                <p className="border border-[#18755B]/15 bg-[#E7FFF7]/45 px-3 py-3 text-sm font-bold text-[#18755B]">
-                  마지막 단계입니다. 현재 안내에 맞춰 마무리하세요.
-                </p>
+                <div className="flex flex-1 flex-col justify-between gap-3 border border-[#18755B]/15 bg-[#E7FFF7]/45 p-3">
+                  <div>
+                    <p className="text-sm font-bold text-[#18755B]">마지막 단계입니다. 현재 안내에 맞춰 마무리하세요.</p>
+                    <p className="mt-2 text-sm leading-5 text-gray-600">완료하면 결과 창에서 다음 행동을 선택할 수 있습니다.</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleNextStretchStep}
+                    className="min-h-10 w-full bg-[#18755B] px-4 py-2 text-sm font-bold text-white"
+                  >
+                    스트레칭 끝내기
+                  </button>
+                </div>
               )}
             </section>
           )}
