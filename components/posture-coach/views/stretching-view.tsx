@@ -482,7 +482,7 @@ export function StretchingView(props: StretchingViewProps) {
               {nextStretchStep ? (
                 <button
                   type="button"
-                  onClick={() => onSelectStep(activeStretchStepIndex + 1)}
+                  onClick={handleNextStretchStep}
                   className="flex w-full flex-1 flex-col border border-gray-200 bg-white p-3 text-left"
                 >
                   <div className="flex items-start gap-3">

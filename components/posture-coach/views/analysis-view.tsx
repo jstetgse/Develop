@@ -29,7 +29,7 @@ export function AnalysisView(props: AnalysisViewProps) {
       <section className="app-surface flex h-full flex-col p-4">
         <div className="mb-2 flex flex-col justify-between gap-2 sm:flex-row sm:items-start">
           <div>
-            <p className="mb-1 text-xs font-bold uppercase tracking-[0.18em] text-blue-600">실시간 카메라</p>
+            <p className="mb-1 text-xs font-bold uppercase tracking-[0.18em] text-blue-600">카메라 분석</p>
             <div className="flex items-center gap-2">
               <h2 className="text-2xl font-bold text-gray-900">측면 자세 분석</h2>
               <button
