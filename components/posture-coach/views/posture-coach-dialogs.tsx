@@ -123,6 +123,7 @@ export function PostureCoachDialogs(props: PostureCoachDialogsProps) {
       ? "1분부터 10분까지 입력해주세요"
       : "";
   const canApplySettings = !badPostureDurationError && settingsSaveStatus !== "saving";
+  const isWindowsNotificationBlocked = settingsDraft.notificationPermissionStatus === "denied";
 
   const ToggleControl = ({
     checked,
@@ -380,8 +381,8 @@ export function PostureCoachDialogs(props: PostureCoachDialogsProps) {
                       Windows 알림 허용
                     </button>
                   </div>
-                  {settingsDraft.notificationPermissionStatus === "denied" && (
-                    <p className="mt-3 text-sm leading-6 text-red-600">
+                  {isWindowsNotificationBlocked && (
+                    <p className="mt-3 text-sm leading-6 text-red-600" role="alert">
                       브라우저에서 알림이 차단되어 있습니다. 주소창 왼쪽 사이트 설정에서 알림 권한을 허용해주세요.
                     </p>
                   )}
@@ -773,4 +774,3 @@ export function PostureCoachDialogs(props: PostureCoachDialogsProps) {
     </>
   );
 }
-

@@ -9,7 +9,7 @@ import { averageScores, createLiveScorePoint, withPostureScore } from "@/lib/pos
 import { calculateSessionAverage } from "@/lib/posture/posture-session-summary";
 import { PostureAnalyzer } from "@/lib/posture-analysis";
 import { saveAlertLog, saveScorePoint, uploadSessionExtremaImage } from "@/lib/repositories/posture-session-repository";
-import type { PostureAreaStats, PostureResult, Settings } from "@/lib/types";
+import type { PostureAreaStats, PostureImageAnalysis, PostureResult, SerializedPoseLandmark, Settings } from "@/lib/types";
 
 type ScorePoint = { id: string; time: string; timestamp: number; score: number };
 type SnapshotExtrema = {
@@ -18,6 +18,8 @@ type SnapshotExtrema = {
   imagePath: string | null;
   imageScore: number | null;
   imageCapturedAt: number | null;
+  imageAnalysis?: PostureImageAnalysis | null;
+  imageLandmarks?: SerializedPoseLandmark[] | null;
 } | null;
 type ExtremaImageKind = "best" | "worst";
 
@@ -81,7 +83,41 @@ function createExtremaScore(score: number): NonNullable<SnapshotExtrema> {
     imagePath: null,
     imageScore: null,
     imageCapturedAt: null,
+    imageAnalysis: null,
+    imageLandmarks: null,
   };
+}
+
+function createImageAnalysis(posture: PostureResult): PostureImageAnalysis | null {
+  if (typeof posture.score !== "number") {
+    return null;
+  }
+
+  return {
+    score: posture.score,
+    neckScore: typeof posture.metrics?.neckScore === "number" ? posture.metrics.neckScore : null,
+    trunkScore: typeof posture.metrics?.trunkScore === "number" ? posture.metrics.trunkScore : null,
+    neckAngleDegrees: typeof posture.metrics?.neckAngleDegrees === "number" ? posture.metrics.neckAngleDegrees : null,
+    trunkLeanDegrees: typeof posture.metrics?.trunkLeanDegrees === "number" ? posture.metrics.trunkLeanDegrees : null,
+    neckForwardOffset: typeof posture.metrics?.neckForwardOffset === "number" ? posture.metrics.neckForwardOffset : null,
+    mainIssue: posture.mainIssue,
+    analysisSide: posture.analysisSide,
+  };
+}
+
+function clonePoseLandmarks(landmarks: SerializedPoseLandmark[] | null | undefined) {
+  if (!landmarks?.length) {
+    return null;
+  }
+
+  return landmarks
+    .filter((landmark) => Number.isFinite(landmark.x) && Number.isFinite(landmark.y))
+    .map((landmark) => ({
+      x: landmark.x,
+      y: landmark.y,
+      z: typeof landmark.z === "number" ? landmark.z : undefined,
+      visibility: typeof landmark.visibility === "number" ? landmark.visibility : undefined,
+    }));
 }
 
 function shouldUploadBestImage(snapshot: SnapshotExtrema, score: number, now: number, lastUploadedAt: number) {
@@ -120,7 +156,7 @@ export function usePostureSession({ uid, settings, captureCurrentFrame, setActiv
   const postureAreaStatsRef = useRef<PostureAreaStats>(createEmptyPostureAreaStats());
   const lastScoreTrendUpdateAtRef = useRef(0);
   const nextStretchReminderAtRef = useRef(0);
-  const latestLandmarksRef = useRef<unknown[] | null>(null);
+  const latestLandmarksRef = useRef<SerializedPoseLandmark[] | null>(null);
   const alertVisibleUntilRef = useRef(0);
   const postureAlertVisibleUntilRef = useRef(0);
   const stretchAlertVisibleUntilRef = useRef(0);
@@ -153,7 +189,9 @@ export function usePostureSession({ uid, settings, captureCurrentFrame, setActiv
     kind: ExtremaImageKind,
     score: number,
     imageDataUrl: string,
-    capturedAt: number
+    capturedAt: number,
+    imageAnalysis: PostureImageAnalysis | null,
+    imageLandmarks: SerializedPoseLandmark[] | null
   ) => {
     const currentUid = uidRef.current;
     const sessionId = sessionIdRef.current;
@@ -188,6 +226,8 @@ export function usePostureSession({ uid, settings, captureCurrentFrame, setActiv
           imagePath: uploaded.imagePath,
           imageScore: score,
           imageCapturedAt: capturedAt,
+          imageAnalysis,
+          imageLandmarks,
         };
 
         if (isBest) {
@@ -248,12 +288,14 @@ export function usePostureSession({ uid, settings, captureCurrentFrame, setActiv
       return;
     }
 
+    const imageAnalysis = createImageAnalysis(posture);
+    const imageLandmarks = clonePoseLandmarks(latestLandmarksRef.current);
     const uploads: Promise<void>[] = [];
     if (shouldUploadBest) {
-      uploads.push(uploadExtremaImage("best", score, imageDataUrl, now));
+      uploads.push(uploadExtremaImage("best", score, imageDataUrl, now, imageAnalysis, imageLandmarks));
     }
     if (shouldUploadWorst) {
-      uploads.push(uploadExtremaImage("worst", score, imageDataUrl, now));
+      uploads.push(uploadExtremaImage("worst", score, imageDataUrl, now, imageAnalysis, imageLandmarks));
     }
 
     void Promise.allSettled(uploads);
@@ -310,12 +352,16 @@ export function usePostureSession({ uid, settings, captureCurrentFrame, setActiv
       bestSnapshotRef.current = {
         ...(bestSnapshotRef.current ?? createExtremaScore(posture.score)),
         score: posture.score,
+        imageAnalysis: createImageAnalysis(posture),
+        imageLandmarks: clonePoseLandmarks(latestLandmarksRef.current),
       };
     }
     if (!worstSnapshotRef.current || posture.score < worstSnapshotRef.current.score) {
       worstSnapshotRef.current = {
         ...(worstSnapshotRef.current ?? createExtremaScore(posture.score)),
         score: posture.score,
+        imageAnalysis: createImageAnalysis(posture),
+        imageLandmarks: clonePoseLandmarks(latestLandmarksRef.current),
       };
     }
     const averagePosture = withPostureScore(posture, cumulativeAverage, settingsRef.current.warningScoreThreshold);

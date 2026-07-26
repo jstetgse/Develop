@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Activity, AlertTriangle, Bell, CheckCircle, ChevronLeft, ChevronRight, Clock, HelpCircle, Pencil, Trash2 } from "lucide-react";
 import { CartesianGrid, Line, LineChart, ReferenceDot, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import type { HistoryGroup, SessionSummary } from "@/lib/types";
+import type { HistoryGroup, PostureImageAnalysis, SerializedPoseLandmark, SessionSummary } from "@/lib/types";
 import { SESSION_TITLE_MAX_LENGTH, getSessionTitleKey } from "@/lib/session-title";
 import { formatMinutes, getStatusLabel } from "@/components/posture-coach/display-utils";
 import { createSessionTrendSummary, formatDateKey, formatHistoryMonthLabel, formatTime, getCalendarDays, getHistoryAreaScores, getHistoryAverageReferenceTone, getHistoryCalendarToneClass, getHistoryGraphDotColor, getHistoryReportComment, getHistorySessionDisplayTitle, getHistoryWeakestArea, getKoreaDateKey, getMonthKey, getScoreIndicatorStyle, shiftMonthKey } from "@/components/posture-coach/history-utils";
@@ -74,9 +74,184 @@ function renderHistoryTrendActiveDot(props: HistoryTrendDotProps) {
   return <circle cx={cx} cy={cy} r={4} fill={color} stroke="#ffffff" strokeWidth={1.5} />;
 }
 
+type ExtremaImageKind = "best" | "worst";
+
+const POSE_PIPELINE_CONNECTIONS: Array<[number, number]> = [
+  [11, 12],
+  [11, 13],
+  [13, 15],
+  [12, 14],
+  [14, 16],
+  [11, 23],
+  [12, 24],
+  [23, 24],
+  [23, 25],
+  [25, 27],
+  [24, 26],
+  [26, 28],
+];
+
+const POSE_PIPELINE_POINTS = [0, 11, 12, 13, 14, 15, 16, 23, 24, 25, 26, 27, 28];
+
+function getExplanationStatus(score: number | null | undefined) {
+  if (typeof score !== "number") {
+    return {
+      label: "측정 부족",
+      className: "border-gray-200 bg-gray-50 text-gray-500",
+    };
+  }
+
+  if (score >= 80) {
+    return {
+      label: "양호",
+      className: "border-[#39AF8E]/35 bg-[#D6F3EB] text-[#18755B]",
+    };
+  }
+
+  if (score >= 60) {
+    return {
+      label: "주의",
+      className: "border-yellow-200 bg-yellow-50 text-yellow-800",
+    };
+  }
+
+  return {
+    label: "개선 필요",
+    className: "border-red-200 bg-red-50 text-red-700",
+  };
+}
+
+function getImageScore(session: SessionSummary, kind: ExtremaImageKind) {
+  return kind === "best"
+    ? session.bestImageScore ?? session.bestScore
+    : session.worstImageScore ?? session.worstScore;
+}
+
+function getImageAnalysis(session: SessionSummary, kind: ExtremaImageKind) {
+  return kind === "best" ? session.bestImageAnalysis : session.worstImageAnalysis;
+}
+
+function getFallbackAreaScore(session: SessionSummary, area: "neck" | "torso") {
+  const score = session.postureAreaStats?.[area]?.averageScore;
+  return typeof score === "number" ? score : null;
+}
+
+function getSnapshotOrFallbackScore(
+  analysis: PostureImageAnalysis | null | undefined,
+  session: SessionSummary,
+  area: "neck" | "torso"
+) {
+  const score = area === "neck" ? analysis?.neckScore : analysis?.trunkScore;
+  return typeof score === "number" ? score : getFallbackAreaScore(session, area);
+}
+
+function createNeckExplanation(score: number | null) {
+  if (typeof score !== "number") {
+    return "이 기록에는 자세 세부 정보가 적어서 점수 중심으로만 설명했어요.";
+  }
+  if (score >= 85) {
+    return "목이 앞으로 많이 나오지 않았어요.";
+  }
+  if (score >= 70) {
+    return "목이 살짝 앞으로 나온 모습이 점수에 반영됐어요.";
+  }
+  return "머리가 앞으로 많이 나와 목 자세를 고치면 좋아요.";
+}
+
+function createTrunkExplanation(score: number | null) {
+  if (typeof score !== "number") {
+    return "이 기록에는 자세 세부 정보가 적어서 점수 중심으로만 설명했어요.";
+  }
+  if (score >= 85) {
+    return "상체가 비교적 바르게 유지됐어요.";
+  }
+  if (score >= 70) {
+    return "상체가 조금 기울어진 모습이 점수에 반영됐어요.";
+  }
+  return "허리/상체가 많이 기울어 자세를 고치면 좋아요.";
+}
+
+function createDeductionExplanation(
+  imageScore: number | null,
+  neckScore: number | null,
+  trunkScore: number | null,
+  analysis: PostureImageAnalysis | null | undefined,
+  isBest: boolean
+) {
+  if (typeof imageScore !== "number") {
+    return "이 기록에는 자세 세부 정보가 적어서 점수 중심으로만 설명했어요.";
+  }
+  if (imageScore >= 85 && isBest) {
+    return "큰 문제는 없지만, 작은 자세 차이가 점수에 반영됐어요.";
+  }
+
+  const hasNeck = typeof neckScore === "number";
+  const hasTrunk = typeof trunkScore === "number";
+  if (hasNeck && hasTrunk) {
+    if (neckScore <= trunkScore - 5 || analysis?.mainIssue === "neck") {
+      return "목 위치가 점수를 낮춘 가장 큰 이유예요.";
+    }
+    if (trunkScore <= neckScore - 5 || analysis?.mainIssue === "torso") {
+      return "상체 기울기가 점수를 낮춘 가장 큰 이유예요.";
+    }
+    return imageScore >= 70
+      ? "큰 문제는 없지만, 작은 자세 차이가 점수에 반영됐어요."
+      : "목과 상체 자세가 함께 점수에 영향을 줬어요.";
+  }
+
+  if (imageScore >= 70) {
+    return "큰 문제는 없지만, 작은 자세 차이가 점수에 반영됐어요.";
+  }
+  return "목이나 상체 자세를 조금 더 고치면 좋아요.";
+}
+
+function createFinalExplanation(score: number | null, isBest: boolean) {
+  if (typeof score !== "number") {
+    return "이 기록에는 자세 세부 정보가 적어서 점수 중심으로만 설명했어요.";
+  }
+
+  return isBest
+    ? "이 순간은 자세가 가장 좋게 나온 장면이에요."
+    : "이 순간은 자세를 조금 더 고치면 좋은 장면이에요.";
+}
+
+function createPhotoScoreExplanation(session: SessionSummary, kind: ExtremaImageKind) {
+  const score = getImageScore(session, kind);
+  const isBest = kind === "best";
+  const analysis = getImageAnalysis(session, kind);
+  const neckScore = getSnapshotOrFallbackScore(analysis, session, "neck");
+  const trunkScore = getSnapshotOrFallbackScore(analysis, session, "torso");
+  const finalStatus = getExplanationStatus(score);
+
+  return [
+    {
+      label: "목 정렬",
+      score: neckScore,
+      message: createNeckExplanation(neckScore),
+    },
+    {
+      label: "상체 정렬",
+      score: trunkScore,
+      message: createTrunkExplanation(trunkScore),
+    },
+    {
+      label: "감점 요인",
+      score,
+      message: createDeductionExplanation(score, neckScore, trunkScore, analysis, isBest),
+    },
+    {
+      label: "최종 판단",
+      score,
+      message: createFinalExplanation(score, isBest),
+      overrideStatus: finalStatus,
+    },
+  ];
+}
+
 export function HistoryView(props: HistoryViewProps) {
   const { historyGroups, isLoadingHistory, selectedHistoryGroup, selectedHistorySessionKey, historySessionPage, visibleHistoryMonthKey, editingSessionTitleKey, sessionTitleDraft, savingSessionTitleKey, sessionTitleErrors, expandedHistoryImageSessions, onSelectSession, onOpenDelete, onShiftMonth, onSelectDate, onCloseSession, onChangePage, onTitleDraftChange, onCancelTitleEdit, onBeginTitleEdit, onToggleImages, onSaveTitle } = props;
     const [isCalendarHelpOpen, setIsCalendarHelpOpen] = useState(false);
+    const [visibleGuidelineImages, setVisibleGuidelineImages] = useState<Set<string>>(new Set());
     const [calendarHelpPosition, setCalendarHelpPosition] = useState<{ left: number; top: number } | null>(null);
     const calendarHelpRef = useRef<HTMLDivElement>(null);
     const calendarHelpPopoverRef = useRef<HTMLDivElement>(null);
@@ -168,6 +343,148 @@ export function HistoryView(props: HistoryViewProps) {
           <div className="flex items-end justify-between gap-2">
             <strong className="text-xl leading-none tabular-nums">{value}</strong>
             {options?.badge}
+          </div>
+        </div>
+      );
+    };
+
+    const toggleImageGuideline = (key: string) => {
+      setVisibleGuidelineImages((current) => {
+        const next = new Set(current);
+        if (next.has(key)) {
+          next.delete(key);
+        } else {
+          next.add(key);
+        }
+        return next;
+      });
+    };
+
+    const getPipelinePoint = (landmarks: SerializedPoseLandmark[], index: number) => {
+      const landmark = landmarks[index];
+      if (!landmark || !Number.isFinite(landmark.x) || !Number.isFinite(landmark.y) || (landmark.visibility ?? 1) < 0.35) {
+        return null;
+      }
+
+      return {
+        x: Math.max(0, Math.min(100, 100 - landmark.x * 100)),
+        y: Math.max(0, Math.min(100, landmark.y * 100)),
+      };
+    };
+
+    const renderPosePipeline = (landmarks: SerializedPoseLandmark[]) => (
+      <svg className="pointer-events-none absolute inset-0 h-full w-full" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+        {POSE_PIPELINE_CONNECTIONS.map(([from, to]) => {
+          const start = getPipelinePoint(landmarks, from);
+          const end = getPipelinePoint(landmarks, to);
+          if (!start || !end) {
+            return null;
+          }
+
+          return (
+            <line
+              key={`${from}-${to}`}
+              x1={start.x}
+              y1={start.y}
+              x2={end.x}
+              y2={end.y}
+              stroke="rgba(59, 130, 246, 0.88)"
+              strokeWidth="0.9"
+              strokeLinecap="round"
+              vectorEffect="non-scaling-stroke"
+            />
+          );
+        })}
+        {POSE_PIPELINE_POINTS.map((index) => {
+          const point = getPipelinePoint(landmarks, index);
+          if (!point) {
+            return null;
+          }
+
+          return (
+            <circle
+              key={index}
+              cx={point.x}
+              cy={point.y}
+              r="1.1"
+              fill="rgba(219, 234, 254, 0.95)"
+              stroke="rgba(37, 99, 235, 0.95)"
+              strokeWidth="0.45"
+              vectorEffect="non-scaling-stroke"
+            />
+          );
+        })}
+      </svg>
+    );
+
+    const renderExtremaImageCard = (session: SessionSummary, kind: ExtremaImageKind) => {
+      const isBest = kind === "best";
+      const imageUrl = isBest ? session.bestImageUrl : session.worstImageUrl;
+      const score = getImageScore(session, kind);
+      const imageVersion = isBest
+        ? session.bestImageCapturedAt ?? session.bestImageScore
+        : session.worstImageCapturedAt ?? session.worstImageScore;
+      const title = isBest ? "최고 자세" : "최저 자세";
+      const scoreLabel = isBest ? "최고 점수" : "최저 점수";
+      const landmarks = isBest ? session.bestImageLandmarks : session.worstImageLandmarks;
+      const hasPosePipeline = Boolean(landmarks?.length);
+      const guidelineKey = `${session.sessionId}:${kind}`;
+      const isGuidelineVisible = visibleGuidelineImages.has(guidelineKey);
+      const canShowExplanation = Boolean(imageUrl) && typeof score === "number";
+      const explanation = canShowExplanation ? createPhotoScoreExplanation(session, kind) : [];
+
+      return (
+        <div className="overflow-hidden border border-gray-200 bg-white">
+          {imageUrl ? (
+            <div className="relative">
+              <img
+                src={appendImageVersion(imageUrl, imageVersion)}
+                alt={title}
+                className="aspect-video w-full object-cover"
+              />
+              {isGuidelineVisible && landmarks?.length ? renderPosePipeline(landmarks) : null}
+              {hasPosePipeline && (
+                <button
+                  type="button"
+                  onClick={() => toggleImageGuideline(guidelineKey)}
+                  className="absolute right-2 top-2 border border-[#70E5C4]/60 bg-[#001A12]/75 px-2.5 py-1 text-xs font-bold text-[#D6F3EB]"
+                >
+                  {isGuidelineVisible ? "자세 파이프라인 끄기" : "자세 파이프라인 보기"}
+                </button>
+              )}
+            </div>
+          ) : (
+            <div className="flex aspect-video items-center justify-center text-sm text-gray-400">
+              {title} 이미지 없음
+            </div>
+          )}
+          <div className="border-t border-gray-100 p-3">
+            <div className="mb-3 flex items-center justify-between gap-3 text-sm font-medium text-gray-900">
+              <span>{scoreLabel}</span>
+              <strong className="tabular-nums">{score ?? "--"}</strong>
+            </div>
+            {canShowExplanation && (
+              <div className="space-y-2">
+                <p className="text-xs font-bold uppercase tracking-[0.16em] text-blue-600">왜 이 점수가 나왔나요?</p>
+                {explanation.map((step) => {
+                  const status = step.overrideStatus ?? getExplanationStatus(step.score);
+                  return (
+                    <div key={step.label} className="border-t border-gray-100 pt-2 text-sm">
+                      <div className="mb-1 flex flex-wrap items-center gap-2">
+                        <span className="font-bold text-gray-900">{step.label}</span>
+                        <span className={`border px-2 py-0.5 text-[11px] font-bold ${status.className}`}>
+                          {status.label}
+                        </span>
+                        {typeof step.score === "number" && (
+                          <span className="text-xs font-bold tabular-nums text-gray-500">{Math.round(step.score)}점</span>
+                        )}
+                      </div>
+                      <p className="leading-5 text-gray-600">{step.message}</p>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </div>
       );
@@ -749,36 +1066,8 @@ export function HistoryView(props: HistoryViewProps) {
 
                     {isImagesExpanded && (
                       <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
-                        <div className="overflow-hidden border border-gray-200 bg-white">
-                          {session.bestImageUrl ? (
-                            <img
-                              src={appendImageVersion(session.bestImageUrl, session.bestImageCapturedAt ?? session.bestImageScore)}
-                              alt="최고 자세"
-                              className="aspect-video w-full object-cover"
-                            />
-                          ) : (
-                            <div className="flex aspect-video items-center justify-center text-sm text-gray-400">
-                              최고 자세 이미지 없음
-                            </div>
-                          )}
-                          <div className="p-3 text-sm font-medium text-gray-900">최고 점수: {session.bestScore ?? "--"}</div>
-                        </div>
-                        <div className="overflow-hidden border border-gray-200 bg-white">
-                          {session.worstImageUrl ? (
-                            <img
-                              src={appendImageVersion(session.worstImageUrl, session.worstImageCapturedAt ?? session.worstImageScore)}
-                              alt="최저 자세"
-                              className="aspect-video w-full object-cover"
-                            />
-                          ) : (
-                            <div className="flex aspect-video items-center justify-center text-sm text-gray-400">
-                              최저 자세 이미지 없음
-                            </div>
-                          )}
-                          <div className="p-3 text-sm font-medium text-gray-900">
-                            최저 점수: {session.worstScore ?? "--"}
-                          </div>
-                        </div>
+                        {renderExtremaImageCard(session, "best")}
+                        {renderExtremaImageCard(session, "worst")}
                       </div>
                     )}
                   </article>

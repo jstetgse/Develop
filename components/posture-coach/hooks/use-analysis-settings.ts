@@ -58,5 +58,15 @@ export function useAnalysisSettings(uid: string | null) {
     if (permission === "granted") new Notification("알림 설정 완료", { body: "나쁜 자세가 감지되면 Windows 알림으로 알려드릴게요.", icon: "/favicon.ico" });
   }, [updateSettingsDraft]);
 
+  useEffect(() => {
+    if (!isAnalysisSettingsOpen) return;
+    const permission = notificationPermission();
+    setSettingsDraft((current) =>
+      current.notificationPermissionStatus === permission
+        ? current
+        : { ...current, notificationPermissionStatus: permission }
+    );
+  }, [isAnalysisSettingsOpen]);
+
   return { settings, settingsDraft, badPostureDurationMinutesInput, settingsSaveStatus, activeAnalysisSettingsPanel, isAnalysisSettingsOpen, setBadPostureDurationMinutesInput, setSettingsSaveStatus, setActiveAnalysisSettingsPanel, setIsAnalysisSettingsOpen, updateSettingsDraft, applySettings, resetSettings, requestNotificationPermission };
 }

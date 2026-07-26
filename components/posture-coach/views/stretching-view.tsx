@@ -88,7 +88,7 @@ export function StretchingView(props: StretchingViewProps) {
     onToggleShowAll,
   } = props;
 
-  const statusLabel = isStretchingMode ? "스트레칭 분석 중" : selectedStretch ? "스트레칭 준비" : "스트레칭 선택";
+  const statusLabel = isStretchingMode ? "스트레칭 분석 중" : selectedStretch ? "스트레칭 준비" : "대기 중";
   const statusClassName = isStretchingMode
     ? "border-[#70E5C4] bg-[#C4F6E8] text-[#18755B]"
     : selectedStretch
@@ -289,7 +289,7 @@ export function StretchingView(props: StretchingViewProps) {
         <section className="app-surface flex h-full flex-col p-4">
           <div className="mb-2 flex flex-col justify-between gap-2 sm:flex-row sm:items-start">
             <div>
-              <p className="mb-1 text-xs font-bold uppercase tracking-[0.18em] text-blue-600">실시간 카메라</p>
+              <p className="mb-1 text-xs font-bold uppercase tracking-[0.18em] text-blue-600">실시간 카메라 이거 좀 바꾸고 싶은데</p>
               <div className="flex flex-wrap items-center gap-2">
                 <h2 className="text-2xl font-bold text-gray-900">스트레칭 분석</h2>
                 <button

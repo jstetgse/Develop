@@ -54,6 +54,24 @@ export interface PostureResult {
   analysisSide: SelectedSide | null;
 }
 
+export interface PostureImageAnalysis {
+  score: number;
+  neckScore: number | null;
+  trunkScore: number | null;
+  neckAngleDegrees: number | null;
+  trunkLeanDegrees: number | null;
+  neckForwardOffset: number | null;
+  mainIssue: PostureResult["mainIssue"];
+  analysisSide: SelectedSide | null;
+}
+
+export interface SerializedPoseLandmark {
+  x: number;
+  y: number;
+  z?: number;
+  visibility?: number;
+}
+
 export interface PostureFeedbackItem {
   part: PostureFeedbackPart;
   label: string;
@@ -157,10 +175,14 @@ export interface SessionSummary {
   bestImagePath?: string | null;
   bestImageScore?: number | null;
   bestImageCapturedAt?: number | null;
+  bestImageAnalysis?: PostureImageAnalysis | null;
+  bestImageLandmarks?: SerializedPoseLandmark[] | null;
   worstImageUrl: string | null;
   worstImagePath?: string | null;
   worstImageScore?: number | null;
   worstImageCapturedAt?: number | null;
+  worstImageAnalysis?: PostureImageAnalysis | null;
+  worstImageLandmarks?: SerializedPoseLandmark[] | null;
   createdAt?: string;
 }
 

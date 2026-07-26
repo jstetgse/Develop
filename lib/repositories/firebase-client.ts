@@ -31,10 +31,12 @@ import type {
   HistoryGroup,
   PostureAreaStat,
   PostureAreaStats,
+  PostureImageAnalysis,
   PostureRecommendationArea,
   PostureScorePoint,
   RecentSummary,
   Settings,
+  SerializedPoseLandmark,
   SessionSummary,
   SideMode,
 } from "@/lib/types";
@@ -461,10 +463,14 @@ export async function createSession(
       bestImagePath: null,
       bestImageScore: null,
       bestImageCapturedAt: null,
+      bestImageAnalysis: null,
+      bestImageLandmarks: null,
       worstImageUrl: null,
       worstImagePath: null,
       worstImageScore: null,
       worstImageCapturedAt: null,
+      worstImageAnalysis: null,
+      worstImageLandmarks: null,
       alertCount: 0,
       preferredSideMode,
       createdAt: startedAt,
@@ -491,10 +497,14 @@ export async function finalizeSessionSummary(
     | "bestImagePath"
     | "bestImageScore"
     | "bestImageCapturedAt"
+    | "bestImageAnalysis"
+    | "bestImageLandmarks"
     | "worstImageUrl"
     | "worstImagePath"
     | "worstImageScore"
     | "worstImageCapturedAt"
+    | "worstImageAnalysis"
+    | "worstImageLandmarks"
     | "preferredSideMode"
     | "postureAreaStats"
   >
@@ -516,10 +526,14 @@ export async function finalizeSessionSummary(
       bestImagePath: summary.bestImagePath ?? null,
       bestImageScore: summary.bestImageScore ?? null,
       bestImageCapturedAt: summary.bestImageCapturedAt ?? null,
+      bestImageAnalysis: summary.bestImageAnalysis ?? null,
+      bestImageLandmarks: summary.bestImageLandmarks ?? null,
       worstImageUrl: summary.worstImageUrl,
       worstImagePath: summary.worstImagePath ?? null,
       worstImageScore: summary.worstImageScore ?? null,
       worstImageCapturedAt: summary.worstImageCapturedAt ?? null,
+      worstImageAnalysis: summary.worstImageAnalysis ?? null,
+      worstImageLandmarks: summary.worstImageLandmarks ?? null,
       preferredSideMode: normalizeSideMode(summary.preferredSideMode),
       ...(summary.postureAreaStats ? { postureAreaStats: summary.postureAreaStats } : {}),
     });
@@ -727,6 +741,69 @@ function normalizePostureAreaStats(raw: unknown): PostureAreaStats | undefined {
   return stats as PostureAreaStats;
 }
 
+function normalizePostureImageAnalysis(raw: unknown): PostureImageAnalysis | null {
+  if (!raw || typeof raw !== "object") {
+    return null;
+  }
+
+  const value = raw as Partial<PostureImageAnalysis>;
+  if (typeof value.score !== "number") {
+    return null;
+  }
+
+  const mainIssue =
+    value.mainIssue === "neck" ||
+    value.mainIssue === "torso" ||
+    value.mainIssue === "stability" ||
+    value.mainIssue === "balanced" ||
+    value.mainIssue === "tracking"
+      ? value.mainIssue
+      : "tracking";
+  const analysisSide = value.analysisSide === "left" || value.analysisSide === "right" ? value.analysisSide : null;
+
+  return {
+    score: value.score,
+    neckScore: typeof value.neckScore === "number" ? value.neckScore : null,
+    trunkScore: typeof value.trunkScore === "number" ? value.trunkScore : null,
+    neckAngleDegrees: typeof value.neckAngleDegrees === "number" ? value.neckAngleDegrees : null,
+    trunkLeanDegrees: typeof value.trunkLeanDegrees === "number" ? value.trunkLeanDegrees : null,
+    neckForwardOffset: typeof value.neckForwardOffset === "number" ? value.neckForwardOffset : null,
+    mainIssue,
+    analysisSide,
+  };
+}
+
+function normalizePoseLandmarks(raw: unknown): SerializedPoseLandmark[] | null {
+  if (!Array.isArray(raw)) {
+    return null;
+  }
+
+  const landmarks = raw.flatMap((entry): SerializedPoseLandmark[] => {
+    if (!entry || typeof entry !== "object") {
+      return [];
+    }
+
+    const value = entry as Partial<SerializedPoseLandmark>;
+    if (typeof value.x !== "number" || typeof value.y !== "number") {
+      return [];
+    }
+
+    const landmark: SerializedPoseLandmark = {
+      x: value.x,
+      y: value.y,
+    };
+    if (typeof value.z === "number") {
+      landmark.z = value.z;
+    }
+    if (typeof value.visibility === "number") {
+      landmark.visibility = value.visibility;
+    }
+    return [landmark];
+  });
+
+  return landmarks.length ? landmarks : null;
+}
+
 function normalizeSession(raw: Partial<SessionSummary>, sessionId: string): SessionSummary {
   const startedAt = raw.startedAt ?? raw.createdAt ?? new Date(0).toISOString();
   const endedAt = raw.endedAt ?? null;
@@ -748,10 +825,14 @@ function normalizeSession(raw: Partial<SessionSummary>, sessionId: string): Sess
     bestImagePath: typeof raw.bestImagePath === "string" ? raw.bestImagePath : null,
     bestImageScore: typeof raw.bestImageScore === "number" ? raw.bestImageScore : null,
     bestImageCapturedAt: typeof raw.bestImageCapturedAt === "number" ? raw.bestImageCapturedAt : null,
+    bestImageAnalysis: normalizePostureImageAnalysis(raw.bestImageAnalysis),
+    bestImageLandmarks: normalizePoseLandmarks(raw.bestImageLandmarks),
     worstImageUrl: typeof raw.worstImageUrl === "string" ? raw.worstImageUrl : null,
     worstImagePath: typeof raw.worstImagePath === "string" ? raw.worstImagePath : null,
     worstImageScore: typeof raw.worstImageScore === "number" ? raw.worstImageScore : null,
     worstImageCapturedAt: typeof raw.worstImageCapturedAt === "number" ? raw.worstImageCapturedAt : null,
+    worstImageAnalysis: normalizePostureImageAnalysis(raw.worstImageAnalysis),
+    worstImageLandmarks: normalizePoseLandmarks(raw.worstImageLandmarks),
     alertCount: typeof raw.alertCount === "number" ? raw.alertCount : 0,
     durationMinutes,
     postureAreaStats: normalizePostureAreaStats(raw.postureAreaStats),
