@@ -105,6 +105,29 @@ function createImageAnalysis(posture: PostureResult): PostureImageAnalysis | nul
   };
 }
 
+function clampScore(score: number) {
+  return Math.max(0, Math.min(100, score));
+}
+
+function getPhotoPostureScore(posture: { neckScore?: number | null; trunkScore?: number | null }) {
+  const neckScore = typeof posture.neckScore === "number" ? posture.neckScore : null;
+  const trunkScore = typeof posture.trunkScore === "number" ? posture.trunkScore : null;
+
+  if (neckScore !== null && trunkScore !== null) {
+    return clampScore(Math.round((neckScore * 55 + trunkScore * 30) / 85));
+  }
+
+  if (neckScore !== null) {
+    return clampScore(Math.round(neckScore));
+  }
+
+  if (trunkScore !== null) {
+    return clampScore(Math.round(trunkScore));
+  }
+
+  return null;
+}
+
 function clonePoseLandmarks(landmarks: SerializedPoseLandmark[] | null | undefined) {
   if (!landmarks?.length) {
     return null;
@@ -271,13 +294,22 @@ export function usePostureSession({ uid, settings, captureCurrentFrame, setActiv
       return;
     }
 
+    const imageAnalysis = createImageAnalysis(posture);
+    const photoScore = getPhotoPostureScore({
+      neckScore: imageAnalysis?.neckScore,
+      trunkScore: imageAnalysis?.trunkScore,
+    });
+    if (photoScore === null) {
+      return;
+    }
+
     const now = Date.now();
     const shouldUploadBest =
       !bestImageUploadInProgressRef.current &&
-      shouldUploadBestImage(bestSnapshotRef.current, score, now, bestImageLastUploadedAtRef.current);
+      shouldUploadBestImage(bestSnapshotRef.current, photoScore, now, bestImageLastUploadedAtRef.current);
     const shouldUploadWorst =
       !worstImageUploadInProgressRef.current &&
-      shouldUploadWorstImage(worstSnapshotRef.current, score, now, worstImageLastUploadedAtRef.current);
+      shouldUploadWorstImage(worstSnapshotRef.current, photoScore, now, worstImageLastUploadedAtRef.current);
 
     if (!shouldUploadBest && !shouldUploadWorst) {
       return;
@@ -288,14 +320,13 @@ export function usePostureSession({ uid, settings, captureCurrentFrame, setActiv
       return;
     }
 
-    const imageAnalysis = createImageAnalysis(posture);
     const imageLandmarks = clonePoseLandmarks(latestLandmarksRef.current);
     const uploads: Promise<void>[] = [];
     if (shouldUploadBest) {
-      uploads.push(uploadExtremaImage("best", score, imageDataUrl, now, imageAnalysis, imageLandmarks));
+      uploads.push(uploadExtremaImage("best", photoScore, imageDataUrl, now, imageAnalysis, imageLandmarks));
     }
     if (shouldUploadWorst) {
-      uploads.push(uploadExtremaImage("worst", score, imageDataUrl, now, imageAnalysis, imageLandmarks));
+      uploads.push(uploadExtremaImage("worst", photoScore, imageDataUrl, now, imageAnalysis, imageLandmarks));
     }
 
     void Promise.allSettled(uploads);

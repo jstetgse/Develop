@@ -131,133 +131,120 @@ function getImageAnalysis(session: SessionSummary, kind: ExtremaImageKind) {
   return kind === "best" ? session.bestImageAnalysis : session.worstImageAnalysis;
 }
 
-function getFallbackAreaScore(session: SessionSummary, area: "neck" | "torso") {
-  const score = session.postureAreaStats?.[area]?.averageScore;
-  return typeof score === "number" ? score : null;
-}
-
-function getSnapshotOrFallbackScore(
-  analysis: PostureImageAnalysis | null | undefined,
-  session: SessionSummary,
-  area: "neck" | "torso"
-) {
-  const score = area === "neck" ? analysis?.neckScore : analysis?.trunkScore;
-  return typeof score === "number" ? score : getFallbackAreaScore(session, area);
-}
-
-function calculatePhotoDisplayScore(neckScore: number | null, trunkScore: number | null, fallbackScore: number | null) {
-  if (typeof neckScore === "number" && typeof trunkScore === "number") {
-    return Math.round((neckScore * 55 + trunkScore * 30) / 85);
-  }
-
-  if (typeof neckScore === "number") {
-    return Math.round(neckScore);
-  }
-
-  if (typeof trunkScore === "number") {
-    return Math.round(trunkScore);
-  }
-
-  return typeof fallbackScore === "number" ? Math.round(fallbackScore) : null;
-}
-
-function getPhotoDisplayScore(session: SessionSummary, kind: ExtremaImageKind) {
-  const analysis = getImageAnalysis(session, kind);
-  const neckScore = getSnapshotOrFallbackScore(analysis, session, "neck");
-  const trunkScore = getSnapshotOrFallbackScore(analysis, session, "torso");
-  return calculatePhotoDisplayScore(neckScore, trunkScore, getImageScore(session, kind));
-}
-
-
 function createNeckExplanation(score: number | null, isBest: boolean) {
   if (typeof score !== "number") {
-    return "이 기록에는 자세 세부 정보가 적어서 점수 중심으로만 설명했어요.";
+    return "사진별 자세 세부 정보가 적어서 점수 중심으로 설명했어요. 정확한 원인 분석은 새로 측정한 기록에서 더 잘 표시돼요.";
   }
   if (score >= 85) {
     return isBest
-      ? "목이 앞으로 나오지 않고 안정적으로 유지됐어요."
-      : "이 장면에서도 목 정렬은 비교적 잘 유지됐어요.";
+      ? "목이 앞으로 많이 나오지 않고 안정적으로 유지됐어요. 이 자세처럼 화면을 볼 때 고개가 앞으로 쏠리지 않게 유지하면 좋아요."
+      : "이 장면에서도 목 정렬은 비교적 잘 유지됐어요. 목보다는 다른 자세 요소를 함께 확인하면 좋아요.";
   }
   if (score >= 70) {
-    return isBest
-      ? "목이 살짝 앞으로 나왔지만 세션에서 가장 좋은 편이었어요."
-      : "목이 살짝 앞으로 나온 모습이 이 장면의 점수에 반영됐어요.";
+    return "목이 살짝 앞으로 나온 모습이 점수에 반영됐어요. 턱을 살짝 당기고 화면을 눈높이에 맞추면 더 좋아요.";
   }
-  return isBest
-    ? "이 장면에서도 머리가 앞으로 나와 목 정렬을 확인하면 좋아요."
-    : "머리가 앞으로 많이 나와 목 자세를 보정하면 좋아요.";
+  return "머리가 앞으로 많이 나와 목 자세를 고치면 좋아요. 화면 쪽으로 고개를 내밀지 않도록 의자에 몸을 조금 더 붙여보세요.";
 }
 
 function createTrunkExplanation(score: number | null, isBest: boolean) {
   if (typeof score !== "number") {
-    return "이 기록에는 자세 세부 정보가 적어서 점수 중심으로만 설명했어요.";
+    return "사진별 자세 세부 정보가 적어서 점수 중심으로 설명했어요. 정확한 원인 분석은 새로 측정한 기록에서 더 잘 표시돼요.";
   }
   if (score >= 85) {
     return isBest
-      ? "상체가 바르게 세워진 상태로 유지됐어요."
-      : "이 장면에서도 상체 정렬은 비교적 잘 유지됐어요.";
+      ? "상체가 비교적 바르게 유지됐어요. 어깨와 허리가 한쪽으로 쏠리지 않은 점이 좋게 평가됐어요."
+      : "이 장면에서도 상체 정렬은 비교적 잘 유지됐어요. 허리나 어깨가 무너지지 않았는지 함께 확인하면 좋아요.";
   }
   if (score >= 70) {
-    return isBest
-      ? "상체가 조금 기울었지만 세션에서 가장 좋은 편이었어요."
-      : "상체가 조금 기울어진 모습이 이 장면의 점수에 반영됐어요.";
+    return "상체가 조금 기울어진 모습이 점수에 반영됐어요. 허리와 어깨가 한쪽으로 쏠리지 않게 등받이에 기대어 앉아보세요.";
   }
-  return isBest
-    ? "이 장면에서도 상체 기울기가 있어 자세를 확인하면 좋아요."
-    : "허리와 상체가 많이 기울어 자세를 보정하면 좋아요.";
+  return "허리와 상체가 많이 기울어 자세를 고치면 좋아요. 몸을 책상 쪽으로 너무 숙이지 말고 골반을 의자 안쪽에 붙여보세요.";
 }
 
-function createOtherFactorsExplanation(imageScore: number) {
-  if (imageScore >= 85) {
-    return "목과 상체 정렬은 안정적으로 기록됐어요.";
+function createOtherFactorsExplanation(
+  imageScore: number,
+  neckScore?: number | null,
+  trunkScore?: number | null
+) {
+  const hasStableAreaScores =
+    typeof neckScore === "number" &&
+    typeof trunkScore === "number" &&
+    neckScore >= 85 &&
+    trunkScore >= 85;
+
+  if (hasStableAreaScores && imageScore < 85) {
+    return "목과 상체 정렬은 안정적으로 기록됐어요. 이 사진만으로는 낮은 점수의 원인을 특정 부위로 단정하지 않아요.";
   }
-  if (imageScore >= 70) {
-    return "목과 상체는 크게 나쁘지 않았지만, 이 세션에서는 상대적으로 낮은 점수로 기록됐어요.";
+
+  if (hasStableAreaScores || imageScore >= 85) {
+    return "목과 상체 정렬은 안정적으로 기록됐어요. 이 자세를 유지하면서 화면 높이와 앉는 위치를 함께 맞추면 좋아요.";
   }
-  return "목과 상체만으로는 낮은 점수의 이유를 충분히 설명하기 어려워요.";
+
+  return "이 사진만으로는 점수의 이유를 충분히 설명하기 어려워요. 측정 시간이 짧으면 최고/최저 장면은 참고용으로 보는 것이 좋아요.";
 }
 
 function createLegacyAnalysisExplanation(imageScore: number) {
   if (imageScore >= 85) {
-    return "사진 세부 정보가 적지만, 목/상체 기준으로는 큰 문제를 찾기 어려워요.";
+    return "사진별 자세 세부 정보가 적어서 점수 중심으로 설명했어요. 정확한 원인 분석은 새로 측정한 기록에서 더 잘 표시돼요.";
   }
   if (imageScore >= 70) {
-    return "사진 세부 정보가 적어 목/상체 기준 점수로 안내해요.";
+    return "사진별 자세 세부 정보가 적어서 특정 부위를 원인으로 단정하지 않아요. 이 장면은 기록 점수 중심으로 참고하면 좋아요.";
   }
-  return "사진별 세부 정보가 적어, 이 장면의 자세를 전반적으로 확인하면 좋아요.";
+  return "사진별 자세 세부 정보가 적어서 낮은 점수의 이유를 충분히 설명하기 어려워요. 새로 측정한 기록에서는 최고/최저 장면을 더 정확히 비교할 수 있어요.";
 }
 
 function createDeductionExplanation(
   imageScore: number | null,
   neckScore: number | null,
   trunkScore: number | null,
-  analysis: PostureImageAnalysis | null | undefined,
-  isBest: boolean
+  analysis: PostureImageAnalysis | null | undefined
 ) {
   if (typeof imageScore !== "number") {
-    return "이 기록에는 자세 세부 정보가 적어서 점수 중심으로만 설명했어요.";
+    return "측정 시간이 짧아 자세를 충분히 분석하지 못했어요. 조금 더 길게 측정하면 최고/최저 장면을 더 정확히 비교할 수 있어요.";
   }
 
   const hasNeck = typeof neckScore === "number";
   const hasTrunk = typeof trunkScore === "number";
   if (hasNeck && hasTrunk) {
     if (neckScore >= 85 && trunkScore >= 85) {
-      return createOtherFactorsExplanation(imageScore);
+      return createOtherFactorsExplanation(imageScore, neckScore, trunkScore);
     }
-    if (neckScore <= trunkScore || (analysis?.mainIssue === "neck" && neckScore < 85)) {
-      return "목 위치가 점수를 낮춘 가장 큰 이유예요.";
+
+    const scoreGap = Math.abs(neckScore - trunkScore);
+    const bothLow = neckScore < 70 && trunkScore < 70;
+    const bothCaution = neckScore >= 70 && neckScore < 85 && trunkScore >= 70 && trunkScore < 85;
+
+    if (bothLow && scoreGap < 8) {
+      return "목과 상체 모두 자세를 확인하면 좋아요. 앉는 위치를 다시 잡고 화면 높이도 함께 맞춰보세요.";
     }
-    if (trunkScore < neckScore || (analysis?.mainIssue === "torso" && trunkScore < 85)) {
-      return "상체 기울기가 점수를 낮춘 가장 큰 이유예요.";
+
+    if (bothCaution && scoreGap < 8) {
+      return "목과 상체가 모두 조금씩 점수에 반영됐어요. 확인할 때는 고개와 허리 위치를 함께 보면 좋아요.";
     }
-    if (analysis?.mainIssue === "stability") {
-      return createOtherFactorsExplanation(imageScore);
+
+    if (neckScore < 70 && trunkScore >= 70) {
+      return "이 장면에서는 목 정렬이 점수에 더 크게 반영됐어요. 고개가 앞으로 나오는 습관을 먼저 확인하면 좋아요.";
     }
-    return imageScore >= 70
-      ? isBest
-        ? "목과 상체의 작은 자세 차이가 점수에 반영됐어요."
-        : "목과 상체 자세가 함께 이 장면의 점수에 영향을 줬어요."
-      : "목과 상체 자세가 함께 점수에 영향을 줬어요.";
+
+    if (trunkScore < 70 && neckScore >= 70) {
+      return "이 장면에서는 상체 정렬이 점수에 더 크게 반영됐어요. 허리와 어깨가 한쪽으로 기울지 않았는지 먼저 확인하면 좋아요.";
+    }
+
+    if (scoreGap >= 8) {
+      return neckScore < trunkScore
+        ? "이 장면에서는 목 정렬이 점수에 더 크게 반영됐어요. 고개가 앞으로 나오는 습관을 먼저 확인하면 좋아요."
+        : "이 장면에서는 상체 정렬이 점수에 더 크게 반영됐어요. 허리와 어깨가 한쪽으로 기울지 않았는지 먼저 확인하면 좋아요.";
+    }
+
+    if (analysis?.mainIssue === "neck" && neckScore < 85) {
+      return "이 장면에서는 목 정렬이 점수에 더 크게 반영됐어요. 고개가 앞으로 나오는 습관을 먼저 확인하면 좋아요.";
+    }
+
+    if (analysis?.mainIssue === "torso" && trunkScore < 85) {
+      return "이 장면에서는 상체 정렬이 점수에 더 크게 반영됐어요. 허리와 어깨가 한쪽으로 기울지 않았는지 먼저 확인하면 좋아요.";
+    }
+
+    return createOtherFactorsExplanation(imageScore, neckScore, trunkScore);
   }
 
   return createLegacyAnalysisExplanation(imageScore);
@@ -265,26 +252,26 @@ function createDeductionExplanation(
 
 function createFinalExplanation(score: number | null, isBest: boolean) {
   if (typeof score !== "number") {
-    return "이 기록에는 자세 세부 정보가 적어서 점수 중심으로만 설명했어요.";
+    return "측정 시간이 짧아 자세를 충분히 분석하지 못했어요. 조금 더 길게 측정하면 최고/최저 장면을 더 정확히 비교할 수 있어요.";
   }
 
   if (isBest) {
-    return "이 세션에서 가장 자세가 좋았던 순간이에요.";
+    return "이 세션에서 가장 자세가 좋았던 순간이에요. 이 자세를 기준으로 화면 높이와 앉는 위치를 유지하면 좋아요.";
   }
   if (score >= 85) {
-    return "기록 점수 기준으로 안정적인 장면이에요.";
+    return "이 세션은 전체적으로 안정적이었고, 이 장면은 그중 상대적으로 점수가 낮았던 순간이에요. 나쁜 자세라기보다는 비교용 장면으로 보면 좋아요.";
   }
   if (score >= 70) {
-    return "이 세션에서는 상대적으로 낮게 저장된 장면이에요.";
+    return "이 순간은 자세를 조금 더 확인하면 좋은 장면이에요. 점수에 더 크게 반영된 부분을 먼저 확인하면 좋아요.";
   }
-  return "기록 점수 기준으로 자세 보정이 필요한 장면이에요.";
+  return "이 순간은 자세 보정이 필요한 장면이에요. 목과 상체가 함께 무너지지 않도록 앉는 위치부터 다시 잡아보세요.";
 }
 
 function createPhotoScoreExplanation(session: SessionSummary, kind: ExtremaImageKind) {
   const isBest = kind === "best";
   const analysis = getImageAnalysis(session, kind);
-  const neckScore = getSnapshotOrFallbackScore(analysis, session, "neck");
-  const trunkScore = getSnapshotOrFallbackScore(analysis, session, "torso");
+  const neckScore = typeof analysis?.neckScore === "number" ? analysis.neckScore : null;
+  const trunkScore = typeof analysis?.trunkScore === "number" ? analysis.trunkScore : null;
   const score = getImageScore(session, kind);
   const finalStatus = getExplanationStatus(score);
 
@@ -302,7 +289,7 @@ function createPhotoScoreExplanation(session: SessionSummary, kind: ExtremaImage
     {
       label: "점수에 영향 준 부분",
       score,
-      message: createDeductionExplanation(score, neckScore, trunkScore, analysis, isBest),
+      message: createDeductionExplanation(score, neckScore, trunkScore, analysis),
       showStatus: false,
       showScore: false,
     },
@@ -486,7 +473,7 @@ export function HistoryView(props: HistoryViewProps) {
   const renderExtremaImageCard = (session: SessionSummary, kind: ExtremaImageKind) => {
     const isBest = kind === "best";
     const imageUrl = isBest ? session.bestImageUrl : session.worstImageUrl;
-    const score = getPhotoDisplayScore(session, kind);
+    const score = getImageScore(session, kind);
     const imageVersion = isBest
       ? session.bestImageCapturedAt ?? session.bestImageScore
       : session.worstImageCapturedAt ?? session.worstImageScore;
@@ -495,7 +482,7 @@ export function HistoryView(props: HistoryViewProps) {
     const hasPosePipeline = Boolean(landmarks?.length);
     const guidelineKey = `${session.sessionId}:${kind}`;
     const isGuidelineVisible = visibleGuidelineImages.has(guidelineKey);
-    const canShowExplanation = Boolean(imageUrl) && typeof score === "number";
+    const canShowExplanation = Boolean(imageUrl);
     const explanation = canShowExplanation ? createPhotoScoreExplanation(session, kind) : [];
 
     return (
@@ -527,7 +514,7 @@ export function HistoryView(props: HistoryViewProps) {
           <div className="mb-3 flex items-center justify-between gap-3 text-sm font-medium text-gray-900">
             <span>{title}</span>
             <span className="text-right">
-              <span className="block text-[11px] font-bold text-gray-500">목/상체 기준</span>
+              <span className="block text-[11px] font-bold text-gray-500">사진 점수</span>
               <strong className="tabular-nums">{score !== null ? `${score}점` : "--"}</strong>
             </span>
           </div>
