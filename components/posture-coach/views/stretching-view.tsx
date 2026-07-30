@@ -5,7 +5,7 @@ import { calculateStretchRecommendations } from "@/lib/stretch-recommendation";
 import { getStretchById, isDynamicStretchStep } from "@/lib/stretch-analysis";
 import type { Tab } from "@/components/posture-coach/types";
 import { getRecommendationPriorityClass } from "@/components/posture-coach/history-utils";
-import { getStretchStepPictogram } from "@/components/posture-coach/posture-icons";
+import { StretchStepIconTile } from "@/components/posture-coach/stretch-step-icon";
 
 type StretchingViewProps = {
   activeStretchId: string | null;
@@ -101,11 +101,7 @@ export function StretchingView(props: StretchingViewProps) {
   const renderStepCard = (step: StretchStep, index: number, compact = false) => {
     const isCurrent = index === activeStretchStepIndex;
     const isDone = completedStretchSteps.includes(index);
-    const pictogramBoxClassName = isCurrent
-      ? "bg-[#E7FFF7] text-[#18755B]"
-      : isDone
-        ? "bg-green-50 text-green-600"
-        : "bg-transparent text-gray-300";
+    const iconState = isCurrent ? "active" : isDone ? "completed" : "inactive";
 
     return (
       <button
@@ -120,23 +116,8 @@ export function StretchingView(props: StretchingViewProps) {
               : "border-gray-200 bg-white"
         }`}
       >
-        <div className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-2">
-          <div className="flex items-center gap-2">
-            <div
-              className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-bold ${
-                isDone
-                  ? "bg-green-600 text-white"
-                  : isCurrent
-                    ? "bg-[#18755B] text-white"
-                    : "bg-gray-100 text-gray-600"
-              }`}
-            >
-              {isDone ? <CheckCircle className="h-4 w-4" /> : index + 1}
-            </div>
-            <div className={`flex h-8 w-8 shrink-0 items-center justify-center ${pictogramBoxClassName}`}>
-              {getStretchStepPictogram(step.checkType, "h-5 w-5")}
-            </div>
-          </div>
+        <div className="grid grid-cols-[48px_minmax(0,1fr)] gap-x-3 gap-y-2">
+          <StretchStepIconTile checkType={step.checkType} stepNumber={index + 1} state={iconState} />
           <div className="min-w-0 self-center">
             <div className="flex flex-wrap items-center gap-2">
               <p className="break-keep text-base font-bold leading-snug text-gray-900">{step.title}</p>
@@ -384,9 +365,12 @@ export function StretchingView(props: StretchingViewProps) {
                 {isStretchingMode && activeStretchStep ? (
                   <div className="space-y-3">
                     <div className="flex items-start gap-3">
-                      <div className="flex h-12 w-12 shrink-0 items-center justify-center bg-[#E7FFF7] text-[#18755B]">
-                        {getStretchStepPictogram(activeStretchStep.checkType, "h-9 w-9")}
-                      </div>
+                      <StretchStepIconTile
+                        checkType={activeStretchStep.checkType}
+                        stepNumber={activeStretchStepIndex + 1}
+                        state="active"
+                        size="large"
+                      />
                       <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-2">
                           <p className="font-bold text-[#18755B]">{activeStretchStep.title}</p>
@@ -486,12 +470,11 @@ export function StretchingView(props: StretchingViewProps) {
                   className="flex w-full flex-1 flex-col border border-gray-200 bg-white p-3 text-left"
                 >
                   <div className="flex items-start gap-3">
-                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gray-100 text-sm font-bold text-gray-600">
-                      {activeStretchStepIndex + 2}
-                    </div>
-                    <div className="flex h-9 w-9 shrink-0 items-center justify-center text-gray-300">
-                      {getStretchStepPictogram(nextStretchStep.checkType, "h-5 w-5")}
-                    </div>
+                    <StretchStepIconTile
+                      checkType={nextStretchStep.checkType}
+                      stepNumber={activeStretchStepIndex + 2}
+                      state="inactive"
+                    />
                     <div className="min-w-0 flex-1">
                       <p className="font-bold text-gray-900">{nextStretchStep.title}</p>
                       <p className="mt-1 line-clamp-2 text-sm leading-5 text-gray-600">{nextStretchStep.instruction}</p>
