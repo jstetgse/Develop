@@ -6,6 +6,19 @@ export type SideMode = "left" | "right";
 
 export type SelectedSide = "left" | "right";
 
+export const LEGACY_SCORING_VERSION = "legacy-normalized-image-v1" as const;
+export const CURRENT_SCORING_VERSION = "aspect-corrected-image-v2" as const;
+
+export type ScoringVersion =
+  | typeof LEGACY_SCORING_VERSION
+  | typeof CURRENT_SCORING_VERSION;
+
+export function normalizeScoringVersion(value: unknown): ScoringVersion {
+  return value === CURRENT_SCORING_VERSION
+    ? CURRENT_SCORING_VERSION
+    : LEGACY_SCORING_VERSION;
+}
+
 export type PostureFeedbackPart = "neck" | "torso" | "stability";
 
 export type PostureFeedbackSeverity = "good" | "caution" | "warning";
@@ -158,6 +171,7 @@ export interface LowScoreCaptureEvent {
 
 export interface SessionSummary {
   sessionId: string;
+  scoringVersion: ScoringVersion;
   sessionTitleKey?: string;
   customTitle?: string | null;
   startedAt: string;

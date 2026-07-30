@@ -7,6 +7,13 @@ export type Landmark = {
 
 export type PoseResults = {
   poseLandmarks?: Landmark[] | null;
+  poseWorldLandmarks?: Landmark[] | null;
+};
+
+export type PoseFrameMetadata = {
+  videoWidth: number;
+  videoHeight: number;
+  timestamp: number;
 };
 
 export type PoseInstance = {
@@ -37,4 +44,3 @@ export type MediaPipeWindow = Window & {
   drawConnectors?: DrawingModuleShape["drawConnectors"];
   drawLandmarks?: DrawingModuleShape["drawLandmarks"];
 };
-

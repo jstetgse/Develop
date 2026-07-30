@@ -25,6 +25,10 @@ import {
   type Auth,
 } from "firebase/auth";
 import { deleteObject, getDownloadURL, getStorage, ref, uploadString, type FirebaseStorage } from "firebase/storage";
+import {
+  CURRENT_SCORING_VERSION,
+  normalizeScoringVersion,
+} from "@/lib/types";
 import type {
   FirebaseConfigShape,
   FirebaseStatus,
@@ -473,6 +477,7 @@ export async function createSession(
       worstImageLandmarks: null,
       alertCount: 0,
       preferredSideMode,
+      scoringVersion: CURRENT_SCORING_VERSION,
       createdAt: startedAt,
     });
     return true;
@@ -816,6 +821,7 @@ function normalizeSession(raw: Partial<SessionSummary>, sessionId: string): Sess
 
   return {
     sessionId,
+    scoringVersion: normalizeScoringVersion(raw.scoringVersion),
     startedAt,
     endedAt,
     averageScore: typeof raw.averageScore === "number" ? raw.averageScore : null,

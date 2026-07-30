@@ -1,10 +1,20 @@
 declare module "@mediapipe/pose" {
   export const POSE_CONNECTIONS: unknown;
 
+  type PoseLandmark = {
+    x: number;
+    y: number;
+    z?: number;
+    visibility?: number;
+  };
+
   export class Pose {
     constructor(options: { locateFile: (file: string) => string });
     setOptions(options: Record<string, unknown>): void;
-    onResults(callback: (results: { poseLandmarks?: Array<{ x: number; y: number; visibility?: number }> | null }) => void): void;
+    onResults(callback: (results: {
+      poseLandmarks?: PoseLandmark[] | null;
+      poseWorldLandmarks?: PoseLandmark[] | null;
+    }) => void): void;
     send(input: { image: HTMLVideoElement }): Promise<void>;
   }
 }

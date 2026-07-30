@@ -5,7 +5,12 @@ import { getStretchById } from "@/lib/stretch-analysis";
 import { drawDynamicStretchGuidePose, drawStretchGuidePose } from "@/lib/stretch-guide";
 import type { StretchCoachingResult } from "@/lib/types";
 import type { Tab } from "@/components/posture-coach/types";
-import type { MediaPipeWindow, PoseInstance, PoseResults } from "@/components/posture-coach/mediapipe/mediapipe-types";
+import type {
+  MediaPipeWindow,
+  PoseFrameMetadata,
+  PoseInstance,
+  PoseResults,
+} from "@/components/posture-coach/mediapipe/mediapipe-types";
 import { loadBrowserScript, resolveDrawingExports, resolvePoseExports, waitForVideoReady } from "@/components/posture-coach/mediapipe/mediapipe-loader";
 
 type OverlayState = {
@@ -19,7 +24,7 @@ type UsePoseCameraOptions = {
   activeTab: Tab;
   isRunning: boolean;
   showLandmarks: boolean;
-  onPoseFrame: (results: PoseResults) => void;
+  onPoseFrame: (results: PoseResults, metadata: PoseFrameMetadata) => void;
   getOverlayState: () => OverlayState;
 };
 
@@ -31,6 +36,7 @@ export function usePoseCamera(options: UsePoseCameraOptions) {
   const poseModuleRef = useRef<unknown>(null);
   const drawingModuleRef = useRef<unknown>(null);
   const rafIdRef = useRef<number | null>(null);
+  const pendingFrameMetadataRef = useRef<PoseFrameMetadata[]>([]);
   const onPoseFrameRef = useRef(options.onPoseFrame);
   const overlayStateRef = useRef(options.getOverlayState);
   const showLandmarksRef = useRef(options.showLandmarks);
@@ -85,7 +91,13 @@ export function usePoseCamera(options: UsePoseCameraOptions) {
     if (!PoseClass) throw new Error("MediaPipe Pose could not be loaded.");
     const pose = new PoseClass({ locateFile: (file) => `/mediapipe/pose/${file}` });
     pose.setOptions({ modelComplexity: 1, smoothLandmarks: true, enableSegmentation: false, minDetectionConfidence: 0.55, minTrackingConfidence: 0.55 });
-    pose.onResults((results) => { drawOverlay(results); onPoseFrameRef.current(results); });
+    pose.onResults((results) => {
+      drawOverlay(results);
+      const metadata = pendingFrameMetadataRef.current.shift();
+      if (metadata) {
+        onPoseFrameRef.current(results, metadata);
+      }
+    });
     if (pose.initialize) await pose.initialize();
     detectorRef.current = pose;
     return pose;
@@ -100,7 +112,21 @@ export function usePoseCamera(options: UsePoseCameraOptions) {
     const loop = async () => {
       const currentVideo = videoRef.current;
       if (currentVideo && currentVideo.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA && currentVideo.videoWidth > 0 && currentVideo.videoHeight > 0 && detectorRef.current === detector) {
-        try { await detector.send({ image: currentVideo }); } catch (error) { console.error("Pose send failed:", error); }
+        const metadata = {
+          videoWidth: currentVideo.videoWidth,
+          videoHeight: currentVideo.videoHeight,
+          timestamp: Date.now(),
+        };
+        pendingFrameMetadataRef.current.push(metadata);
+        try {
+          await detector.send({ image: currentVideo });
+        } catch (error) {
+          const pendingIndex = pendingFrameMetadataRef.current.indexOf(metadata);
+          if (pendingIndex >= 0) {
+            pendingFrameMetadataRef.current.splice(pendingIndex, 1);
+          }
+          console.error("Pose send failed:", error);
+        }
       }
       if (detectorRef.current === detector) rafIdRef.current = requestAnimationFrame(() => void loop());
     };
@@ -110,6 +136,7 @@ export function usePoseCamera(options: UsePoseCameraOptions) {
   const stopCamera = useCallback(async () => {
     if (rafIdRef.current !== null) { cancelAnimationFrame(rafIdRef.current); rafIdRef.current = null; }
     const detector = detectorRef.current; detectorRef.current = null;
+    pendingFrameMetadataRef.current = [];
     if (detector?.close) { try { await detector.close(); } catch (error) { console.error("Failed to close pose detector:", error); } }
     streamRef.current?.getTracks().forEach((track) => track.stop()); streamRef.current = null;
     if (videoRef.current) videoRef.current.srcObject = null;

@@ -2,7 +2,10 @@ import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateA
 
 import { getCameraErrorMessage } from "@/components/posture-coach/display-utils";
 import { getKoreaDateKey, hasPostureAreaStats } from "@/components/posture-coach/history-utils";
-import type { PoseResults } from "@/components/posture-coach/mediapipe/mediapipe-types";
+import type {
+  PoseFrameMetadata,
+  PoseResults,
+} from "@/components/posture-coach/mediapipe/mediapipe-types";
 import type { AppMode, Tab } from "@/components/posture-coach/types";
 import { usePoseCamera } from "@/components/posture-coach/hooks/use-pose-camera";
 import { usePostureSession } from "@/components/posture-coach/hooks/use-posture-session";
@@ -47,7 +50,9 @@ export function useAnalysisRuntime(props: Props) {
 
   const activeTabRef = useRef<Tab>("home");
   const appModeRef = useRef<AppMode>("paused");
-  const poseFrameHandlerRef = useRef<(results: PoseResults) => void>(() => undefined);
+  const poseFrameHandlerRef = useRef<
+    (results: PoseResults, metadata: PoseFrameMetadata) => void
+  >(() => undefined);
   const startAppHandlerRef = useRef<() => Promise<void>>(async () => undefined);
   const captureFrameHandlerRef = useRef<() => string | null>(() => null);
   const captureFrameProxy = useCallback(() => captureFrameHandlerRef.current(), []);
@@ -62,7 +67,11 @@ export function useAnalysisRuntime(props: Props) {
     setActiveTab, setAppMode, setModeMessage, setCameraText, setCameraTone, setAlertMessage,
     startApp: startAppProxy, playStretchBeep, speakStretchCue, resetStretchAudioEvents, setStretchTtsUserStarted,
   });
-  const poseFrameProxy = useCallback((results: PoseResults) => poseFrameHandlerRef.current(results), []);
+  const poseFrameProxy = useCallback(
+    (results: PoseResults, metadata: PoseFrameMetadata) =>
+      poseFrameHandlerRef.current(results, metadata),
+    []
+  );
   const camera = usePoseCamera({
     activeTab, isRunning, showLandmarks: settings.landmarkOverlayEnabled, onPoseFrame: poseFrameProxy,
     getOverlayState: () => ({
@@ -74,7 +83,7 @@ export function useAnalysisRuntime(props: Props) {
   });
   captureFrameHandlerRef.current = camera.captureCurrentFrame;
 
-  const handlePoseResults = useCallback((results: PoseResults) => {
+  const handlePoseResults = useCallback((results: PoseResults, metadata: PoseFrameMetadata) => {
     posture.latestLandmarksRef.current = results.poseLandmarks ?? null;
     if (appModeRef.current === "stretching") {
       setCameraText("스트레칭 분석 중");
@@ -86,7 +95,14 @@ export function useAnalysisRuntime(props: Props) {
       posture.badPostureStartedAtRef.current = null;
       return;
     }
-    const result = posture.analyzerRef.current.analyze(results.poseLandmarks, posture.settingsRef.current.preferredSideMode);
+    const result = posture.analyzerRef.current.analyze(
+      results.poseLandmarks,
+      posture.settingsRef.current.preferredSideMode,
+      {
+        videoWidth: metadata.videoWidth,
+        videoHeight: metadata.videoHeight,
+      }
+    );
     if (result.isTracking) {
       setCameraText("카메라 분석 중");
       setCameraTone("good");

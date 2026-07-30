@@ -6,12 +6,13 @@ import type {
   SelectedSide,
   SideMode,
 } from "@/lib/types";
+import {
+  calculateImagePostureMetrics,
+  type FrameSize,
+  type PostureLandmark,
+} from "@/lib/posture/posture-metrics";
 
-type Landmark = {
-  x: number;
-  y: number;
-  visibility?: number;
-};
+type Landmark = PostureLandmark;
 
 const LANDMARKS = {
   LEFT_EAR: 7,
@@ -26,12 +27,12 @@ const SMOOTHING_WINDOW = 12;
 const STABILITY_WINDOW = 30;
 const SIDE_UNAVAILABLE_MESSAGE = "옆모습이 잘 보이지 않습니다. 카메라 위치를 조정해주세요.";
 
-function toDegrees(radians: number) {
-  return (radians * 180) / Math.PI;
-}
-
 function isVisible(landmark: Landmark | undefined) {
-  return Boolean(landmark && (landmark.visibility ?? 1) > 0.42);
+  return Boolean(
+    landmark &&
+      Number.isFinite(landmark.visibility ?? 1) &&
+      (landmark.visibility ?? 1) > 0.42
+  );
 }
 
 function visibilityScore(points: Array<Landmark | undefined>) {
@@ -40,10 +41,6 @@ function visibilityScore(points: Array<Landmark | undefined>) {
   }
 
   return points.reduce((sum, point) => sum + (point?.visibility ?? 1), 0) / points.length;
-}
-
-function angleFromVertical(topPoint: Landmark, bottomPoint: Landmark) {
-  return Math.abs(toDegrees(Math.atan2(topPoint.x - bottomPoint.x, bottomPoint.y - topPoint.y)));
 }
 
 function estimateNeckLoadKg(angle: number) {
@@ -69,7 +66,7 @@ function estimateNeckLoadKg(angle: number) {
   return lower.load + (upper.load - lower.load) * ratio;
 }
 
-function scoreNeck(angle: number) {
+export function scoreNeck(angle: number) {
   if (angle <= 10) {
     return 100;
   }
@@ -85,7 +82,7 @@ function scoreNeck(angle: number) {
   return 30;
 }
 
-function scoreTrunk(angle: number) {
+export function scoreTrunk(angle: number) {
   if (angle <= 5) {
     return 100;
   }
@@ -222,7 +219,11 @@ export class PostureAnalyzer {
     this.lastSelectedSide = null;
   }
 
-  analyze(landmarks?: Landmark[] | null, preferredSideMode = this.preferredSideMode): PostureResult {
+  analyze(
+    landmarks: Landmark[] | null | undefined,
+    preferredSideMode = this.preferredSideMode,
+    frameSize?: FrameSize
+  ): PostureResult {
     this.preferredSideMode = preferredSideMode;
 
     if (!landmarks?.length) {
@@ -249,8 +250,13 @@ export class PostureAnalyzer {
       return this.createUnavailableResult(SIDE_UNAVAILABLE_MESSAGE);
     }
 
-    const neckAngleDegrees = angleFromVertical(ear as Landmark, shoulder as Landmark);
-    const trunkLeanDegrees = angleFromVertical(shoulder as Landmark, hip as Landmark);
+    const imageMetrics = calculateImagePostureMetrics(landmarks, side, frameSize);
+    if (!imageMetrics.valid) {
+      return this.createUnavailableResult(SIDE_UNAVAILABLE_MESSAGE);
+    }
+
+    const neckAngleDegrees = imageMetrics.value.absoluteNeckAngle;
+    const trunkLeanDegrees = imageMetrics.value.trunkAngle;
     const center = {
       x: ((ear as Landmark).x + (shoulder as Landmark).x + (hip as Landmark).x) / 3,
       y: ((ear as Landmark).y + (shoulder as Landmark).y + (hip as Landmark).y) / 3,
