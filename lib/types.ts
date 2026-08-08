@@ -26,6 +26,8 @@ export type PostureFeedbackSeverity = "good" | "caution" | "warning";
 export type NotificationPermissionStatus = "unsupported" | "default" | "granted" | "denied";
 
 export interface Settings {
+  currentHeightCm: number | null;
+  targetHeightCm: number | null;
   warningAlertEnabled: boolean;
   warningScoreThreshold: number;
   badPostureDurationMinutes: number;

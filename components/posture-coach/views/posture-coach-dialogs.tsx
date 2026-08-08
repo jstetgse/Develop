@@ -5,6 +5,11 @@ import { SESSION_TITLE_MAX_LENGTH, getSessionTitleKey } from "@/lib/session-titl
 import { formatMinutes } from "@/components/posture-coach/display-utils";
 import { formatTime, getHistorySessionDisplayTitle } from "@/components/posture-coach/history-utils";
 import { getStretchVoiceLabel } from "@/components/posture-coach/stretch-utils";
+import {
+  CURRENT_HEIGHT_RANGE,
+  TARGET_HEIGHT_RANGE,
+  isHeightInRange,
+} from "@/lib/growth-posture";
 
 type AnalysisSettingsPanel = "analysis-options" | "posture-alerts" | "stretch-alerts";
 type SettingsSaveStatus = "idle" | "saving" | "saved" | "error";
@@ -122,7 +127,17 @@ export function PostureCoachDialogs(props: PostureCoachDialogsProps) {
         badPostureDurationMinutesValue > 10
       ? "1분부터 10분까지 입력해주세요"
       : "";
-  const canApplySettings = !badPostureDurationError && settingsSaveStatus !== "saving";
+  const currentHeightError =
+    settingsDraft.currentHeightCm !== null &&
+    !isHeightInRange(settingsDraft.currentHeightCm, CURRENT_HEIGHT_RANGE);
+  const targetHeightError =
+    settingsDraft.targetHeightCm !== null &&
+    !isHeightInRange(settingsDraft.targetHeightCm, TARGET_HEIGHT_RANGE);
+  const canApplySettings =
+    !badPostureDurationError &&
+    !currentHeightError &&
+    !targetHeightError &&
+    settingsSaveStatus !== "saving";
 
   const ToggleControl = ({
     checked,
@@ -324,6 +339,59 @@ export function PostureCoachDialogs(props: PostureCoachDialogsProps) {
                     선택한 방향의 귀, 어깨, 엉덩이 랜드마크만 사용해 분석합니다.
                   </p>
                 </label>
+                <div className="border border-blue-100 bg-blue-50/60 p-4">
+                  <div className="mb-3">
+                    <p className="font-bold text-gray-900">내 성장 자세</p>
+                    <p className="mt-1 text-xs leading-5 text-gray-600">
+                      현재 키와 목표 키를 자세 상태와 함께 확인해요.
+                    </p>
+                  </div>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <label className="block">
+                      <span className="text-sm font-medium text-gray-700">현재 키 (cm)</span>
+                      <input
+                        type="number"
+                        min={CURRENT_HEIGHT_RANGE.min}
+                        max={CURRENT_HEIGHT_RANGE.max}
+                        step="0.1"
+                        value={settingsDraft.currentHeightCm ?? ""}
+                        onChange={(event) =>
+                          onUpdateSettingsDraft({
+                            currentHeightCm: event.target.value === "" ? null : event.target.valueAsNumber,
+                          })
+                        }
+                        className="mt-2 w-full border border-gray-300 bg-white px-3 py-2"
+                        placeholder="예: 165"
+                      />
+                      {currentHeightError && (
+                        <p className="mt-1 text-xs text-red-600">100~220cm 사이로 입력해 주세요.</p>
+                      )}
+                    </label>
+                    <label className="block">
+                      <span className="text-sm font-medium text-gray-700">목표 키 (cm)</span>
+                      <input
+                        type="number"
+                        min={TARGET_HEIGHT_RANGE.min}
+                        max={TARGET_HEIGHT_RANGE.max}
+                        step="0.1"
+                        value={settingsDraft.targetHeightCm ?? ""}
+                        onChange={(event) =>
+                          onUpdateSettingsDraft({
+                            targetHeightCm: event.target.value === "" ? null : event.target.valueAsNumber,
+                          })
+                        }
+                        className="mt-2 w-full border border-gray-300 bg-white px-3 py-2"
+                        placeholder="예: 172"
+                      />
+                      {targetHeightError && (
+                        <p className="mt-1 text-xs text-red-600">100~230cm 사이로 입력해 주세요.</p>
+                      )}
+                    </label>
+                  </div>
+                  <p className="mt-3 text-xs leading-5 text-gray-500">
+                    목표 키는 의학적으로 예측된 성인 키가 아니라 사용자가 직접 설정하는 목표입니다.
+                  </p>
+                </div>
               </div>
             )}
 

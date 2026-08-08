@@ -21,6 +21,8 @@ export const POSE_CONNECTIONS_FALLBACK: Array<[number, number]> = [
 ];
 
 export const DEFAULT_SETTINGS: Settings = {
+  currentHeightCm: null,
+  targetHeightCm: null,
   warningAlertEnabled: true,
   warningScoreThreshold: 60,
   badPostureDurationMinutes: 5,

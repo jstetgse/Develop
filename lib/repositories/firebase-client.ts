@@ -44,6 +44,11 @@ import type {
   SessionSummary,
   SideMode,
 } from "@/lib/types";
+import {
+  CURRENT_HEIGHT_RANGE,
+  TARGET_HEIGHT_RANGE,
+  normalizeOptionalHeight,
+} from "@/lib/growth-posture";
 import { getSessionTitleKey, normalizeSessionTitle } from "@/lib/session-title";
 
 let firebaseApp: FirebaseApp | null = null;
@@ -189,6 +194,8 @@ const SETTINGS_DOC_ID = "app";
 
 type FirestoreSettings = Pick<
   Settings,
+  | "currentHeightCm"
+  | "targetHeightCm"
   | "warningAlertEnabled"
   | "warningScoreThreshold"
   | "badPostureDurationMinutes"
@@ -217,6 +224,8 @@ function normalizeSideMode(value: unknown, fallback: SideMode = "left"): SideMod
 function normalizeSettings(raw: Partial<Settings>, defaults: Settings): Settings {
   return {
     ...defaults,
+    currentHeightCm: normalizeOptionalHeight(raw.currentHeightCm, CURRENT_HEIGHT_RANGE),
+    targetHeightCm: normalizeOptionalHeight(raw.targetHeightCm, TARGET_HEIGHT_RANGE),
     warningAlertEnabled:
       typeof raw.warningAlertEnabled === "boolean" ? raw.warningAlertEnabled : defaults.warningAlertEnabled,
     warningScoreThreshold:
@@ -256,6 +265,8 @@ function normalizeSettings(raw: Partial<Settings>, defaults: Settings): Settings
 
 function toFirestoreSettings(settings: Settings): FirestoreSettings {
   return {
+    currentHeightCm: normalizeOptionalHeight(settings.currentHeightCm, CURRENT_HEIGHT_RANGE),
+    targetHeightCm: normalizeOptionalHeight(settings.targetHeightCm, TARGET_HEIGHT_RANGE),
     warningAlertEnabled: settings.warningAlertEnabled,
     warningScoreThreshold: settings.warningScoreThreshold,
     badPostureDurationMinutes: settings.badPostureDurationMinutes,

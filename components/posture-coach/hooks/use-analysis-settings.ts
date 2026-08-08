@@ -2,6 +2,12 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { ensureUserSettings, saveUserSettings } from "@/lib/repositories/settings-repository";
 import type { NotificationPermissionStatus, Settings } from "@/lib/types";
 import { DEFAULT_SETTINGS } from "@/components/posture-coach/constants";
+import {
+  CURRENT_HEIGHT_RANGE,
+  TARGET_HEIGHT_RANGE,
+  isHeightInRange,
+  normalizeOptionalHeight,
+} from "@/lib/growth-posture";
 
 type SettingsSaveStatus = "idle" | "saving" | "saved" | "error";
 export type AnalysisSettingsPanel = "analysis-options" | "posture-alerts" | "stretch-alerts";
@@ -48,7 +54,18 @@ export function useAnalysisSettings(uid: string | null) {
   const applySettings = useCallback(() => {
     const duration = Number(badPostureDurationMinutesInput);
     if (!Number.isInteger(duration) || duration < 1 || duration > 10) { setSettingsSaveStatus("error"); return; }
-    const next = { ...settingsDraft, smoothingEnabled: true, badPostureDurationMinutes: duration, preferredSideMode: settingsDraft.preferredSideMode === "right" ? "right" as const : "left" as const, notificationPermissionStatus: notificationPermission() };
+    const isCurrentHeightValid = settingsDraft.currentHeightCm === null || isHeightInRange(settingsDraft.currentHeightCm, CURRENT_HEIGHT_RANGE);
+    const isTargetHeightValid = settingsDraft.targetHeightCm === null || isHeightInRange(settingsDraft.targetHeightCm, TARGET_HEIGHT_RANGE);
+    if (!isCurrentHeightValid || !isTargetHeightValid) { setSettingsSaveStatus("error"); return; }
+    const next = {
+      ...settingsDraft,
+      currentHeightCm: normalizeOptionalHeight(settingsDraft.currentHeightCm, CURRENT_HEIGHT_RANGE),
+      targetHeightCm: normalizeOptionalHeight(settingsDraft.targetHeightCm, TARGET_HEIGHT_RANGE),
+      smoothingEnabled: true,
+      badPostureDurationMinutes: duration,
+      preferredSideMode: settingsDraft.preferredSideMode === "right" ? "right" as const : "left" as const,
+      notificationPermissionStatus: notificationPermission(),
+    };
     setSettings(next); setSettingsDraft(next); setBadPostureDurationMinutesInput(String(next.badPostureDurationMinutes)); void persistSettings(next);
   }, [badPostureDurationMinutesInput, persistSettings, settingsDraft]);
   const resetSettings = useCallback(() => { const next = defaultSettings(); setSettingsDraft(next); setBadPostureDurationMinutesInput(String(next.badPostureDurationMinutes)); setSettingsSaveStatus("idle"); }, []);
