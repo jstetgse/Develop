@@ -5,7 +5,8 @@ export type HeightGoalResult =
   | { status: "remaining"; remainingCm: number }
   | { status: "reached"; remainingCm: 0 };
 
-export type GrowthPostureState = "idle" | "tracking-lost" | "bad" | "good";
+export type PostureScoreStatus = "waiting" | "good" | "warning" | "danger";
+export type GrowthPostureState = "idle" | "tracking-lost" | "good" | "warning" | "danger";
 
 export function roundHeightCm(value: number) {
   return Math.round((value + Number.EPSILON) * 10) / 10;
@@ -59,13 +60,13 @@ export function formatHeightCm(value: number) {
 export function getGrowthPostureState({
   isRunning,
   isTracking,
-  isBadPosture,
+  postureStatus,
 }: {
   isRunning: boolean;
   isTracking: boolean;
-  isBadPosture: boolean;
+  postureStatus: PostureScoreStatus;
 }): GrowthPostureState {
   if (!isRunning) return "idle";
   if (!isTracking) return "tracking-lost";
-  return isBadPosture ? "bad" : "good";
+  return postureStatus === "waiting" ? "tracking-lost" : postureStatus;
 }

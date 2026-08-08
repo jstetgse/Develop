@@ -50,10 +50,13 @@ describe("growth posture height goal", () => {
 });
 
 describe("growth posture display state", () => {
-  it("distinguishes idle, tracking failure, bad posture, and good posture", () => {
-    expect(getGrowthPostureState({ isRunning: false, isTracking: false, isBadPosture: false })).toBe("idle");
-    expect(getGrowthPostureState({ isRunning: true, isTracking: false, isBadPosture: false })).toBe("tracking-lost");
-    expect(getGrowthPostureState({ isRunning: true, isTracking: true, isBadPosture: true })).toBe("bad");
-    expect(getGrowthPostureState({ isRunning: true, isTracking: true, isBadPosture: false })).toBe("good");
+  it("prioritizes idle and tracking failure before score status", () => {
+    expect(getGrowthPostureState({ isRunning: false, isTracking: false, postureStatus: "danger" })).toBe("idle");
+    expect(getGrowthPostureState({ isRunning: true, isTracking: false, postureStatus: "danger" })).toBe("tracking-lost");
+    expect(getGrowthPostureState({ isRunning: true, isTracking: true, postureStatus: "waiting" })).toBe("tracking-lost");
+  });
+
+  it.each(["good", "warning", "danger"] as const)("preserves the %s score status while tracking", (postureStatus) => {
+    expect(getGrowthPostureState({ isRunning: true, isTracking: true, postureStatus })).toBe(postureStatus);
   });
 });

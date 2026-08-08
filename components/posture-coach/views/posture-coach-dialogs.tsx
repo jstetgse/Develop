@@ -325,6 +325,11 @@ export function PostureCoachDialogs(props: PostureCoachDialogsProps) {
                   onChange={(checked) => onUpdateSettingsDraft({ landmarkOverlayEnabled: checked })}
                   label="자세 랜드마크 표시 켜기/끄기"
                 />
+                <ToggleControl
+                  checked={settingsDraft.postureEffectSoundEnabled}
+                  onChange={(checked) => onUpdateSettingsDraft({ postureEffectSoundEnabled: checked })}
+                  label="화면 파손 효과음 켜기/끄기"
+                />
                 <label className="block">
                   <span className="text-sm font-medium text-gray-700">측면 분석 기준</span>
                   <select

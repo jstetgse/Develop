@@ -2,11 +2,14 @@ import type { RefObject } from "react";
 import { SlidersHorizontal, VideoOff } from "lucide-react";
 import type { PostureResult, Settings } from "@/lib/types";
 import type { AppMode } from "@/components/posture-coach/types";
+import { PostureScreenEffectOverlay } from "@/components/posture-coach/posture-screen-effect-overlay";
+import type { PostureScreenEffectLevel } from "@/lib/posture/posture-screen-effect";
 import { getAnalysisSideLabel, getFeedbackSeverityClass, getFeedbackSeverityLabel, getStatusLabel, getWeightMessage } from "@/components/posture-coach/display-utils";
 import {
   calculateHeightGoal,
   formatHeightCm,
   getGrowthPostureState,
+  type PostureScoreStatus,
 } from "@/lib/growth-posture";
 
 type AnalysisViewProps = {
@@ -19,8 +22,9 @@ type AnalysisViewProps = {
   videoRef: RefObject<HTMLVideoElement | null>;
   canvasRef: RefObject<HTMLCanvasElement | null>;
   isRunning: boolean;
-  postureStatus: string;
+  postureStatus: PostureScoreStatus;
   appMode: AppMode;
+  screenEffectLevel: PostureScreenEffectLevel;
   sessionAverageScore: number | null;
   onOpenSettings: () => void;
   onStart: () => Promise<void>;
@@ -28,15 +32,18 @@ type AnalysisViewProps = {
 };
 
 export function AnalysisView(props: AnalysisViewProps) {
-  const { cameraTone, cameraText, modeLabel, modeMessage, latestPosture, settings, videoRef, canvasRef, isRunning, postureStatus, appMode, sessionAverageScore, onOpenSettings, onStart, onStop } = props;
+  const { cameraTone, cameraText, modeLabel, modeMessage, latestPosture, settings, videoRef, canvasRef, isRunning, postureStatus, appMode, screenEffectLevel, sessionAverageScore, onOpenSettings, onStart, onStop } = props;
   const heightGoal = calculateHeightGoal(settings.currentHeightCm, settings.targetHeightCm);
   const growthPostureState = getGrowthPostureState({
     isRunning,
     isTracking: latestPosture.isTracking,
-    isBadPosture: latestPosture.isBadPosture,
+    postureStatus,
   });
   return (
-    <div className="grid grid-cols-1 items-stretch gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(320px,1fr)]">
+    <div
+      className={`posture-effect-stage posture-effect-stage--${screenEffectLevel} grid grid-cols-1 items-stretch gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(320px,1fr)]`}
+      data-posture-effect={screenEffectLevel}
+    >
       <section className="app-surface flex h-full flex-col p-4">
         <div className="mb-2 flex flex-col justify-between gap-2 sm:flex-row sm:items-start">
           <div>
@@ -116,6 +123,97 @@ export function AnalysisView(props: AnalysisViewProps) {
           >
             {isRunning ? "분석 중지" : "분석 시작"}
           </button>
+        </div>
+
+        <div className="mt-4 border-t border-blue-100 pt-4">
+          <div className="border border-blue-100 bg-blue-50/60 p-4">
+            <div className="mb-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <h4 className="font-bold text-gray-900">내 성장 자세</h4>
+                {heightGoal && (
+                  <span className="border border-[#70E5C4] bg-[#C4F6E8] px-2.5 py-1 text-xs font-bold text-[#12644C]">
+                    {heightGoal.status === "remaining"
+                      ? `목표까지 ${formatHeightCm(heightGoal.remainingCm)}`
+                      : "목표 달성"}
+                  </span>
+                )}
+              </div>
+              <p className="mt-1 text-xs leading-5 text-gray-600">
+                현재 키와 목표 키를 자세 상태와 함께 확인해요.
+              </p>
+            </div>
+
+            <div className="grid gap-2 lg:grid-cols-[minmax(0,0.75fr)_minmax(0,1fr)_minmax(0,1.5fr)]">
+              {heightGoal && settings.currentHeightCm !== null && settings.targetHeightCm !== null ? (
+                <>
+                  <div className="border border-white bg-white/80 p-3 text-sm">
+                    <span className="text-gray-500">현재 키</span>
+                    <strong className="mt-1 block text-lg text-gray-900">
+                      {formatHeightCm(settings.currentHeightCm)}
+                    </strong>
+                  </div>
+                  <div className="border border-[#70E5C4] bg-[#C4F6E8] p-3 text-sm text-[#12644C]">
+                    <span>목표 키</span>
+                    <strong className="mt-1 block text-lg">
+                      {formatHeightCm(settings.targetHeightCm)}
+                    </strong>
+                  </div>
+                </>
+              ) : (
+                <button
+                  type="button"
+                  onClick={onOpenSettings}
+                  className="border border-blue-200 bg-white px-3 py-2 text-sm font-bold text-blue-700 lg:col-span-2"
+                >
+                  설정에서 현재 키와 목표 키를 입력해 주세요
+                </button>
+              )}
+
+              <div
+                className={`border p-3 text-sm leading-6 ${
+                  growthPostureState === "danger"
+                    ? "border-red-200 bg-red-50 text-red-950"
+                    : growthPostureState === "warning"
+                      ? "border-yellow-200 bg-yellow-50 text-yellow-950"
+                      : growthPostureState === "good"
+                        ? "border-[#70E5C4] bg-white text-[#12644C]"
+                        : "border-gray-200 bg-white text-gray-700"
+                }`}
+              >
+                {growthPostureState === "idle" && (
+                  <p>분석을 시작해 보세요.</p>
+                )}
+                {growthPostureState === "tracking-lost" && (
+                  <p>측면이 보이도록 위치를 조정해 주세요.</p>
+                )}
+                {growthPostureState === "good" && (
+                  <p>
+                    <strong>좋음</strong> · 좋아요! 지금 자세를 유지해요.
+                  </p>
+                )}
+                {growthPostureState === "warning" && (
+                  <p>
+                    <strong>주의</strong> · 자세를 고쳐보세요. 목표 키까지 도달해야죠!
+                  </p>
+                )}
+                {growthPostureState === "danger" && (
+                  <p>
+                    <strong>위험</strong> · 혹시 자세를 포기하셨나요? ㅠ 지금 바로 몸을 펴 주세요!
+                  </p>
+                )}
+              </div>
+            </div>
+
+            <details className="mt-3 text-xs leading-5 text-gray-600">
+              <summary className="cursor-pointer font-bold text-gray-700">왜 이 기능을 만들었나요?</summary>
+              <p className="mt-2">
+                일부 대중 기사에서는 나쁜 자세가 성장기 키를 일정한 수치만큼 감소시킨다고
+                설명하지만, 연간 5mm와 같은 정량적 수치는 충분한 학술적 근거가 확인되지
+                않았습니다. 따라서 PostureAI는 최종 키를 예측하지 않고 사용자가 직접 설정한
+                성장 목표와 현재 자세 상태를 함께 보여줍니다.
+              </p>
+            </details>
+          </div>
         </div>
 
       </section>
@@ -205,92 +303,9 @@ export function AnalysisView(props: AnalysisViewProps) {
               </strong>
             </div>
           </div>
-          <div className="mt-4 border-t border-blue-100 pt-4">
-            <div className="border border-blue-100 bg-blue-50/60 p-4">
-              <div className="mb-3">
-                <h4 className="font-bold text-gray-900">내 성장 자세</h4>
-                <p className="mt-1 text-xs leading-5 text-gray-600">
-                  현재 키와 목표 키를 자세 상태와 함께 확인해요.
-                </p>
-              </div>
-
-              {heightGoal && settings.currentHeightCm !== null && settings.targetHeightCm !== null ? (
-                <div className="grid grid-cols-2 gap-2 text-sm">
-                  <div className="border border-white bg-white/80 p-2">
-                    <span className="text-gray-500">현재 키</span>
-                    <strong className="mt-1 block text-lg text-gray-900">
-                      {formatHeightCm(settings.currentHeightCm)}
-                    </strong>
-                  </div>
-                  <div className="border border-white bg-white/80 p-2">
-                    <span className="text-gray-500">목표 키</span>
-                    <strong className="mt-1 block text-lg text-gray-900">
-                      {formatHeightCm(settings.targetHeightCm)}
-                    </strong>
-                  </div>
-                  <div className="col-span-2 border border-[#70E5C4] bg-[#C4F6E8] p-3 text-center font-bold text-[#12644C]">
-                    {heightGoal.status === "remaining"
-                      ? `목표까지 ${formatHeightCm(heightGoal.remainingCm)}`
-                      : "설정한 목표 키에 도달했어요"}
-                  </div>
-                </div>
-              ) : (
-                <button
-                  type="button"
-                  onClick={onOpenSettings}
-                  className="w-full border border-blue-200 bg-white px-3 py-2 text-sm font-bold text-blue-700"
-                >
-                  설정에서 현재 키와 목표 키를 입력해 주세요
-                </button>
-              )}
-
-              <div
-                className={`mt-3 border p-3 text-sm leading-6 ${
-                  growthPostureState === "bad"
-                    ? "border-orange-200 bg-orange-50 text-orange-950"
-                    : growthPostureState === "good"
-                      ? "border-[#70E5C4] bg-white text-[#12644C]"
-                      : "border-gray-200 bg-white text-gray-700"
-                }`}
-              >
-                {growthPostureState === "idle" && (
-                  <p>자세 분석을 시작하면 현재 자세 상태를 확인할 수 있어요.</p>
-                )}
-                {growthPostureState === "tracking-lost" && (
-                  <p>몸의 측면이 잘 보이도록 카메라 위치를 조정해 주세요.</p>
-                )}
-                {growthPostureState === "good" && (
-                  <>
-                    <p className="font-bold">좋은 자세를 유지하고 있어요.</p>
-                    <p>바른 자세로 건강한 성장 습관을 이어가세요.</p>
-                  </>
-                )}
-                {growthPostureState === "bad" && (
-                  <>
-                    <p className="font-bold">⚠️ 지금 구부정한 자세가 감지됐어요.</p>
-                    <p>성장기에는 바른 자세와 규칙적인 운동·수면 습관이 중요해요.</p>
-                    <p>
-                      구부정한 자세에서는 몸이 제대로 펴지지 않아 실제 키보다 작아 보일 수 있고,
-                      목과 허리에 부담이 커질 수 있어요.
-                    </p>
-                    <p className="font-bold">성장기에는 자세 습관도 함께 관리해 주세요.</p>
-                  </>
-                )}
-              </div>
-
-              <details className="mt-3 text-xs leading-5 text-gray-600">
-                <summary className="cursor-pointer font-bold text-gray-700">왜 이 기능을 만들었나요?</summary>
-                <p className="mt-2">
-                  일부 대중 기사에서는 나쁜 자세가 성장기 키를 일정한 수치만큼 감소시킨다고
-                  설명하지만, 연간 5mm와 같은 정량적 수치는 충분한 학술적 근거가 확인되지
-                  않았습니다. 따라서 PostureAI는 최종 키를 예측하지 않고 사용자가 직접 설정한
-                  성장 목표와 현재 자세 상태를 함께 보여줍니다.
-                </p>
-              </details>
-            </div>
-          </div>
         </section>
       </div>
+      <PostureScreenEffectOverlay level={screenEffectLevel} />
     </div>
   );
 }

@@ -36,6 +36,7 @@ export interface Settings {
   stretchReminderIntervalMinutes: number;
   stretchReminderTestAlertEnabled: boolean;
   landmarkOverlayEnabled: boolean;
+  postureEffectSoundEnabled: boolean;
   smoothingEnabled: boolean;
   realtimeScoreIntervalSeconds: number;
   preferredSideMode: SideMode;

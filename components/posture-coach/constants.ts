@@ -31,6 +31,7 @@ export const DEFAULT_SETTINGS: Settings = {
   stretchReminderIntervalMinutes: 30,
   stretchReminderTestAlertEnabled: false,
   landmarkOverlayEnabled: true,
+  postureEffectSoundEnabled: true,
   smoothingEnabled: true,
   realtimeScoreIntervalSeconds: 1,
   preferredSideMode: "left",

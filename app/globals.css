@@ -204,6 +204,174 @@ input[type="range"] {
   background: currentColor;
 }
 
+.posture-effect-stage {
+  position: relative;
+  isolation: isolate;
+}
+
+.posture-effect-stage--cracked {
+  animation: posture-screen-glitch 2.8s steps(2, end) infinite;
+}
+
+.posture-effect-stage--shattered {
+  animation: posture-screen-shatter 0.34s ease-out 1, posture-screen-glitch-danger 1.7s steps(2, end) 0.34s infinite;
+}
+
+.posture-screen-effect-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 50;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.posture-screen-effect-vignette,
+.posture-screen-effect-impact,
+.posture-screen-effect-scanline,
+.posture-screen-effect-cracks {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.posture-screen-effect-vignette {
+  background:
+    radial-gradient(circle at center, transparent 48%, rgba(3, 16, 18, 0.18) 78%, rgba(1, 8, 10, 0.52) 100%),
+    linear-gradient(90deg, rgba(0, 228, 255, 0.05), transparent 14%, transparent 86%, rgba(255, 32, 65, 0.08));
+  animation: posture-vignette-pulse 2.4s ease-in-out infinite;
+}
+
+.posture-screen-effect-overlay--shattered .posture-screen-effect-vignette {
+  background:
+    radial-gradient(circle at center, transparent 34%, rgba(94, 0, 12, 0.14) 62%, rgba(30, 0, 5, 0.62) 100%),
+    linear-gradient(90deg, rgba(0, 225, 255, 0.1), transparent 18%, transparent 82%, rgba(255, 0, 43, 0.16));
+  animation-duration: 0.8s;
+}
+
+.posture-screen-effect-cracks {
+  overflow: visible;
+  filter: drop-shadow(2px 1px 0 rgba(255, 36, 76, 0.5)) drop-shadow(-2px -1px 0 rgba(0, 220, 255, 0.45));
+}
+
+.posture-crack {
+  fill: none;
+  stroke: rgba(235, 252, 255, 0.92);
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  stroke-linejoin: bevel;
+  vector-effect: non-scaling-stroke;
+  animation: posture-crack-draw 0.26s ease-out both;
+}
+
+.posture-crack--shattered {
+  display: none;
+  stroke-width: 2.8;
+}
+
+.posture-screen-effect-overlay--shattered .posture-crack--shattered {
+  display: inline;
+  animation-duration: 0.2s;
+}
+
+.posture-screen-effect-scanline {
+  height: 4px;
+  opacity: 0;
+  background: linear-gradient(90deg, transparent, rgba(0, 232, 255, 0.38) 15%, rgba(255, 255, 255, 0.22) 58%, rgba(255, 15, 67, 0.42) 88%, transparent);
+  mix-blend-mode: screen;
+}
+
+.posture-screen-effect-scanline--one {
+  animation: posture-scanline-one 2.1s steps(1, end) infinite;
+}
+
+.posture-screen-effect-scanline--two {
+  animation: posture-scanline-two 2.7s steps(1, end) 0.4s infinite;
+}
+
+.posture-screen-effect-overlay--shattered .posture-screen-effect-scanline {
+  height: 7px;
+  animation-duration: 1.1s;
+}
+
+.posture-screen-effect-impact {
+  opacity: 0;
+  background: rgba(255, 255, 255, 0.6);
+  animation: posture-impact-flash 0.24s ease-out 1;
+}
+
+.posture-screen-effect-overlay--shattered .posture-screen-effect-impact {
+  background: rgba(255, 30, 61, 0.42);
+  animation-duration: 0.34s;
+}
+
+@keyframes posture-crack-draw {
+  from { opacity: 0; stroke-dasharray: 0 1200; }
+  to { opacity: 1; stroke-dasharray: 1200 0; }
+}
+
+@keyframes posture-impact-flash {
+  0% { opacity: 0.78; }
+  45% { opacity: 0.08; }
+  100% { opacity: 0; }
+}
+
+@keyframes posture-vignette-pulse {
+  0%, 100% { opacity: 0.72; }
+  50% { opacity: 1; }
+}
+
+@keyframes posture-screen-shatter {
+  0%, 100% { transform: translate3d(0, 0, 0); }
+  20% { transform: translate3d(-5px, 2px, 0); }
+  40% { transform: translate3d(5px, -3px, 0); }
+  60% { transform: translate3d(-3px, -1px, 0); }
+  80% { transform: translate3d(2px, 2px, 0); }
+}
+
+@keyframes posture-screen-glitch {
+  0%, 91%, 100% { filter: none; transform: translate3d(0, 0, 0); }
+  92% { filter: drop-shadow(2px 0 rgba(255, 20, 60, 0.25)) drop-shadow(-2px 0 rgba(0, 220, 255, 0.25)); transform: translateX(1px); }
+  94% { filter: none; transform: translateX(-1px); }
+}
+
+@keyframes posture-screen-glitch-danger {
+  0%, 82%, 100% { filter: none; transform: translate3d(0, 0, 0); }
+  84% { filter: drop-shadow(4px 0 rgba(255, 0, 48, 0.4)) drop-shadow(-4px 0 rgba(0, 225, 255, 0.38)); transform: translateX(2px); }
+  88% { filter: saturate(1.22); transform: translateX(-2px); }
+  92% { filter: none; transform: translateX(1px); }
+}
+
+@keyframes posture-scanline-one {
+  0%, 75%, 100% { opacity: 0; transform: translateY(12vh); }
+  76% { opacity: 0.75; transform: translateY(12vh); }
+  78% { opacity: 0.15; transform: translateY(48vh); }
+  79% { opacity: 0; transform: translateY(70vh); }
+}
+
+@keyframes posture-scanline-two {
+  0%, 60%, 100% { opacity: 0; transform: translateY(72vh); }
+  61% { opacity: 0.6; transform: translateY(72vh); }
+  64% { opacity: 0.12; transform: translateY(30vh); }
+  65% { opacity: 0; transform: translateY(16vh); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .posture-effect-stage--cracked,
+  .posture-effect-stage--shattered,
+  .posture-screen-effect-vignette,
+  .posture-screen-effect-scanline,
+  .posture-screen-effect-impact,
+  .posture-crack {
+    animation: none !important;
+  }
+
+  .posture-screen-effect-impact,
+  .posture-screen-effect-scanline {
+    display: none;
+  }
+}
+
 .stretch-analysis-layout {
   display: grid;
   grid-template-columns: minmax(0, 1fr);

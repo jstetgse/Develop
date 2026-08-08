@@ -204,6 +204,7 @@ type FirestoreSettings = Pick<
   | "stretchReminderIntervalMinutes"
   | "stretchReminderTestAlertEnabled"
   | "landmarkOverlayEnabled"
+  | "postureEffectSoundEnabled"
   | "smoothingEnabled"
   | "realtimeScoreIntervalSeconds"
   | "preferredSideMode"
@@ -254,6 +255,10 @@ function normalizeSettings(raw: Partial<Settings>, defaults: Settings): Settings
       typeof raw.landmarkOverlayEnabled === "boolean"
         ? raw.landmarkOverlayEnabled
         : defaults.landmarkOverlayEnabled,
+    postureEffectSoundEnabled:
+      typeof raw.postureEffectSoundEnabled === "boolean"
+        ? raw.postureEffectSoundEnabled
+        : defaults.postureEffectSoundEnabled,
     smoothingEnabled: true,
     realtimeScoreIntervalSeconds:
       typeof raw.realtimeScoreIntervalSeconds === "number"
@@ -275,6 +280,7 @@ function toFirestoreSettings(settings: Settings): FirestoreSettings {
     stretchReminderIntervalMinutes: settings.stretchReminderIntervalMinutes,
     stretchReminderTestAlertEnabled: settings.stretchReminderTestAlertEnabled,
     landmarkOverlayEnabled: settings.landmarkOverlayEnabled,
+    postureEffectSoundEnabled: settings.postureEffectSoundEnabled,
     smoothingEnabled: true,
     realtimeScoreIntervalSeconds: settings.realtimeScoreIntervalSeconds,
     preferredSideMode: settings.preferredSideMode,

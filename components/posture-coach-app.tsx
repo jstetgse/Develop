@@ -18,6 +18,7 @@ import { useHistoryRecords } from "@/components/posture-coach/hooks/use-history-
 import { useAnalysisSettings } from "@/components/posture-coach/hooks/use-analysis-settings";
 import { useAuthSession } from "@/components/posture-coach/hooks/use-auth-session";
 import { useAnalysisRuntime } from "@/components/posture-coach/hooks/use-analysis-runtime";
+import { usePostureScreenEffect } from "@/components/posture-coach/hooks/use-posture-screen-effect";
 import { createHomePostureSummary, createHomeScoreInsight } from "@/components/posture-coach/home-utils";
 import { getHomeScoreTone, getStatusFromScore } from "@/components/posture-coach/display-utils";
 import { getKoreaDateKey, getMonthKey, getScoreToneClass, shiftMonthKey } from "@/components/posture-coach/history-utils";
@@ -141,6 +142,12 @@ export function PostureCoachApp() {
   const {
     latestPosture, hasCurrentSessionPostureData, liveScorePoints, sessionAverageScore, clearLiveScorePoints,
   } = runtime.posture;
+  const postureScreenEffect = usePostureScreenEffect({
+    isRunning,
+    isTracking: latestPosture.isTracking,
+    neckAngleDegrees: latestPosture.metrics?.neckAngleDegrees ?? null,
+    soundEnabled: settings.postureEffectSoundEnabled,
+  });
   const {
     activeStretchId, showAllStretchOptions, isStretchDropdownOpen, activeStretchStepIndex,
     completedStretchSteps, isStretchCompleteModalOpen, stretchCalibrationStatus, stretchCalibrationMessage,
@@ -220,6 +227,11 @@ export function PostureCoachApp() {
     await signOutUser();
     setActiveTab("home");
   }, [isRunning, stopApp]);
+
+  const handleStartAnalysis = useCallback(async () => {
+    await postureScreenEffect.unlockAudio();
+    await startApp();
+  }, [postureScreenEffect.unlockAudio, startApp]);
 
   useEffect(() => {
     setSettingsSaveStatus("idle");
@@ -332,9 +344,10 @@ export function PostureCoachApp() {
             isRunning={isRunning}
             postureStatus={postureStatus}
             appMode={appMode}
+            screenEffectLevel={postureScreenEffect.level}
             sessionAverageScore={sessionAverageScore}
             onOpenSettings={() => setIsAnalysisSettingsOpen(true)}
-            onStart={startApp}
+            onStart={handleStartAnalysis}
             onStop={stopApp}
           />
         )}
