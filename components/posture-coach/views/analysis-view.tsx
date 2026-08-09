@@ -1,4 +1,4 @@
-import type { RefObject } from "react";
+import { useState, type RefObject } from "react";
 import { SlidersHorizontal, VideoOff } from "lucide-react";
 import type { PostureResult, Settings } from "@/lib/types";
 import type { AppMode } from "@/components/posture-coach/types";
@@ -33,6 +33,7 @@ type AnalysisViewProps = {
 
 export function AnalysisView(props: AnalysisViewProps) {
   const { cameraTone, cameraText, modeLabel, modeMessage, latestPosture, settings, videoRef, canvasRef, isRunning, postureStatus, appMode, screenEffectLevel, sessionAverageScore, onOpenSettings, onStart, onStop } = props;
+  const [showDetailedMetrics, setShowDetailedMetrics] = useState(false);
   const heightGoal = calculateHeightGoal(settings.currentHeightCm, settings.targetHeightCm);
   const growthPostureState = getGrowthPostureState({
     isRunning,
@@ -125,97 +126,6 @@ export function AnalysisView(props: AnalysisViewProps) {
           </button>
         </div>
 
-        <div className="mt-4 border-t border-blue-100 pt-4">
-          <div className="border border-blue-100 bg-blue-50/60 p-4">
-            <div className="mb-3">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <h4 className="font-bold text-gray-900">내 성장 자세</h4>
-                {heightGoal && (
-                  <span className="border border-[#70E5C4] bg-[#C4F6E8] px-2.5 py-1 text-xs font-bold text-[#12644C]">
-                    {heightGoal.status === "remaining"
-                      ? `목표까지 ${formatHeightCm(heightGoal.remainingCm)}`
-                      : "목표 달성"}
-                  </span>
-                )}
-              </div>
-              <p className="mt-1 text-xs leading-5 text-gray-600">
-                현재 키와 목표 키를 자세 상태와 함께 확인해요.
-              </p>
-            </div>
-
-            <div className="grid gap-2 lg:grid-cols-[minmax(0,0.75fr)_minmax(0,1fr)_minmax(0,1.5fr)]">
-              {heightGoal && settings.currentHeightCm !== null && settings.targetHeightCm !== null ? (
-                <>
-                  <div className="border border-white bg-white/80 p-3 text-sm">
-                    <span className="text-gray-500">현재 키</span>
-                    <strong className="mt-1 block text-lg text-gray-900">
-                      {formatHeightCm(settings.currentHeightCm)}
-                    </strong>
-                  </div>
-                  <div className="border border-[#70E5C4] bg-[#C4F6E8] p-3 text-sm text-[#12644C]">
-                    <span>목표 키</span>
-                    <strong className="mt-1 block text-lg">
-                      {formatHeightCm(settings.targetHeightCm)}
-                    </strong>
-                  </div>
-                </>
-              ) : (
-                <button
-                  type="button"
-                  onClick={onOpenSettings}
-                  className="border border-blue-200 bg-white px-3 py-2 text-sm font-bold text-blue-700 lg:col-span-2"
-                >
-                  설정에서 현재 키와 목표 키를 입력해 주세요
-                </button>
-              )}
-
-              <div
-                className={`border p-3 text-sm leading-6 ${
-                  growthPostureState === "danger"
-                    ? "border-red-200 bg-red-50 text-red-950"
-                    : growthPostureState === "warning"
-                      ? "border-yellow-200 bg-yellow-50 text-yellow-950"
-                      : growthPostureState === "good"
-                        ? "border-[#70E5C4] bg-white text-[#12644C]"
-                        : "border-gray-200 bg-white text-gray-700"
-                }`}
-              >
-                {growthPostureState === "idle" && (
-                  <p>분석을 시작해 보세요.</p>
-                )}
-                {growthPostureState === "tracking-lost" && (
-                  <p>측면이 보이도록 위치를 조정해 주세요.</p>
-                )}
-                {growthPostureState === "good" && (
-                  <p>
-                    <strong>좋음</strong> · 좋아요! 지금 자세를 유지해요.
-                  </p>
-                )}
-                {growthPostureState === "warning" && (
-                  <p>
-                    <strong>주의</strong> · 자세를 고쳐보세요. 목표 키까지 도달해야죠!
-                  </p>
-                )}
-                {growthPostureState === "danger" && (
-                  <p>
-                    <strong>위험</strong> · 혹시 자세를 포기하셨나요? ㅠ 지금 바로 몸을 펴 주세요!
-                  </p>
-                )}
-              </div>
-            </div>
-
-            <details className="mt-3 text-xs leading-5 text-gray-600">
-              <summary className="cursor-pointer font-bold text-gray-700">왜 이 기능을 만들었나요?</summary>
-              <p className="mt-2">
-                일부 대중 기사에서는 나쁜 자세가 성장기 키를 일정한 수치만큼 감소시킨다고
-                설명하지만, 연간 5mm와 같은 정량적 수치는 충분한 학술적 근거가 확인되지
-                않았습니다. 따라서 PostureAI는 최종 키를 예측하지 않고 사용자가 직접 설정한
-                성장 목표와 현재 자세 상태를 함께 보여줍니다.
-              </p>
-            </details>
-          </div>
-        </div>
-
       </section>
 
       <div className="flex h-full flex-col gap-2">
@@ -278,31 +188,120 @@ export function AnalysisView(props: AnalysisViewProps) {
         </section>
 
         <section className="app-surface flex min-h-[210px] flex-1 flex-col p-4">
-          <h3 className="mb-2 text-lg font-bold text-gray-900">분석 지표</h3>
-          <div className="grid flex-1 grid-rows-3 gap-2">
-            <div className="flex min-h-0 flex-col justify-center border-t border-gray-100 pt-2 first:border-t-0 first:pt-0">
-              <span className="text-sm font-medium text-gray-600">목 점수 / 각도 / 하중</span>
-              <strong className="mt-1 break-keep text-right text-xl leading-tight text-gray-900">
-                {latestPosture.metrics
-                  ? `${Math.round(latestPosture.metrics.neckScore)}점 · ${latestPosture.metrics.neckAngleDegrees.toFixed(1)}° · ${latestPosture.metrics.estimatedNeckLoadKg.toFixed(1)}kg`
-                  : "--"}
-              </strong>
-            </div>
-            <div className="flex min-h-0 flex-col justify-center border-t border-gray-100 pt-2">
-              <span className="text-sm font-medium text-gray-600">허리 점수 / 기울기</span>
-              <strong className="mt-1 break-keep text-right text-xl leading-tight text-gray-900">
-                {latestPosture.metrics
-                  ? `${Math.round(latestPosture.metrics.trunkScore)}점 · ${latestPosture.metrics.trunkLeanDegrees.toFixed(1)}°`
-                  : "--"}
-              </strong>
-            </div>
-            <div className="flex min-h-0 flex-col justify-center border-t border-gray-100 pt-2">
-              <span className="text-sm font-medium text-gray-600">안정성 점수</span>
-              <strong className="mt-1 break-keep text-right text-xl leading-tight text-gray-900">
-                {latestPosture.metrics ? `${Math.round(latestPosture.metrics.stabilityScore)}점` : "--"}
-              </strong>
-            </div>
-          </div>
+          {showDetailedMetrics ? (
+            <>
+              <h3 className="mb-2 text-lg font-bold text-gray-900">분석 지표</h3>
+              <div className="grid flex-1 grid-rows-3 gap-2">
+                <div className="flex min-h-0 flex-col justify-center border-t border-gray-100 pt-2 first:border-t-0 first:pt-0">
+                  <span className="text-sm font-medium text-gray-600">목 점수 / 각도 / 하중</span>
+                  <strong className="mt-1 break-keep text-right text-xl leading-tight text-gray-900">
+                    {latestPosture.metrics
+                      ? `${Math.round(latestPosture.metrics.neckScore)}점 · ${latestPosture.metrics.neckAngleDegrees.toFixed(1)}° · ${latestPosture.metrics.estimatedNeckLoadKg.toFixed(1)}kg`
+                      : "--"}
+                  </strong>
+                </div>
+                <div className="flex min-h-0 flex-col justify-center border-t border-gray-100 pt-2">
+                  <span className="text-sm font-medium text-gray-600">허리 점수 / 기울기</span>
+                  <strong className="mt-1 break-keep text-right text-xl leading-tight text-gray-900">
+                    {latestPosture.metrics
+                      ? `${Math.round(latestPosture.metrics.trunkScore)}점 · ${latestPosture.metrics.trunkLeanDegrees.toFixed(1)}°`
+                      : "--"}
+                  </strong>
+                </div>
+                <div className="flex min-h-0 flex-col justify-center border-t border-gray-100 pt-2">
+                  <span className="text-sm font-medium text-gray-600">안정성 점수</span>
+                  <strong className="mt-1 break-keep text-right text-xl leading-tight text-gray-900">
+                    {latestPosture.metrics ? `${Math.round(latestPosture.metrics.stabilityScore)}점` : "--"}
+                  </strong>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowDetailedMetrics(false)}
+                className="mt-3 w-full border border-blue-200 bg-white px-3 py-2 text-sm font-bold text-blue-700"
+              >
+                성장 자세로 돌아가기
+              </button>
+            </>
+          ) : (
+            <>
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                <h3 className="text-lg font-bold text-gray-900">내 성장 자세</h3>
+                {heightGoal && (
+                  <span className="border border-[#70E5C4] bg-[#C4F6E8] px-2.5 py-1 text-xs font-bold text-[#12644C]">
+                    {heightGoal.status === "remaining"
+                      ? `목표까지 ${formatHeightCm(heightGoal.remainingCm)}`
+                      : "목표 달성"}
+                  </span>
+                )}
+              </div>
+
+              {heightGoal && settings.currentHeightCm !== null && settings.targetHeightCm !== null ? (
+                <div className="grid grid-cols-2 gap-2 text-sm">
+                  <div className="border border-white bg-white/80 p-3">
+                    <span className="text-gray-500">현재 키</span>
+                    <strong className="mt-1 block text-lg text-gray-900">
+                      {formatHeightCm(settings.currentHeightCm)}
+                    </strong>
+                  </div>
+                  <div className="border border-[#70E5C4] bg-[#C4F6E8] p-3 text-[#12644C]">
+                    <span>목표 키</span>
+                    <strong className="mt-1 block text-lg">
+                      {formatHeightCm(settings.targetHeightCm)}
+                    </strong>
+                  </div>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={onOpenSettings}
+                  className="w-full border border-blue-200 bg-white px-3 py-2 text-sm font-bold text-blue-700"
+                >
+                  설정에서 현재 키와 목표 키를 입력해 주세요
+                </button>
+              )}
+
+              <div
+                className={`mt-3 border p-3 text-sm leading-6 ${
+                  growthPostureState === "danger"
+                    ? "border-red-200 bg-red-50 text-red-950"
+                    : growthPostureState === "warning"
+                      ? "border-yellow-200 bg-yellow-50 text-yellow-950"
+                      : growthPostureState === "good"
+                        ? "border-[#70E5C4] bg-white text-[#12644C]"
+                        : "border-gray-200 bg-white text-gray-700"
+                }`}
+              >
+                {growthPostureState === "idle" && <p>분석을 시작해 보세요.</p>}
+                {growthPostureState === "tracking-lost" && (
+                  <p>측면이 보이도록 위치를 조정해 주세요.</p>
+                )}
+                {growthPostureState === "good" && (
+                  <p>
+                    <strong>좋음</strong> · 좋아요! 지금 자세를 유지해요.
+                  </p>
+                )}
+                {growthPostureState === "warning" && (
+                  <p>
+                    <strong>주의</strong> · 자세를 고쳐보세요. 목표 키까지 도달해야죠!
+                  </p>
+                )}
+                {growthPostureState === "danger" && (
+                  <p>
+                    <strong>위험</strong> · 혹시 자세를 포기하셨나요? ㅠ 지금 바로 몸을 펴 주세요!
+                  </p>
+                )}
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setShowDetailedMetrics(true)}
+                className="mt-3 w-full border border-blue-200 bg-white px-3 py-2 text-sm font-bold text-blue-700"
+              >
+                자세히 보기
+              </button>
+            </>
+          )}
         </section>
       </div>
       <PostureScreenEffectOverlay level={screenEffectLevel} />
