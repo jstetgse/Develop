@@ -22,6 +22,7 @@ import { usePostureScreenEffect } from "@/components/posture-coach/hooks/use-pos
 import { createHomePostureSummary, createHomeScoreInsight } from "@/components/posture-coach/home-utils";
 import { getHomeScoreTone, getStatusFromScore } from "@/components/posture-coach/display-utils";
 import { getKoreaDateKey, getMonthKey, getScoreToneClass, shiftMonthKey } from "@/components/posture-coach/history-utils";
+import { createGrowthPostureWeek } from "@/components/posture-coach/growth-posture-utils";
 
 
 export function PostureCoachApp() {
@@ -179,6 +180,10 @@ export function PostureCoachApp() {
     () => createHomePostureSummary(homeScoreInsight),
     [homeScoreInsight]
   );
+  const growthPostureWeek = useMemo(
+    () => createGrowthPostureWeek(historyGroups),
+    [historyGroups]
+  );
   const homeAttentionTone = getHomeScoreTone(
     homePostureSummary.attentionText === "없음" ? 100 : homeScoreInsight.weakestAreaScore
   );
@@ -323,11 +328,18 @@ export function PostureCoachApp() {
       >
         {activeTab === "home" && (
           <HomeView
+            settings={settings}
             homePostureSummary={homePostureSummary}
             homeAttentionTone={homeAttentionTone}
             homeScoreInsight={homeScoreInsight}
             recentSummary={recentSummary}
             combinedScorePoints={combinedScorePoints}
+            growthPostureWeek={growthPostureWeek}
+            isLoadingHistory={isLoadingHistory}
+            onOpenGrowthSettings={() => {
+              setActiveAnalysisSettingsPanel("analysis-options");
+              setIsAnalysisSettingsOpen(true);
+            }}
             onNavigate={setActiveTab}
           />
         )}
@@ -400,6 +412,7 @@ export function PostureCoachApp() {
         {activeTab === "history" && (
           <HistoryView
             historyGroups={historyGroups}
+            growthPostureWeek={growthPostureWeek}
             isLoadingHistory={isLoadingHistory}
             selectedHistoryGroup={selectedHistoryGroup}
             selectedHistorySessionKey={selectedHistorySessionKey}
@@ -423,6 +436,7 @@ export function PostureCoachApp() {
             }
             onSelectDate={(dateKey) => {
               setSelectedHistoryDateKey(dateKey);
+              setVisibleHistoryMonthKey(getMonthKey(dateKey));
               setHistorySessionPage(0);
               setSelectedHistorySessionKey(null);
             }}

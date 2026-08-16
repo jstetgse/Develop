@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   CURRENT_HEIGHT_RANGE,
   TARGET_HEIGHT_RANGE,
+  calculateArticleHeightScenario,
   calculateHeightGoal,
   getGrowthPostureState,
   normalizeOptionalHeight,
@@ -46,6 +47,74 @@ describe("growth posture height goal", () => {
     expect(normalizeOptionalHeight(undefined, CURRENT_HEIGHT_RANGE)).toBeNull();
     expect(normalizeOptionalHeight(165.56, CURRENT_HEIGHT_RANGE)).toBe(165.6);
     expect(normalizeOptionalHeight(240, TARGET_HEIGHT_RANGE)).toBeNull();
+  });
+});
+
+describe("article height scenario", () => {
+  it("does not subtract from a good posture scenario", () => {
+    expect(calculateArticleHeightScenario(175, 4, 80)).toEqual({
+      years: 4,
+      targetHeightCm: 175,
+      averageScore: 80,
+      postureStatus: "good",
+      applicationRate: 0,
+      maximumReductionCm: 2,
+      appliedReductionCm: 0,
+      estimatedHeightCm: 175,
+    });
+  });
+
+  it("applies half of the article assumption to a warning posture scenario", () => {
+    expect(calculateArticleHeightScenario(175, 1, 60)).toEqual({
+      years: 1,
+      targetHeightCm: 175,
+      averageScore: 60,
+      postureStatus: "warning",
+      applicationRate: 0.5,
+      maximumReductionCm: 0.5,
+      appliedReductionCm: 0.3,
+      estimatedHeightCm: 174.7,
+    });
+  });
+
+  it("applies all of the article assumption to a danger posture scenario", () => {
+    expect(calculateArticleHeightScenario(175, 4, 59)).toEqual({
+      years: 4,
+      targetHeightCm: 175,
+      averageScore: 59,
+      postureStatus: "danger",
+      applicationRate: 1,
+      maximumReductionCm: 2,
+      appliedReductionCm: 2,
+      estimatedHeightCm: 173,
+    });
+  });
+
+  it.each([
+    [80, "good"],
+    [79, "warning"],
+    [60, "warning"],
+    [59, "danger"],
+  ] as const)("classifies the %s-point boundary as %s", (score, postureStatus) => {
+    expect(calculateArticleHeightScenario(175, 4, score)?.postureStatus).toBe(postureStatus);
+  });
+
+  it.each([
+    [1, 90, 175],
+    [1, 70, 174.7],
+    [1, 50, 174.5],
+    [4, 90, 175],
+    [4, 70, 174],
+    [4, 50, 173],
+  ] as const)("calculates the %s-year scenario for score %s", (years, score, expectedHeight) => {
+    expect(calculateArticleHeightScenario(175, years, score)?.estimatedHeightCm).toBe(expectedHeight);
+  });
+
+  it("rejects invalid target heights and scores", () => {
+    expect(calculateArticleHeightScenario(null, 4, 70)).toBeNull();
+    expect(calculateArticleHeightScenario(230.1, 4, 70)).toBeNull();
+    expect(calculateArticleHeightScenario(175, 4, null)).toBeNull();
+    expect(calculateArticleHeightScenario(175, 4, 101)).toBeNull();
   });
 });
 

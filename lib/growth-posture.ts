@@ -7,6 +7,19 @@ export type HeightGoalResult =
 
 export type PostureScoreStatus = "waiting" | "good" | "warning" | "danger";
 export type GrowthPostureState = "idle" | "tracking-lost" | "good" | "warning" | "danger";
+export type ArticleScenarioYears = 1 | 4;
+export type ArticleScenarioPostureStatus = "good" | "warning" | "danger";
+
+export type ArticleHeightScenario = {
+  years: ArticleScenarioYears;
+  targetHeightCm: number;
+  averageScore: number;
+  postureStatus: ArticleScenarioPostureStatus;
+  applicationRate: 0 | 0.5 | 1;
+  maximumReductionCm: number;
+  appliedReductionCm: number;
+  estimatedHeightCm: number;
+};
 
 export function roundHeightCm(value: number) {
   return Math.round((value + Number.EPSILON) * 10) / 10;
@@ -55,6 +68,40 @@ export function formatHeightCm(value: number) {
     minimumFractionDigits: Number.isInteger(roundHeightCm(value)) ? 0 : 1,
     maximumFractionDigits: 1,
   })}cm`;
+}
+
+export function calculateArticleHeightScenario(
+  targetHeightCm: number | null | undefined,
+  years: ArticleScenarioYears,
+  averageScore: number | null | undefined
+): ArticleHeightScenario | null {
+  if (
+    !isHeightInRange(targetHeightCm, TARGET_HEIGHT_RANGE) ||
+    typeof averageScore !== "number" ||
+    !Number.isFinite(averageScore) ||
+    averageScore < 0 ||
+    averageScore > 100
+  ) {
+    return null;
+  }
+
+  const postureStatus: ArticleScenarioPostureStatus =
+    averageScore >= 80 ? "good" : averageScore >= 60 ? "warning" : "danger";
+  const applicationRate = postureStatus === "good" ? 0 : postureStatus === "warning" ? 0.5 : 1;
+  const maximumReductionCm = roundHeightCm(years * 0.5);
+  const appliedReductionCm = roundHeightCm(maximumReductionCm * applicationRate);
+  const normalizedTargetHeightCm = roundHeightCm(targetHeightCm);
+
+  return {
+    years,
+    targetHeightCm: normalizedTargetHeightCm,
+    averageScore,
+    postureStatus,
+    applicationRate,
+    maximumReductionCm,
+    appliedReductionCm,
+    estimatedHeightCm: roundHeightCm(normalizedTargetHeightCm - appliedReductionCm),
+  };
 }
 
 export function getGrowthPostureState({

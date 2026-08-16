@@ -6,9 +6,12 @@ import { SESSION_TITLE_MAX_LENGTH, getSessionTitleKey } from "@/lib/session-titl
 import { formatMinutes, getStatusLabel } from "@/components/posture-coach/display-utils";
 import { createSessionTrendSummary, formatDateKey, formatHistoryMonthLabel, formatTime, getCalendarDays, getHistoryAreaScores, getHistoryAverageReferenceTone, getHistoryCalendarToneClass, getHistoryGraphDotColor, getHistoryReportComment, getHistorySessionDisplayTitle, getHistoryWeakestArea, getKoreaDateKey, getMonthKey, getScoreIndicatorStyle, shiftMonthKey } from "@/components/posture-coach/history-utils";
 import { getPostureAreaIcon } from "@/components/posture-coach/posture-icons";
+import { GrowthPostureWeekStrip } from "@/components/posture-coach/growth-posture-week-strip";
+import { getGrowthPostureHistoryMessage, type GrowthPostureDay } from "@/components/posture-coach/growth-posture-utils";
 
 type HistoryViewProps = {
   historyGroups: HistoryGroup[];
+  growthPostureWeek: GrowthPostureDay[];
   isLoadingHistory: boolean;
   selectedHistoryGroup: HistoryGroup | null;
   selectedHistorySessionKey: string | null;
@@ -303,7 +306,7 @@ function createPhotoScoreExplanation(session: SessionSummary, kind: ExtremaImage
 }
 
 export function HistoryView(props: HistoryViewProps) {
-  const { historyGroups, isLoadingHistory, selectedHistoryGroup, selectedHistorySessionKey, historySessionPage, visibleHistoryMonthKey, editingSessionTitleKey, sessionTitleDraft, savingSessionTitleKey, sessionTitleErrors, expandedHistoryImageSessions, onSelectSession, onOpenDeleteSession, onShiftMonth, onSelectDate, onCloseSession, onChangePage, onTitleDraftChange, onCancelTitleEdit, onBeginTitleEdit, onToggleImages, onSaveTitle } = props;
+  const { historyGroups, growthPostureWeek, isLoadingHistory, selectedHistoryGroup, selectedHistorySessionKey, historySessionPage, visibleHistoryMonthKey, editingSessionTitleKey, sessionTitleDraft, savingSessionTitleKey, sessionTitleErrors, expandedHistoryImageSessions, onSelectSession, onOpenDeleteSession, onShiftMonth, onSelectDate, onCloseSession, onChangePage, onTitleDraftChange, onCancelTitleEdit, onBeginTitleEdit, onToggleImages, onSaveTitle } = props;
   const [isCalendarHelpOpen, setIsCalendarHelpOpen] = useState(false);
   const [visibleGuidelineImages, setVisibleGuidelineImages] = useState<Set<string>>(new Set());
   const [calendarHelpPosition, setCalendarHelpPosition] = useState<{ left: number; top: number } | null>(null);
@@ -814,6 +817,12 @@ export function HistoryView(props: HistoryViewProps) {
                   <Bell className="h-4 w-4" />,
                   { tone: selectedHistoryGroup.alertCount > 0 ? "warning" : "neutral" }
                 )}
+              </div>
+              <div className="mt-4 border-l-4 border-l-[#18755B] bg-[#F2FBF8] px-4 py-3">
+                <p className="text-xs font-bold uppercase tracking-[0.12em] text-[#18755B]">성장 자세 한마디</p>
+                <p className="mt-1 text-sm font-medium leading-6 text-gray-700">
+                  {getGrowthPostureHistoryMessage(selectedHistoryGroup.averageScore)}
+                </p>
               </div>
             </section>
 
