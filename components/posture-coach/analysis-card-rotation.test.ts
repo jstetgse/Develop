@@ -16,7 +16,7 @@ describe("analysis card rotation", () => {
     expect(getNextAnalysisCardView("growth")).toBe("score");
   });
 
-  it("rotates only after five seconds", () => {
+  it("rotates only after one minute", () => {
     vi.useFakeTimers();
     const onRotate = vi.fn();
     scheduleAnalysisCardRotation(onRotate);

@@ -1,6 +1,6 @@
 export type AnalysisCardView = "score" | "growth";
 
-export const ANALYSIS_CARD_ROTATION_MS = 5_000;
+export const ANALYSIS_CARD_ROTATION_MS = 60_000;
 
 export function getNextAnalysisCardView(current: AnalysisCardView): AnalysisCardView {
   return current === "score" ? "growth" : "score";

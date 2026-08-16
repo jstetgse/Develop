@@ -250,29 +250,37 @@ export function AnalysisView(props: AnalysisViewProps) {
             )}
           </div>
 
-          <p className="border-l-4 border-l-[#18755B] bg-blue-50 px-3 py-2 text-sm font-bold leading-6 text-blue-950">
-            현재 분석 평균 점수: {sessionAverageScore ?? "--"}점
-          </p>
-          <p className="mt-2 text-sm leading-6 text-gray-700">{getWeightMessage(latestPosture)}</p>
-          {latestPosture.feedbackItems.length > 0 && (
-            <div className="mt-2 space-y-2">
+          <div className="space-y-2">
+            <p className="border-l-4 border-l-[#18755B] bg-blue-50 px-3 py-2 text-sm font-bold leading-6 text-blue-950">
+              현재 분석 평균 점수: {sessionAverageScore ?? "--"}점
+            </p>
+            <p className="border border-[rgba(18,100,76,0.18)] bg-white px-3 py-2 text-sm font-bold leading-6 text-gray-700">
+              {getWeightMessage(latestPosture)}
+            </p>
+            <div className="space-y-2">
               <p className="text-sm font-bold text-gray-900">부위별 피드백</p>
-              {latestPosture.feedbackItems.map((item) => (
-                <div
-                  key={item.part}
-                  className={`border p-3 text-sm leading-6 ${getFeedbackSeverityClass(item.severity)}`}
-                >
-                  <div className="mb-1 flex flex-wrap items-center justify-between gap-2 font-bold">
-                    <span>
-                      {item.label} · {getFeedbackSeverityLabel(item.severity)}
-                    </span>
-                    <span>{item.score}점</span>
+              {latestPosture.feedbackItems.length > 0 ? (
+                latestPosture.feedbackItems.map((item) => (
+                  <div
+                    key={item.part}
+                    className={`border p-3 text-sm leading-6 ${getFeedbackSeverityClass(item.severity)}`}
+                  >
+                    <div className="mb-1 flex flex-wrap items-center justify-between gap-2 font-bold">
+                      <span>
+                        {item.label} · {getFeedbackSeverityLabel(item.severity)}
+                      </span>
+                      <span>{item.score}점</span>
+                    </div>
+                    <p>{item.message}</p>
                   </div>
-                  <p>{item.message}</p>
-                </div>
-              ))}
+                ))
+              ) : (
+                <p className="border border-dashed border-gray-300 bg-white px-3 py-3 text-sm font-medium leading-6 text-gray-600">
+                  {latestPosture.feedbackMessage}
+                </p>
+              )}
             </div>
-          )}
+          </div>
             </>
           ) : (
             <>

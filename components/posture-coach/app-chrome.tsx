@@ -60,7 +60,7 @@ export function AppChrome(props: AppChromeProps) {
             { id: "history" as Tab, label: "기록 보기", icon: <History className="h-5 w-5" /> },
           ].map((tab) => {
             const isActive = activeTab === tab.id;
-            return <button key={tab.id} type="button" onClick={() => onTabChange(tab.id)} className={`relative flex min-h-14 min-w-0 flex-col items-center justify-center gap-1 px-1 text-[11px] leading-tight sm:text-xs ${isActive ? "font-bold text-[#18755B]" : "text-gray-500"}`}><span className={`absolute top-0 h-0.5 w-5 ${isActive ? "bg-[#18755B]" : "bg-transparent"}`} />{tab.icon}<span className="max-w-full truncate whitespace-nowrap">{tab.label}</span></button>;
+            return <button key={tab.id} type="button" onClick={() => onTabChange(tab.id)} className={`relative flex min-h-14 min-w-0 flex-col items-center justify-center gap-1 px-1 text-xs leading-tight ${isActive ? "font-bold text-[#18755B]" : "text-gray-500"}`}><span className={`absolute top-0 h-0.5 w-5 ${isActive ? "bg-[#18755B]" : "bg-transparent"}`} />{tab.icon}<span className="max-w-full truncate whitespace-nowrap">{tab.label}</span></button>;
           })}
         </div></div>
       </nav>
