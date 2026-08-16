@@ -139,6 +139,166 @@ export function StretchingView(props: StretchingViewProps) {
     );
   };
 
+  if (!activeStretchId) {
+    return (
+      <div className="-mt-4 space-y-4">
+        {hasCurrentSessionPostureData && (
+          <section className="app-surface p-5">
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h2 className="text-xl font-bold text-gray-900">맞춤 스트레칭 추천</h2>
+                {personalizedStretchRecommendations.message && (
+                  <p className="mt-1 text-sm text-gray-600">{personalizedStretchRecommendations.message}</p>
+                )}
+              </div>
+              {isLoadingHistory && (
+                <span className="border border-blue-100 bg-blue-50 px-3 py-1 text-xs font-bold text-blue-700">
+                  추천 계산 중...
+                </span>
+              )}
+            </div>
+            {isLoadingHistory ? (
+              <div className="border border-blue-100 bg-blue-50 px-4 py-3 text-sm font-bold text-blue-900">
+                추천 계산 중...
+              </div>
+            ) : personalizedStretchRecommendations.recommendations.length > 0 ? (
+              <div className="grid gap-3 lg:grid-cols-3">
+                {personalizedStretchRecommendations.recommendations.slice(0, 3).map((recommendation) => {
+                  const stretch = getStretchById(recommendation.stretchId);
+                  if (!stretch) return null;
+
+                  return (
+                    <button
+                      key={recommendation.stretchId}
+                      type="button"
+                      onClick={() => handleStretchSelection(recommendation.stretchId)}
+                      className="group flex h-full flex-col border border-gray-200 bg-white p-4 text-left"
+                    >
+                      <div className="mb-3 flex items-start justify-between gap-3">
+                        <div>
+                          <p className="mb-1 text-xs font-bold text-blue-600">{stretch.targetBodyPart}</p>
+                          <h3 className="font-bold text-gray-900">{stretch.name}</h3>
+                        </div>
+                        <span
+                          className={`shrink-0 border px-2.5 py-1 text-xs font-bold ${getRecommendationPriorityClass(
+                            recommendation.priorityLabel,
+                          )}`}
+                        >
+                          우선순위: {recommendation.priorityLabel}
+                        </span>
+                      </div>
+                      <div className="flex-1">
+                        <p className="text-sm font-bold text-gray-800">추천 이유:</p>
+                        <ul className="mt-1 space-y-1 text-sm leading-6 text-gray-600">
+                          {recommendation.reasons.slice(0, 2).map((reason) => (
+                            <li key={reason}>- {reason}</li>
+                          ))}
+                        </ul>
+                      </div>
+                      <div className="mt-4 flex items-center justify-between border border-[#18755B]/25 bg-white px-3 py-2 text-sm font-bold text-[#18755B]">
+                        <span>이 스트레칭 선택하기</span>
+                        <ChevronRight className="h-4 w-4 shrink-0" />
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="border border-gray-100 bg-[rgba(196,246,232,0.28)] px-4 py-3 text-sm font-bold text-gray-700">
+                맞춤 추천을 찾지 못했습니다. 아래 목록에서 스트레칭을 직접 선택할 수 있습니다.
+              </div>
+            )}
+            <div className="mt-4 border-t border-gray-100 pt-4">
+              <button
+                type="button"
+                onClick={onToggleShowAll}
+                className="inline-flex min-h-10 items-center justify-center gap-2 border border-blue-200 bg-white px-4 py-2 text-sm font-bold text-blue-700"
+              >
+                {showAllStretchOptions ? "다른 스트레칭 목록 닫기" : "다른 스트레칭 선택하기"}
+                <ChevronRight className="h-4 w-4" />
+              </button>
+              {(showAllStretchOptions || personalizedStretchRecommendations.recommendations.length === 0) && !isLoadingHistory && (
+                <div className="mt-3 grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+                  {allStretchOptions.map((stretch) => (
+                    <button
+                      key={stretch.id}
+                      type="button"
+                      onClick={() => handleStretchSelection(stretch.id)}
+                      className="group flex h-full flex-col border border-gray-200 bg-gray-50 p-4 text-left"
+                    >
+                      <div className="mb-2 flex items-start justify-between gap-3">
+                        <div>
+                          <p className="mb-1 text-xs font-bold text-blue-600">{stretch.targetBodyPart}</p>
+                          <h3 className="font-bold text-gray-900">{stretch.name}</h3>
+                        </div>
+                        <ChevronRight className="h-5 w-5 shrink-0 text-gray-400" />
+                      </div>
+                      <p className="text-sm leading-6 text-gray-600">{stretch.shortDescription}</p>
+                      <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-gray-500">
+                        <Clock className="h-3 w-3" />
+                        <span>{stretch.durationSec}초</span>
+                        <span>{stretch.steps.length}단계</span>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </section>
+        )}
+
+        {!hasCurrentSessionPostureData && (
+          <section className="app-surface p-5">
+            <div className="mb-4">
+              <h2 className="text-xl font-bold text-gray-900">스트레칭 선택</h2>
+              <p className="mt-1 text-sm leading-6 text-gray-600">
+                목록에서 스트레칭을 선택하면 카메라 분석 화면으로 이동합니다.
+              </p>
+            </div>
+            <div className="relative">
+              <button
+                id="stretch-select"
+                type="button"
+                onClick={onToggleDropdown}
+                className="flex min-h-11 w-full items-center justify-between gap-3 border border-[#18755B]/30 bg-white px-3 py-2 text-left text-sm font-bold text-gray-900 focus:border-[#18755B] focus:outline-none"
+                aria-haspopup="listbox"
+                aria-expanded={isStretchDropdownOpen}
+              >
+                <span>스트레칭을 선택하세요</span>
+                <ChevronRight className={`h-5 w-5 shrink-0 text-[#18755B] ${isStretchDropdownOpen ? "rotate-90" : ""}`} />
+              </button>
+              {isStretchDropdownOpen && (
+                <div className="absolute z-20 mt-2 max-h-72 w-full overflow-auto border border-[#18755B]/25 bg-white" role="listbox">
+                  {displayedRecommendedStretches.map((stretch) => (
+                    <button
+                      key={stretch.id}
+                      type="button"
+                      onClick={() => {
+                        handleStretchSelection(stretch.id);
+                        onCloseDropdown();
+                      }}
+                      className="flex w-full items-start justify-between gap-3 border-b border-gray-100 px-3 py-3 text-left last:border-b-0"
+                      role="option"
+                      aria-selected={activeStretchId === stretch.id}
+                    >
+                      <span className="min-w-0">
+                        <span className="block text-sm font-bold text-gray-900">{stretch.name}</span>
+                        <span className="mt-1 block text-xs text-gray-500">
+                          {stretch.targetBodyPart} · {stretch.durationSec}초 · {stretch.steps.length}단계
+                        </span>
+                      </span>
+                      <ChevronRight className="mt-0.5 h-4 w-4 shrink-0 text-[#18755B]" />
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </section>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className="-mt-4 space-y-4">
       {hasCurrentSessionPostureData && !activeStretchId && (
