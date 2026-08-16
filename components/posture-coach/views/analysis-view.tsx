@@ -257,10 +257,10 @@ export function AnalysisView(props: AnalysisViewProps) {
             <p className="border border-[rgba(18,100,76,0.18)] bg-white px-3 py-2 text-sm font-bold leading-6 text-gray-700">
               {getWeightMessage(latestPosture)}
             </p>
-            <div className="space-y-2">
-              <p className="text-sm font-bold text-gray-900">부위별 피드백</p>
-              {latestPosture.feedbackItems.length > 0 ? (
-                latestPosture.feedbackItems.map((item) => (
+            {latestPosture.feedbackItems.length > 0 && (
+              <div className="space-y-2">
+                <p className="text-sm font-bold text-gray-900">부위별 피드백</p>
+                {latestPosture.feedbackItems.map((item) => (
                   <div
                     key={item.part}
                     className={`border p-3 text-sm leading-6 ${getFeedbackSeverityClass(item.severity)}`}
@@ -273,13 +273,9 @@ export function AnalysisView(props: AnalysisViewProps) {
                     </div>
                     <p>{item.message}</p>
                   </div>
-                ))
-              ) : (
-                <p className="border border-dashed border-gray-300 bg-white px-3 py-3 text-sm font-medium leading-6 text-gray-600">
-                  {latestPosture.feedbackMessage}
-                </p>
-              )}
-            </div>
+                ))}
+              </div>
+            )}
           </div>
             </>
           ) : (
