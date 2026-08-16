@@ -375,7 +375,7 @@ export function HistoryView(props: HistoryViewProps) {
   }, [isCalendarHelpOpen]);
 
   const missingScoreBadge = (
-    <span className="inline-flex items-center border border-gray-200 bg-white px-2 py-0.5 text-[11px] font-bold text-gray-500">
+    <span className="inline-flex items-center border border-gray-200 bg-white px-2 py-0.5 text-xs font-bold text-gray-500">
       측정 부족
     </span>
   );
@@ -517,7 +517,7 @@ export function HistoryView(props: HistoryViewProps) {
           <div className="mb-3 flex items-center justify-between gap-3 text-sm font-medium text-gray-900">
             <span>{title}</span>
             <span className="text-right">
-              <span className="block text-[11px] font-bold text-gray-500">사진 점수</span>
+              <span className="block text-xs font-bold text-gray-500">사진 점수</span>
               <strong className="tabular-nums">{score !== null ? `${score}점` : "--"}</strong>
             </span>
           </div>
@@ -533,7 +533,7 @@ export function HistoryView(props: HistoryViewProps) {
                     <div className="mb-1 flex flex-wrap items-center gap-2">
                       <span className="font-bold text-gray-900">{step.label}</span>
                       {showStatus && (
-                        <span className={`border px-2 py-0.5 text-[11px] font-bold ${status.className}`}>
+                        <span className={`border px-2 py-0.5 text-xs font-bold ${status.className}`}>
                           {status.label}
                         </span>
                       )}
@@ -593,11 +593,11 @@ export function HistoryView(props: HistoryViewProps) {
           className="min-w-0 flex-1 px-3 py-2.5 text-left"
         >
           <span className="block truncate text-sm font-bold">{getHistorySessionDisplayTitle(session)}</span>
-          <span className="mt-1 block truncate text-xs text-gray-500">
+          <span className="mt-1 block truncate text-sm text-gray-500">
             {formatTime(session.startedAt)}
             {session.endedAt ? ` - ${formatTime(session.endedAt)}` : ""} · 사용 {sessionDuration}
           </span>
-          <span className={`mt-1 block text-xs font-bold ${session.averageScore === null ? "text-gray-500" : "text-[#18755B]"}`}>
+          <span className={`mt-1 block text-sm font-bold ${session.averageScore === null ? "text-gray-500" : "text-[#18755B]"}`}>
             {averageText}
           </span>
         </button>
@@ -731,7 +731,7 @@ export function HistoryView(props: HistoryViewProps) {
             <div className="mb-3 text-center text-sm font-bold text-gray-900">
               {formatHistoryMonthLabel(visibleHistoryMonthKey)}
             </div>
-            <div className="grid grid-cols-7 gap-1 text-center text-[11px] font-bold text-gray-500">
+            <div className="grid grid-cols-7 gap-1 text-center text-xs font-bold text-gray-500">
               {["일", "월", "화", "수", "목", "금", "토"].map((dayName) => (
                 <span key={dayName} className="py-1">
                   {dayName}
@@ -782,7 +782,7 @@ export function HistoryView(props: HistoryViewProps) {
             <div className="mt-5 border-t border-[rgba(18,100,76,0.14)] pb-2 pt-4 lg:pr-1">
               <div className="mb-2 flex items-center justify-between gap-2">
                 <h3 className="text-sm font-bold text-gray-900">선택한 날짜의 세션</h3>
-                <span className="text-xs font-medium text-gray-500">{selectedHistorySessions.length}개</span>
+                <span className="text-sm font-medium text-gray-500">{selectedHistorySessions.length}개</span>
               </div>
               {selectedHistorySessions.length > 0 ? (
                 <div className="grid gap-2">
@@ -819,7 +819,7 @@ export function HistoryView(props: HistoryViewProps) {
                 )}
               </div>
               <div className="mt-4 border-l-4 border-l-[#18755B] bg-[#F2FBF8] px-4 py-3">
-                <p className="text-xs font-bold uppercase tracking-[0.12em] text-[#18755B]">성장 자세 한마디</p>
+                <p className="text-sm font-bold uppercase tracking-[0.12em] text-[#18755B]">성장 자세 한마디</p>
                 <p className="mt-1 text-sm font-medium leading-6 text-gray-700">
                   {getGrowthPostureHistoryMessage(selectedHistoryGroup.averageScore)}
                 </p>
@@ -830,7 +830,7 @@ export function HistoryView(props: HistoryViewProps) {
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <h2 className="text-base font-bold text-gray-900">세션 기록</h2>
-                  <p className="mt-1 text-xs font-medium text-gray-500">
+                  <p className="mt-1 text-sm font-medium text-gray-500">
                     {focusedHistorySession
                       ? "선택한 세션 보기"
                       : "왼쪽에서 세션을 선택하면 상세가 표시됩니다"}
@@ -926,7 +926,7 @@ export function HistoryView(props: HistoryViewProps) {
                               className="min-h-10 w-full border border-[rgba(18,100,76,0.35)] bg-white px-3 py-2 text-base font-bold text-gray-900"
                               placeholder="제목을 입력해주세요"
                             />
-                            <div className="flex flex-wrap items-center gap-2 text-xs text-gray-500">
+                            <div className="flex flex-wrap items-center gap-2 text-sm text-gray-500">
                               <span>최대 {SESSION_TITLE_MAX_LENGTH}자</span>
                               {titleError && <span className="font-bold text-red-600">{titleError}</span>}
                             </div>
@@ -965,7 +965,7 @@ export function HistoryView(props: HistoryViewProps) {
                                 <Pencil className="h-3.5 w-3.5" />
                               </button>
                             </div>
-                            {titleError && <p className="mt-1 text-xs font-bold text-red-600">{titleError}</p>}
+                            {titleError && <p className="mt-1 text-sm font-bold text-red-600">{titleError}</p>}
                           </>
                         )}
                         <p className="mt-1 text-sm text-gray-500">
@@ -975,7 +975,7 @@ export function HistoryView(props: HistoryViewProps) {
                       </div>
                       <div className="flex items-center gap-3 md:justify-end">
                         <div className="text-right">
-                          <p className="text-xs font-bold text-gray-500">평균</p>
+                          <p className="text-sm font-bold text-gray-500">평균</p>
                           <p className="text-2xl font-bold leading-none tabular-nums text-[#18755B]">{sessionAverageScore ?? "--"}</p>
                         </div>
                         {hasAverage ? (
@@ -1041,7 +1041,7 @@ export function HistoryView(props: HistoryViewProps) {
                                 >
                                   {area.score ?? "--"}
                                 </span>
-                                <span className="min-w-0 text-xs font-bold text-gray-500">
+                                <span className="min-w-0 text-sm font-bold text-gray-500">
                                   {area.score === null ? "측정 부족" : getStatusLabel(area.score)}
                                 </span>
                               </div>
@@ -1052,10 +1052,10 @@ export function HistoryView(props: HistoryViewProps) {
                           <div className="mb-2 flex items-start justify-between gap-3">
                             <div>
                               <h4 className="text-sm font-bold text-gray-900">최근 5개 기록일 점수</h4>
-                              <p className="mt-0.5 text-xs font-medium text-gray-500">기록일 평균과 선택 날짜 평균 비교</p>
+                              <p className="mt-0.5 text-sm font-medium text-gray-500">기록일 평균과 선택 날짜 평균 비교</p>
                             </div>
                             {sessionTrendSummary.currentPoint && (
-                              <span className="shrink-0 text-xs font-bold tabular-nums text-[#18755B]">
+                              <span className="shrink-0 text-sm font-bold tabular-nums text-[#18755B]">
                                 현재 {sessionTrendSummary.currentPoint.score}
                               </span>
                             )}
@@ -1109,11 +1109,11 @@ export function HistoryView(props: HistoryViewProps) {
                               </ResponsiveContainer>
                             </div>
                           ) : (
-                            <div className="flex h-[132px] items-center justify-center border border-dashed border-gray-200 bg-white px-4 text-center text-xs font-bold text-gray-500">
+                            <div className="flex h-[132px] items-center justify-center border border-dashed border-gray-200 bg-white px-4 text-center text-sm font-bold text-gray-500">
                               최근 점수 흐름을 보려면 기록이 조금 더 필요해요.
                             </div>
                           )}
-                          <div className="mt-2 space-y-1 text-xs leading-5 text-gray-500">
+                          <div className="mt-2 space-y-1 text-sm leading-5 text-gray-500">
                             <p className="truncate font-bold text-gray-700">{sessionTrendSummary.caption}</p>
                             <p className="truncate">{historyReportComment}</p>
                           </div>

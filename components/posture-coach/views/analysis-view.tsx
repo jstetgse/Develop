@@ -446,8 +446,8 @@ export function AnalysisView(props: AnalysisViewProps) {
 
               <div className="mt-3 border-t border-gray-200 pt-3 text-xs leading-5 text-gray-600">
                 <p>
-                  예상 키는 사용자가 설정한 목표 키에 기사 수치와 앱의 자세 단계별 적용률을 반영한
-                  교육용 가정입니다. 의학적 성장량이나 최종 키를 예측하지 않습니다.
+                  예상 키는 사용자가 설정한 목표 키에 자료와 앱의 자세 단계별 적용률을 반영한
+                  교육용 가정임. 의학적 성장량이나 최종 키는 정확하지 않을 수 있음.
                 </p>
               </div>
 

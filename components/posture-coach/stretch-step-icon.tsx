@@ -313,7 +313,7 @@ export function StretchStepIconTile({
 
   return (
     <div className={`relative flex shrink-0 items-center justify-center border ${tileSizeClass} ${toneClass}`}>
-      <span className="absolute left-1 top-1 text-[11px] font-bold leading-none text-current opacity-55">
+      <span className="absolute left-1 top-1 text-xs font-bold leading-none text-current opacity-55">
         {stepNumber}
       </span>
       <StretchStepIcon checkType={checkType} className={iconSizeClass} />

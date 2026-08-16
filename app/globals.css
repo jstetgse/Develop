@@ -148,12 +148,12 @@ input[type="range"] {
 }
 
 .app-shell .text-xs {
-  font-size: 13.5px;
+  font-size: 14px;
   line-height: 1.5;
 }
 
 .app-shell .text-sm {
-  font-size: 16px;
+  font-size: 16.5px;
   line-height: 1.58;
 }
 

@@ -55,13 +55,13 @@ export function GrowthPostureWeekStrip({
         const isSelected = selectedDateKey === day.dateKey;
         const content = (
           <>
-            <span className="text-[11px] font-bold opacity-70 sm:text-xs">{day.dayLabel}</span>
-            <span className="text-[11px] tabular-nums opacity-70 sm:text-xs">{day.dateLabel}</span>
-            <strong className="mt-1 break-keep text-[11px] leading-tight sm:text-xs">
+            <span className="text-xs font-bold opacity-70">{day.dayLabel}</span>
+            <span className="text-xs tabular-nums opacity-70">{day.dateLabel}</span>
+            <strong className="mt-1 break-keep text-xs leading-tight">
               {presentation.label}
             </strong>
             {day.score !== null && (
-              <span className="mt-0.5 text-[11px] font-bold tabular-nums sm:text-xs">
+              <span className="mt-0.5 text-xs font-bold tabular-nums">
                 {Math.round(day.score)}점
               </span>
             )}
