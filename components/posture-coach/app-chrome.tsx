@@ -47,7 +47,7 @@ export function AppChrome(props: AppChromeProps) {
           </div>
         </div>
       </nav>
-      <main className="mx-auto max-w-[1100px] px-6 pb-[calc(5rem+env(safe-area-inset-bottom))] pt-6">
+      <main className="mx-auto max-w-[1100px] px-6 pb-[calc(5rem+env(safe-area-inset-bottom))] pt-4">
         {alertMessage && <section className="mb-6 border border-yellow-200 bg-yellow-50 p-5"><div className="mb-2 flex items-center justify-between gap-3"><h3 className="font-bold text-yellow-950">자세 주의</h3><AlertTriangle className="h-5 w-5 text-yellow-600" /></div><p className="text-sm leading-6 text-yellow-800">{alertMessage}</p></section>}
         {children}
       </main>

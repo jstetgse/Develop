@@ -44,15 +44,11 @@ export function HomeView({ homePostureSummary, homeAttentionTone, homeScoreInsig
   );
 
   return (
-    <div className="space-y-4">
-      <div>
-        <h1 className="text-3xl font-bold text-gray-900">다시 오신 것을 환영합니다</h1>
-      </div>
-
+    <div className="space-y-3">
       <section className="app-surface border-l-4 border-l-[#18755B] p-4">
-        <div className="grid gap-4 lg:grid-cols-[minmax(300px,0.85fr)_minmax(0,1.65fr)] lg:items-stretch">
+        <div className="grid gap-3 lg:grid-cols-[minmax(300px,0.85fr)_minmax(0,1.65fr)] lg:items-stretch">
           <div className="min-w-0">
-            <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
+            <div className="mb-2 flex flex-wrap items-start justify-between gap-3">
               <div className="flex items-center gap-3">
                 <div className="flex h-9 w-9 items-center justify-center bg-[#C4F6E8] text-[#18755B]">
                   <Ruler className="h-5 w-5" />
@@ -130,7 +126,6 @@ export function HomeView({ homePostureSummary, homeAttentionTone, homeScoreInsig
           <div className="min-w-0 border border-[rgba(18,100,76,0.12)] bg-white/70 p-3">
             <div className="mb-2 flex items-center justify-between gap-2">
               <h3 className="text-sm font-bold text-gray-900">최근 7일 자세</h3>
-              <span className="text-xs text-gray-500">자세 점수 기준</span>
             </div>
             <GrowthPostureWeekStrip days={growthPostureWeek} isLoading={isLoadingHistory} />
             {!isLoadingHistory && growthPostureWeek.every((day) => day.status === "unmeasured") && (
@@ -140,10 +135,10 @@ export function HomeView({ homePostureSummary, homeAttentionTone, homeScoreInsig
         </div>
       </section>
 
-      <section className="app-surface border-l-4 border-l-[#18755B] p-5">
-        <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(280px,360px)] lg:items-center">
+      <section className="app-surface border-l-4 border-l-[#18755B] p-4">
+        <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(280px,360px)] lg:items-center">
           <div>
-            <div className="mb-3 flex items-center gap-3">
+            <div className="mb-2 flex items-center gap-3">
               <div className="flex h-9 w-9 items-center justify-center bg-[#C4F6E8] text-[#18755B]">
                 <Activity className="h-5 w-5" />
               </div>
@@ -151,7 +146,7 @@ export function HomeView({ homePostureSummary, homeAttentionTone, homeScoreInsig
                 <h2 className="text-lg font-bold text-gray-900">오늘의 자세 요약</h2>
               </div>
             </div>
-            <div className="grid gap-3 text-sm sm:grid-cols-[minmax(260px,0.8fr)_minmax(300px,1fr)] sm:items-start">
+            <div className="grid gap-2 text-sm sm:grid-cols-[minmax(260px,0.8fr)_minmax(300px,1fr)] sm:items-start">
               <div className="grid max-w-[360px] gap-2">
                 <div className="flex flex-wrap items-center gap-2 border-b border-gray-200 pb-2 leading-5">
                   <span className="shrink-0 text-gray-500">주의 부위</span>
@@ -192,11 +187,11 @@ export function HomeView({ homePostureSummary, homeAttentionTone, homeScoreInsig
               </div>
             </div>
           </div>
-          <div className="grid gap-3">
+          <div className="grid gap-2">
             <button
               type="button"
               onClick={() => onNavigate("analysis")}
-              className="app-action-tile p-5"
+              className="app-action-tile p-4"
             >
               <div className="flex items-center justify-center gap-3">
                 <Video className="h-5 w-5" />
@@ -206,7 +201,7 @@ export function HomeView({ homePostureSummary, homeAttentionTone, homeScoreInsig
             <button
               type="button"
               onClick={() => onNavigate("history")}
-              className="app-action-tile-secondary p-4"
+              className="app-action-tile-secondary p-3"
             >
               <div className="flex items-center justify-center gap-3">
                 <Calendar className="h-5 w-5" />
@@ -217,9 +212,9 @@ export function HomeView({ homePostureSummary, homeAttentionTone, homeScoreInsig
         </div>
       </section>
 
-      <div className="grid items-stretch gap-4 xl:grid-cols-[380px_minmax(0,1fr)]">
-      <section className="app-surface flex h-full flex-col p-5">
-        <div className="mb-4 flex items-center gap-3">
+      <div className="grid items-stretch gap-3 xl:grid-cols-[380px_minmax(0,1fr)]">
+      <section className="app-surface flex h-full flex-col p-4">
+        <div className="mb-3 flex items-center gap-3">
           <div className="flex h-8 w-8 items-center justify-center bg-[#C4F6E8] text-[#18755B]">
             <CheckCircle className="h-4 w-4" />
           </div>
@@ -228,8 +223,8 @@ export function HomeView({ homePostureSummary, homeAttentionTone, homeScoreInsig
             <p className="text-sm text-gray-500">지난 24시간</p>
           </div>
         </div>
-        <div className="flex flex-1 flex-col justify-center gap-4">
-          <div className="grid gap-3 border-y border-gray-200 py-3 text-sm sm:grid-cols-3">
+        <div className="flex flex-1 flex-col justify-center gap-3">
+          <div className="grid gap-3 border-y border-gray-200 py-2.5 text-sm sm:grid-cols-3">
             <div className="min-w-0">
               <span className="block text-xs font-bold text-gray-500">평균 점수</span>
               <strong className="mt-1 block truncate tabular-nums text-gray-900">
@@ -262,7 +257,7 @@ export function HomeView({ homePostureSummary, homeAttentionTone, homeScoreInsig
               </strong>
             </div>
           </div>
-          <div className="grid gap-3 border-t border-gray-200 pt-3 text-xs sm:grid-cols-3">
+          <div className="grid gap-3 border-t border-gray-200 pt-2.5 text-xs sm:grid-cols-3">
             <div className="min-w-0">
               <span className="block font-bold text-gray-500">최근 측정</span>
               <strong className="mt-1 block truncate tabular-nums text-gray-700">
@@ -283,10 +278,10 @@ export function HomeView({ homePostureSummary, homeAttentionTone, homeScoreInsig
         </div>
       </section>
 
-      <div className="app-surface p-5">
-        <h2 className="mb-3 text-lg font-bold text-gray-900">오늘의 자세 점수 흐름</h2>
+      <div className="app-surface p-4">
+        <h2 className="mb-2 text-lg font-bold text-gray-900">오늘의 자세 점수 흐름</h2>
         {combinedScorePoints.length > 0 ? (
-          <ResponsiveContainer width="100%" height={200}>
+          <ResponsiveContainer width="100%" height={180}>
             <LineChart data={combinedScorePoints}>
               <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
               <XAxis dataKey="time" stroke="#9ca3af" fontSize={12} />
@@ -296,7 +291,7 @@ export function HomeView({ homePostureSummary, homeAttentionTone, homeScoreInsig
             </LineChart>
           </ResponsiveContainer>
         ) : (
-          <div className="flex h-[200px] flex-col items-center justify-center border border-dashed border-gray-200 bg-[rgba(196,246,232,0.28)] px-4 text-center text-sm font-medium text-gray-500">
+          <div className="flex h-[180px] flex-col items-center justify-center border border-dashed border-gray-200 bg-[rgba(196,246,232,0.28)] px-4 text-center text-sm font-medium text-gray-500">
             <span>오늘 분석 기록이 아직 없습니다</span>
             <span className="mt-1 text-xs text-gray-500">자세 분석을 시작하면 점수 변화가 여기에 표시됩니다</span>
           </div>

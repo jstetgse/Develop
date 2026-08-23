@@ -104,7 +104,7 @@ export function AnalysisView(props: AnalysisViewProps) {
       <section className="app-surface flex h-full flex-col p-4">
         <div className="mb-2 flex flex-col justify-between gap-2 sm:flex-row sm:items-start">
           <div>
-            <p className="mb-1 text-xs font-bold uppercase tracking-[0.18em] text-blue-600">카메라 분석</p>
+            
             <div className="flex items-center gap-2">
               <h2 className="text-2xl font-bold text-gray-900">측면 자세 분석</h2>
               <button
@@ -231,7 +231,6 @@ export function AnalysisView(props: AnalysisViewProps) {
             <>
           <div className="mb-2 flex items-start justify-between gap-3">
             <div>
-              <p className="mb-1 text-xs font-bold uppercase tracking-[0.18em] text-blue-600">실시간 자세</p>
               <h3 className="text-xl font-bold text-gray-900">실시간 자세 점수</h3>
             </div>
             <span
@@ -341,19 +340,12 @@ export function AnalysisView(props: AnalysisViewProps) {
 
               {heightPrediction ? (
                 <>
-                  <div className="mb-2 border border-blue-100 bg-blue-50/50 px-3 py-2 text-xs text-gray-600">
-                    <strong className="text-gray-900">
-                      {settings.growthSex === "male" ? "남자" : "여자"} · 만 {settings.currentAgeYears}세
-                    </strong>
-                    <span className="ml-2">현재 키 {formatHeightCm(heightPrediction.currentHeightCm)}</span>
-                  </div>
                   <div className="grid grid-cols-2 gap-2 text-sm">
                     <div className="border border-blue-100 bg-blue-50/50 p-3">
                       <span className="font-bold text-gray-600">성장도표 예상 키</span>
                       <strong className="mt-1 block text-2xl text-gray-900">
                         {formatHeightCm(heightPrediction.predictedFinalHeightCm)}
                       </strong>
-                      <span className="mt-1 block text-xs text-gray-500">기준값 · 자세와 무관</span>
                     </div>
                     <div
                       className={`border p-3 ${
@@ -364,19 +356,19 @@ export function AnalysisView(props: AnalysisViewProps) {
                             : "border-yellow-200 bg-yellow-50 text-yellow-900"
                       }`}
                     >
-                      <span className="text-xs font-bold">현재 자세 반영 예상 키(게임)</span>
+                      <span className="text-xs font-bold">현재 자세 반영 예상 키</span>
                       <strong className="mt-1 block text-2xl tabular-nums">
                         {postureHeightPreview
                           ? formatHeightCm(postureHeightPreview.adjustedHeightCm)
                           : "--"}
                       </strong>
-                      <span className="mt-1 block text-xs font-bold">
-                        {postureHeightPreview
-                          ? postureHeightPreview.penaltyCm === 0
+                      {postureHeightPreview && (
+                        <span className="mt-1 block text-xs font-bold">
+                          {postureHeightPreview.penaltyCm === 0
                             ? "바른 자세 · 감소 없음"
-                            : `현재 자세 -${formatHeightCm(postureHeightPreview.penaltyCm)}`
-                          : "자세 분석 대기"}
-                      </span>
+                            : `현재 자세 -${formatHeightCm(postureHeightPreview.penaltyCm)}`}
+                        </span>
+                      )}
                     </div>
                   </div>
 
@@ -386,12 +378,7 @@ export function AnalysisView(props: AnalysisViewProps) {
                     </p>
                   )}
 
-                  <div className="mt-3 border border-blue-100 bg-blue-50/60 p-3 text-sm leading-6 text-gray-700">
-                    <p className="font-bold text-gray-900">게임 계산 기준</p>
-                    <p className="mt-1">
-                      목·허리 각도를 최대 5cm 범위로 환산한 동기부여용 게임 지표이며, 실제 성장 또는 의학적 예상 키가 아닙니다.
-                    </p>
-                  </div>
+                  
                 </>
               ) : (
                 <button
@@ -404,7 +391,7 @@ export function AnalysisView(props: AnalysisViewProps) {
               )}
 
               <p className="mt-3 border-t border-gray-200 pt-3 text-xs leading-5 text-gray-600">
-                2017 소아청소년 성장도표를 활용한 교육용 통계 추정이며, 의학적 최종 키 예측이 아닙니다.
+                청소년 성장도표를 활용한 교육용 통계 추정이며, 의학적 최종 키 예측이 아님
               </p>
 
               <button
