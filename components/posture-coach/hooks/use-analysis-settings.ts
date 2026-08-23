@@ -4,8 +4,11 @@ import type { NotificationPermissionStatus, Settings } from "@/lib/types";
 import { DEFAULT_SETTINGS } from "@/components/posture-coach/constants";
 import {
   CURRENT_HEIGHT_RANGE,
-  TARGET_HEIGHT_RANGE,
+  isGrowthAge,
+  isGrowthSex,
   isHeightInRange,
+  normalizeGrowthAge,
+  normalizeGrowthSex,
   normalizeOptionalHeight,
 } from "@/lib/growth-posture";
 
@@ -55,12 +58,14 @@ export function useAnalysisSettings(uid: string | null) {
     const duration = Number(badPostureDurationMinutesInput);
     if (!Number.isInteger(duration) || duration < 1 || duration > 10) { setSettingsSaveStatus("error"); return; }
     const isCurrentHeightValid = settingsDraft.currentHeightCm === null || isHeightInRange(settingsDraft.currentHeightCm, CURRENT_HEIGHT_RANGE);
-    const isTargetHeightValid = settingsDraft.targetHeightCm === null || isHeightInRange(settingsDraft.targetHeightCm, TARGET_HEIGHT_RANGE);
-    if (!isCurrentHeightValid || !isTargetHeightValid) { setSettingsSaveStatus("error"); return; }
+    const isCurrentAgeValid = settingsDraft.currentAgeYears === null || isGrowthAge(settingsDraft.currentAgeYears);
+    const isGrowthSexValid = settingsDraft.growthSex === null || isGrowthSex(settingsDraft.growthSex);
+    if (!isCurrentHeightValid || !isCurrentAgeValid || !isGrowthSexValid) { setSettingsSaveStatus("error"); return; }
     const next = {
       ...settingsDraft,
+      growthSex: normalizeGrowthSex(settingsDraft.growthSex),
+      currentAgeYears: normalizeGrowthAge(settingsDraft.currentAgeYears),
       currentHeightCm: normalizeOptionalHeight(settingsDraft.currentHeightCm, CURRENT_HEIGHT_RANGE),
-      targetHeightCm: normalizeOptionalHeight(settingsDraft.targetHeightCm, TARGET_HEIGHT_RANGE),
       smoothingEnabled: true,
       badPostureDurationMinutes: duration,
       preferredSideMode: settingsDraft.preferredSideMode === "right" ? "right" as const : "left" as const,

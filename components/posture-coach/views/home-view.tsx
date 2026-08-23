@@ -1,4 +1,4 @@
-import { Activity, Calendar, CheckCircle, Target, Video } from "lucide-react";
+import { Activity, Calendar, CheckCircle, Ruler, Video } from "lucide-react";
 import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import type { PostureRecommendationArea, RecentSummary, Settings } from "@/lib/types";
 import type { Tab } from "@/components/posture-coach/types";
@@ -7,7 +7,11 @@ import { formatTime } from "@/components/posture-coach/history-utils";
 import { getPostureAreaIcon } from "@/components/posture-coach/posture-icons";
 import { GrowthPostureWeekStrip } from "@/components/posture-coach/growth-posture-week-strip";
 import type { GrowthPostureDay } from "@/components/posture-coach/growth-posture-utils";
-import { calculateHeightGoal, formatHeightCm } from "@/lib/growth-posture";
+import {
+  calculateFinalHeightPrediction,
+  formatGrowthPercentile,
+  formatHeightCm,
+} from "@/lib/growth-posture";
 
 type HomeViewProps = {
   homePostureSummary: {
@@ -33,7 +37,11 @@ type HomeViewProps = {
 };
 
 export function HomeView({ homePostureSummary, homeAttentionTone, homeScoreInsight, recentSummary, combinedScorePoints, settings, growthPostureWeek, isLoadingHistory, onOpenGrowthSettings, onNavigate }: HomeViewProps) {
-  const heightGoal = calculateHeightGoal(settings.currentHeightCm, settings.targetHeightCm);
+  const heightPrediction = calculateFinalHeightPrediction(
+    settings.growthSex,
+    settings.currentAgeYears,
+    settings.currentHeightCm
+  );
 
   return (
     <div className="space-y-4">
@@ -41,61 +49,87 @@ export function HomeView({ homePostureSummary, homeAttentionTone, homeScoreInsig
         <h1 className="text-3xl font-bold text-gray-900">다시 오신 것을 환영합니다</h1>
       </div>
 
-      <section className="app-surface border-l-4 border-l-[#18755B] p-3">
-        <div className="mb-2 flex flex-wrap items-start justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center bg-[#C4F6E8] text-[#18755B]">
-              <Target className="h-5 w-5" />
-            </div>
-            <div>
-              <h2 className="text-lg font-bold text-gray-900">내 성장 자세</h2>
-              <p className="mt-0.5 text-xs text-gray-500">목표 키와 최근 자세 습관을 함께 확인해요.</p>
-            </div>
-          </div>
-          {heightGoal && (
-            <span className="border border-[#70E5C4] bg-[#C4F6E8] px-2.5 py-1 text-xs font-bold text-[#12644C]">
-              {heightGoal.status === "remaining"
-                ? `목표까지 ${formatHeightCm(heightGoal.remainingCm)}`
-                : "목표 달성"}
-            </span>
-          )}
-        </div>
-
+      <section className="app-surface border-l-4 border-l-[#18755B] p-4">
         <div className="grid gap-4 lg:grid-cols-[minmax(300px,0.85fr)_minmax(0,1.65fr)] lg:items-stretch">
-          <div className="border border-blue-100 bg-blue-50/50 p-3">
-            {heightGoal && settings.currentHeightCm !== null && settings.targetHeightCm !== null ? (
-              <div className="flex min-h-[78px] h-full items-center justify-center gap-5 text-center">
-                <div>
-                  <span className="block text-sm text-gray-500">현재 키</span>
-                  <strong className="mt-1 block text-2xl text-gray-900">
-                    {formatHeightCm(settings.currentHeightCm)}
-                  </strong>
+          <div className="min-w-0">
+            <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className="flex h-9 w-9 items-center justify-center bg-[#C4F6E8] text-[#18755B]">
+                  <Ruler className="h-5 w-5" />
                 </div>
-                <span className="text-xl font-bold text-[#18755B]" aria-hidden="true">→</span>
-                <div>
-                  <span className="block text-sm text-gray-500">목표 키</span>
-                  <strong className="mt-1 block text-2xl text-[#12644C]">
-                    {formatHeightCm(settings.targetHeightCm)}
-                  </strong>
-                </div>
+                <h2 className="text-lg font-bold text-gray-900">내 키 예측</h2>
+                <span className="group relative inline-flex">
+                  <button
+                    type="button"
+                    aria-label="키 예측 안내"
+                    aria-describedby="height-prediction-note"
+                    className="flex h-5 w-5 items-center justify-center rounded-full border border-[#18755B] text-xs font-black leading-none text-[#18755B] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#18755B]"
+                  >
+                    !
+                  </button>
+                  <span
+                    id="height-prediction-note"
+                    role="tooltip"
+                    className="pointer-events-none absolute left-1/2 top-full z-20 mt-2 hidden w-[min(280px,calc(100vw-3rem))] -translate-x-1/2 border border-gray-200 bg-gray-900 px-3 py-2 text-left text-xs font-medium leading-5 text-white shadow-lg group-hover:block group-focus-within:block"
+                  >
+                    현재 성장 위치가 유지된다는 가정의 교육용 통계 추정이며, 의학적 최종 키 예측이 아닙니다.
+                  </span>
+                </span>
               </div>
+              {heightPrediction && (
+                <span className="border border-[#70E5C4] bg-[#C4F6E8] px-2.5 py-1 text-xs font-bold text-[#12644C]">
+                  {formatGrowthPercentile(heightPrediction.percentile)}
+                </span>
+              )}
+            </div>
+
+            {heightPrediction ? (
+              <>
+                <div className="flex min-h-[118px] flex-col items-center justify-center border border-blue-100 bg-blue-50/50 p-3 text-center">
+                  <span className="mb-3 text-xs font-bold text-gray-500">
+                    {settings.growthSex === "male" ? "남자" : "여자"} · 만 {settings.currentAgeYears}세
+                  </span>
+                  <div className="grid w-full grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-3">
+                    <div className="min-w-0">
+                      <span className="block text-sm text-gray-500">현재 키</span>
+                      <strong className="mt-1 block text-xl text-gray-900 sm:text-2xl">
+                        {formatHeightCm(heightPrediction.currentHeightCm)}
+                      </strong>
+                    </div>
+                    <span className="text-xl font-bold text-[#18755B]" aria-hidden="true">
+                      →
+                    </span>
+                    <div className="min-w-0 text-[#12644C]">
+                      <span className="block text-xs font-bold sm:text-sm">만 18세 예상 키</span>
+                      <strong className="mt-1 block text-xl sm:text-2xl">
+                        {formatHeightCm(heightPrediction.predictedFinalHeightCm)}
+                      </strong>
+                    </div>
+                  </div>
+                </div>
+                {heightPrediction.isOutsideChartRange && (
+                  <p className="mt-3 border border-yellow-200 bg-yellow-50 px-3 py-2 text-xs font-bold leading-5 text-yellow-900">
+                    현재 키가 성장도표의 -3SD~+3SD 범위를 벗어나 경계값으로 계산했어요. 실제 결과와 차이가 클 수 있습니다.
+                  </p>
+                )}
+              </>
             ) : (
-              <div className="flex h-full flex-col items-center justify-center text-center">
-                <p className="text-sm font-bold text-gray-900">현재 키와 목표 키를 설정해 보세요.</p>
+              <div className="flex h-full min-h-[118px] flex-col items-center justify-center border border-blue-100 bg-blue-50/50 p-4 text-center">
+                <p className="text-sm font-bold text-gray-900">성별, 만 나이, 현재 키를 설정해 보세요.</p>
                 <button
                   type="button"
                   onClick={onOpenGrowthSettings}
                   className="mt-3 border border-blue-200 bg-white px-3 py-2 text-sm font-bold text-blue-700"
                 >
-                  키 설정하기
+                  키 예측 설정하기
                 </button>
               </div>
             )}
           </div>
 
-          <div className="min-w-0 border border-[rgba(18,100,76,0.12)] bg-white/70 p-2.5">
+          <div className="min-w-0 border border-[rgba(18,100,76,0.12)] bg-white/70 p-3">
             <div className="mb-2 flex items-center justify-between gap-2">
-              <h3 className="text-sm font-bold text-gray-900">최근 7일 성장 자세</h3>
+              <h3 className="text-sm font-bold text-gray-900">최근 7일 자세</h3>
               <span className="text-xs text-gray-500">자세 점수 기준</span>
             </div>
             <GrowthPostureWeekStrip days={growthPostureWeek} isLoading={isLoadingHistory} />

@@ -11,12 +11,12 @@ import {
   type AnalysisCardView,
 } from "@/components/posture-coach/analysis-card-rotation";
 import {
-  calculateArticleHeightScenario,
-  calculateHeightGoal,
+  calculateFinalHeightPrediction,
+  formatGrowthPercentile,
   formatHeightCm,
-  type ArticleScenarioYears,
   type PostureScoreStatus,
 } from "@/lib/growth-posture";
+import { calculatePostureHeightPreview } from "@/lib/posture-height-preview";
 
 type AnalysisViewProps = {
   cameraTone: "good" | "warn" | "danger" | "neutral";
@@ -40,17 +40,27 @@ type AnalysisViewProps = {
 export function AnalysisView(props: AnalysisViewProps) {
   const { cameraTone, cameraText, modeLabel, modeMessage, latestPosture, settings, videoRef, canvasRef, isRunning, postureStatus, appMode, screenEffectLevel, sessionAverageScore, onOpenSettings, onStart, onStop } = props;
   const [showDetailedMetrics, setShowDetailedMetrics] = useState(false);
-  const [articleScenarioYears, setArticleScenarioYears] = useState<ArticleScenarioYears>(4);
   const [activeCardView, setActiveCardView] = useState<AnalysisCardView>("score");
   const [isCardRotationEnabled, setIsCardRotationEnabled] = useState(true);
   const [cardRotationResetKey, setCardRotationResetKey] = useState(0);
   const previousIsRunningRef = useRef(isRunning);
-  const heightGoal = calculateHeightGoal(settings.currentHeightCm, settings.targetHeightCm);
-  const articleHeightScenario = calculateArticleHeightScenario(
-    settings.targetHeightCm,
-    articleScenarioYears,
-    sessionAverageScore
+  const heightPrediction = calculateFinalHeightPrediction(
+    settings.growthSex,
+    settings.currentAgeYears,
+    settings.currentHeightCm
   );
+  const postureHeightPreview =
+    heightPrediction &&
+    isRunning &&
+    appMode === "posture" &&
+    latestPosture.isTracking &&
+    latestPosture.metrics
+      ? calculatePostureHeightPreview(
+          heightPrediction.predictedFinalHeightCm,
+          latestPosture.metrics.neckAngleDegrees,
+          latestPosture.metrics.trunkLeanDegrees
+        )
+      : null;
 
   useEffect(() => {
     const wasRunning = previousIsRunningRef.current;
@@ -180,7 +190,7 @@ export function AnalysisView(props: AnalysisViewProps) {
             <div className="flex border border-[rgba(18,100,76,0.2)] bg-white p-0.5" role="tablist" aria-label="분석 카드 선택">
               {([
                 ["score", "실시간 점수"],
-                ["growth", "내 성장 자세"],
+                ["prediction", "내 키 예측"],
               ] as const).map(([view, label]) => (
                 <button
                   key={view}
@@ -312,144 +322,90 @@ export function AnalysisView(props: AnalysisViewProps) {
                 onClick={() => setShowDetailedMetrics(false)}
                 className="mt-3 w-full border border-blue-200 bg-white px-3 py-2 text-sm font-bold text-blue-700"
               >
-                성장 자세로 돌아가기
+                키 예측으로 돌아가기
               </button>
             </>
           ) : (
             <>
               <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-                <h3 className="text-lg font-bold text-gray-900">내 성장 자세</h3>
-                {heightGoal && (
+                <div>
+                  <p className="mb-1 text-xs font-bold uppercase tracking-[0.18em] text-blue-600">성장도표 분석</p>
+                  <h3 className="text-lg font-bold text-gray-900">내 키 예측</h3>
+                </div>
+                {heightPrediction && (
                   <span className="border border-[#70E5C4] bg-[#C4F6E8] px-2.5 py-1 text-xs font-bold text-[#12644C]">
-                    {heightGoal.status === "remaining"
-                      ? `목표까지 ${formatHeightCm(heightGoal.remainingCm)}`
-                      : "목표 달성"}
+                    {formatGrowthPercentile(heightPrediction.percentile)}
                   </span>
                 )}
               </div>
 
-              {heightGoal && settings.currentHeightCm !== null && settings.targetHeightCm !== null ? (
-                <div className="grid grid-cols-2 gap-2 text-sm">
-                  <div className="border border-white bg-white/80 p-3">
-                    <span className="text-gray-500">현재 키</span>
-                    <strong className="mt-1 block text-lg text-gray-900">
-                      {formatHeightCm(settings.currentHeightCm)}
+              {heightPrediction ? (
+                <>
+                  <div className="mb-2 border border-blue-100 bg-blue-50/50 px-3 py-2 text-xs text-gray-600">
+                    <strong className="text-gray-900">
+                      {settings.growthSex === "male" ? "남자" : "여자"} · 만 {settings.currentAgeYears}세
                     </strong>
+                    <span className="ml-2">현재 키 {formatHeightCm(heightPrediction.currentHeightCm)}</span>
                   </div>
-                  <div className="border border-[#70E5C4] bg-[#C4F6E8] p-3 text-[#12644C]">
-                    <span>목표 키</span>
-                    <strong className="mt-1 block text-lg">
-                      {formatHeightCm(settings.targetHeightCm)}
-                    </strong>
+                  <div className="grid grid-cols-2 gap-2 text-sm">
+                    <div className="border border-blue-100 bg-blue-50/50 p-3">
+                      <span className="font-bold text-gray-600">성장도표 예상 키</span>
+                      <strong className="mt-1 block text-2xl text-gray-900">
+                        {formatHeightCm(heightPrediction.predictedFinalHeightCm)}
+                      </strong>
+                      <span className="mt-1 block text-xs text-gray-500">기준값 · 자세와 무관</span>
+                    </div>
+                    <div
+                      className={`border p-3 ${
+                        postureHeightPreview === null
+                          ? "border-gray-200 bg-gray-50 text-gray-600"
+                          : postureHeightPreview.penaltyCm === 0
+                            ? "border-[#70E5C4] bg-[#C4F6E8] text-[#12644C]"
+                            : "border-yellow-200 bg-yellow-50 text-yellow-900"
+                      }`}
+                    >
+                      <span className="text-xs font-bold">현재 자세 반영 예상 키(게임)</span>
+                      <strong className="mt-1 block text-2xl tabular-nums">
+                        {postureHeightPreview
+                          ? formatHeightCm(postureHeightPreview.adjustedHeightCm)
+                          : "--"}
+                      </strong>
+                      <span className="mt-1 block text-xs font-bold">
+                        {postureHeightPreview
+                          ? postureHeightPreview.penaltyCm === 0
+                            ? "바른 자세 · 감소 없음"
+                            : `현재 자세 -${formatHeightCm(postureHeightPreview.penaltyCm)}`
+                          : "자세 분석 대기"}
+                      </span>
+                    </div>
                   </div>
-                </div>
+
+                  {heightPrediction.isOutsideChartRange && (
+                    <p className="mt-3 border border-yellow-200 bg-yellow-50 px-3 py-2 text-xs font-bold leading-5 text-yellow-900">
+                      현재 키가 성장도표의 -3SD~+3SD 범위를 벗어나 경계값으로 계산했어요.
+                    </p>
+                  )}
+
+                  <div className="mt-3 border border-blue-100 bg-blue-50/60 p-3 text-sm leading-6 text-gray-700">
+                    <p className="font-bold text-gray-900">게임 계산 기준</p>
+                    <p className="mt-1">
+                      목·허리 각도를 최대 5cm 범위로 환산한 동기부여용 게임 지표이며, 실제 성장 또는 의학적 예상 키가 아닙니다.
+                    </p>
+                  </div>
+                </>
               ) : (
                 <button
                   type="button"
                   onClick={onOpenSettings}
-                  className="w-full border border-blue-200 bg-white px-3 py-2 text-sm font-bold text-blue-700"
+                  className="w-full border border-blue-200 bg-white px-3 py-3 text-sm font-bold text-blue-700"
                 >
-                  설정에서 현재 키와 목표 키를 입력해 주세요
+                  설정에서 성별, 만 나이, 현재 키를 입력해 주세요
                 </button>
               )}
 
-              {heightGoal?.status === "remaining" ? (
-                <div
-                  className={`mt-3 border p-3 ${
-                    isRunning && latestPosture.isTracking && articleHeightScenario?.postureStatus === "danger"
-                      ? "border-red-200 bg-red-50"
-                      : isRunning && latestPosture.isTracking && articleHeightScenario?.postureStatus === "warning"
-                        ? "border-yellow-200 bg-yellow-50"
-                        : "border-blue-100 bg-blue-50/60"
-                  }`}
-                >
-                  <div className="flex flex-wrap items-start justify-between gap-2">
-                    <div>
-                      <div className="flex flex-wrap items-center gap-2">
-                        <p className="text-sm font-bold text-gray-900">현재 자세가 계속된다면</p>
-                      </div>
-                      {articleHeightScenario && isRunning && latestPosture.isTracking && (
-                        <p className="mt-1 text-xs font-bold text-gray-600">
-                          이번 분석 평균 {Math.round(articleHeightScenario.averageScore)}점 · {getStatusLabel(articleHeightScenario.averageScore)}
-                        </p>
-                      )}
-                    </div>
-                    <div className="flex border border-blue-200 bg-white p-0.5" aria-label="기사 가정 기간">
-                      {([1, 4] as const).map((years) => (
-                        <button
-                          key={years}
-                          type="button"
-                          onClick={() => setArticleScenarioYears(years)}
-                          className={`min-h-8 px-3 text-xs font-bold ${
-                            articleScenarioYears === years
-                              ? "bg-[#18755B] text-white"
-                              : "text-gray-600"
-                          }`}
-                          aria-pressed={articleScenarioYears === years}
-                        >
-                          {years}년
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  {!isRunning ? (
-                    <p className="mt-3 border border-dashed border-gray-300 bg-white px-3 py-3 text-sm font-medium text-gray-600">
-                      자세를 분석하면 예상 키 시나리오가 표시돼요.
-                    </p>
-                  ) : !latestPosture.isTracking ? (
-                    <p className="mt-3 border border-dashed border-gray-300 bg-white px-3 py-3 text-sm font-medium text-gray-600">
-                      측면이 보이도록 위치를 조정해 주세요.
-                    </p>
-                  ) : articleHeightScenario ? (
-                    <div className="mt-3">
-                      <div className="flex flex-wrap items-end justify-between gap-2 border-t border-black/10 pt-3">
-                        <div>
-                          <span className="text-sm font-bold text-gray-700">예상 키</span>
-                          <strong className="mt-0.5 block text-3xl leading-none text-[#12644C]">
-                            {formatHeightCm(articleHeightScenario.estimatedHeightCm)}
-                          </strong>
-                        </div>
-                        <p className="text-right text-sm font-bold text-gray-700">
-                          {articleHeightScenario.appliedReductionCm === 0
-                            ? "목표 키와 같아요"
-                            : `목표 키보다 ${formatHeightCm(articleHeightScenario.appliedReductionCm)} 낮아요`}
-                        </p>
-                      </div>
-                      <p
-                        className={`mt-3 text-sm font-bold leading-6 ${
-                          articleHeightScenario.postureStatus === "danger"
-                            ? "text-red-800"
-                            : articleHeightScenario.postureStatus === "warning"
-                              ? "text-yellow-900"
-                              : "text-[#12644C]"
-                        }`}
-                      >
-                        {articleHeightScenario.postureStatus === "good"
-                          ? "좋은 자세가 이어지고 있어요. 기사 가정상 목표 키 차감이 적용되지 않아요."
-                          : articleHeightScenario.postureStatus === "warning"
-                            ? "이 자세가 계속되면 목표 키까지 도달하지 못할 수 있어요."
-                            : "구부정한 자세가 계속되면 목표 키까지 도달하지 못할 수 있어요. 지금 몸을 펴 주세요."}
-                      </p>
-                    </div>
-                  ) : (
-                    <p className="mt-3 border border-dashed border-gray-300 bg-white px-3 py-3 text-sm font-medium text-gray-600">
-                      자세를 분석하면 예상 키 시나리오가 표시돼요.
-                    </p>
-                  )}
-                </div>
-              ) : heightGoal?.status === "reached" ? (
-                <p className="mt-3 border border-[#70E5C4] bg-[#C4F6E8] px-3 py-2 text-sm font-bold text-[#12644C]">
-                  설정한 목표 키에 이미 도달했어요.
-                </p>
-              ) : null}
-
-              <div className="mt-3 border-t border-gray-200 pt-3 text-xs leading-5 text-gray-600">
-                <p>
-                  예상 키는 사용자가 설정한 목표 키에 자료와 앱의 자세 단계별 적용률을 반영한
-                  교육용 가정임. 의학적 성장량이나 최종 키는 정확하지 않을 수 있음.
-                </p>
-              </div>
+              <p className="mt-3 border-t border-gray-200 pt-3 text-xs leading-5 text-gray-600">
+                2017 소아청소년 성장도표를 활용한 교육용 통계 추정이며, 의학적 최종 키 예측이 아닙니다.
+              </p>
 
               <button
                 type="button"
@@ -459,7 +415,7 @@ export function AnalysisView(props: AnalysisViewProps) {
                 }}
                 className="mt-3 w-full border border-blue-200 bg-white px-3 py-2 text-sm font-bold text-blue-700"
               >
-                자세히 보기
+                분석 지표 보기
               </button>
             </>
           )}

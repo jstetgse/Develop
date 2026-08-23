@@ -42,13 +42,13 @@ export function GrowthPostureWeekStrip({
   if (isLoading) {
     return (
       <div className="border border-dashed border-gray-200 bg-white px-4 py-5 text-center text-sm text-gray-500">
-        최근 성장 자세 기록을 불러오는 중입니다...
+        최근 자세 기록을 불러오는 중입니다...
       </div>
     );
   }
 
   return (
-    <div className="grid grid-cols-7 gap-1.5" aria-label="최근 7일 성장 자세 상태">
+    <div className="grid grid-cols-7 gap-1.5" aria-label="최근 7일 자세 상태">
       {days.map((day) => {
         const presentation = STATUS_PRESENTATION[day.status];
         const canSelect = Boolean(onSelectDate && day.status !== "unmeasured");

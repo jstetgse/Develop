@@ -7,8 +7,10 @@ import { formatTime, getHistorySessionDisplayTitle } from "@/components/posture-
 import { getStretchVoiceLabel } from "@/components/posture-coach/stretch-utils";
 import {
   CURRENT_HEIGHT_RANGE,
-  TARGET_HEIGHT_RANGE,
+  GROWTH_AGE_RANGE,
+  isGrowthAge,
   isHeightInRange,
+  type GrowthSex,
 } from "@/lib/growth-posture";
 
 type AnalysisSettingsPanel = "analysis-options" | "posture-alerts" | "stretch-alerts";
@@ -130,13 +132,12 @@ export function PostureCoachDialogs(props: PostureCoachDialogsProps) {
   const currentHeightError =
     settingsDraft.currentHeightCm !== null &&
     !isHeightInRange(settingsDraft.currentHeightCm, CURRENT_HEIGHT_RANGE);
-  const targetHeightError =
-    settingsDraft.targetHeightCm !== null &&
-    !isHeightInRange(settingsDraft.targetHeightCm, TARGET_HEIGHT_RANGE);
+  const currentAgeError =
+    settingsDraft.currentAgeYears !== null && !isGrowthAge(settingsDraft.currentAgeYears);
   const canApplySettings =
     !badPostureDurationError &&
     !currentHeightError &&
-    !targetHeightError &&
+    !currentAgeError &&
     settingsSaveStatus !== "saving";
 
   const ToggleControl = ({
@@ -346,12 +347,53 @@ export function PostureCoachDialogs(props: PostureCoachDialogsProps) {
                 </label>
                 <div className="border border-blue-100 bg-blue-50/60 p-4">
                   <div className="mb-3">
-                    <p className="font-bold text-gray-900">내 성장 자세</p>
+                    <p className="font-bold text-gray-900">내 키 예측</p>
                     <p className="mt-1 text-xs leading-5 text-gray-600">
-                      현재 키와 목표 키를 자세 상태와 함께 확인해요.
+                      성별, 만 나이, 현재 키로 만 18세의 예상 키를 계산해요.
                     </p>
                   </div>
-                  <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="grid gap-3 sm:grid-cols-3">
+                    <label className="block">
+                      <span className="text-sm font-medium text-gray-700">성별</span>
+                      <select
+                        value={settingsDraft.growthSex ?? ""}
+                        onChange={(event) =>
+                          onUpdateSettingsDraft({
+                            growthSex: event.target.value
+                              ? (event.target.value as GrowthSex)
+                              : null,
+                          })
+                        }
+                        className="mt-2 w-full border border-gray-300 bg-white px-3 py-2"
+                      >
+                        <option value="">선택</option>
+                        <option value="male">남자</option>
+                        <option value="female">여자</option>
+                      </select>
+                    </label>
+                    <label className="block">
+                      <span className="text-sm font-medium text-gray-700">만 나이</span>
+                      <select
+                        value={settingsDraft.currentAgeYears ?? ""}
+                        onChange={(event) =>
+                          onUpdateSettingsDraft({
+                            currentAgeYears: event.target.value ? Number(event.target.value) : null,
+                          })
+                        }
+                        className="mt-2 w-full border border-gray-300 bg-white px-3 py-2"
+                      >
+                        <option value="">선택</option>
+                        {Array.from(
+                          { length: GROWTH_AGE_RANGE.max - GROWTH_AGE_RANGE.min + 1 },
+                          (_, index) => GROWTH_AGE_RANGE.min + index
+                        ).map((age) => (
+                          <option key={age} value={age}>만 {age}세</option>
+                        ))}
+                      </select>
+                      {currentAgeError && (
+                        <p className="mt-1 text-xs text-red-600">만 10~18세로 선택해 주세요.</p>
+                      )}
+                    </label>
                     <label className="block">
                       <span className="text-sm font-medium text-gray-700">현재 키 (cm)</span>
                       <input
@@ -372,30 +414,7 @@ export function PostureCoachDialogs(props: PostureCoachDialogsProps) {
                         <p className="mt-1 text-xs text-red-600">100~220cm 사이로 입력해 주세요.</p>
                       )}
                     </label>
-                    <label className="block">
-                      <span className="text-sm font-medium text-gray-700">목표 키 (cm)</span>
-                      <input
-                        type="number"
-                        min={TARGET_HEIGHT_RANGE.min}
-                        max={TARGET_HEIGHT_RANGE.max}
-                        step="0.1"
-                        value={settingsDraft.targetHeightCm ?? ""}
-                        onChange={(event) =>
-                          onUpdateSettingsDraft({
-                            targetHeightCm: event.target.value === "" ? null : event.target.valueAsNumber,
-                          })
-                        }
-                        className="mt-2 w-full border border-gray-300 bg-white px-3 py-2"
-                        placeholder="예: 172"
-                      />
-                      {targetHeightError && (
-                        <p className="mt-1 text-xs text-red-600">100~230cm 사이로 입력해 주세요.</p>
-                      )}
-                    </label>
                   </div>
-                  <p className="mt-3 text-xs leading-5 text-gray-500">
-                    목표 키는 의학적으로 예측된 성인 키가 아니라 사용자가 직접 설정하는 목표입니다.
-                  </p>
                 </div>
               </div>
             )}

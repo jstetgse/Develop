@@ -1,9 +1,9 @@
-export type AnalysisCardView = "score" | "growth";
+export type AnalysisCardView = "score" | "prediction";
 
 export const ANALYSIS_CARD_ROTATION_MS = 60_000;
 
 export function getNextAnalysisCardView(current: AnalysisCardView): AnalysisCardView {
-  return current === "score" ? "growth" : "score";
+  return current === "score" ? "prediction" : "score";
 }
 
 export function scheduleAnalysisCardRotation(onRotate: () => void) {

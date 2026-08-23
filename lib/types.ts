@@ -1,3 +1,5 @@
+import type { GrowthSex } from "@/lib/growth-posture";
+
 export type TabId = "home" | "analysis" | "stretch" | "history" | "settings";
 
 export type Tone = "neutral" | "good" | "warn" | "danger";
@@ -26,8 +28,9 @@ export type PostureFeedbackSeverity = "good" | "caution" | "warning";
 export type NotificationPermissionStatus = "unsupported" | "default" | "granted" | "denied";
 
 export interface Settings {
+  growthSex: GrowthSex | null;
+  currentAgeYears: number | null;
   currentHeightCm: number | null;
-  targetHeightCm: number | null;
   warningAlertEnabled: boolean;
   warningScoreThreshold: number;
   badPostureDurationMinutes: number;

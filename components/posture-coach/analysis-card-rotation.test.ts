@@ -12,8 +12,8 @@ afterEach(() => {
 
 describe("analysis card rotation", () => {
   it("alternates between score and growth cards", () => {
-    expect(getNextAnalysisCardView("score")).toBe("growth");
-    expect(getNextAnalysisCardView("growth")).toBe("score");
+    expect(getNextAnalysisCardView("score")).toBe("prediction");
+    expect(getNextAnalysisCardView("prediction")).toBe("score");
   });
 
   it("rotates only after one minute", () => {

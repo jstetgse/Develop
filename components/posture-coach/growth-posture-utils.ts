@@ -77,7 +77,7 @@ export function createGrowthPostureWeek(
 export function getGrowthPostureHistoryMessage(score: number | null | undefined) {
   const status = getGrowthPostureDayStatus(score, true);
   if (status === "good") return "좋은 자세 습관을 유지했어요.";
-  if (status === "warning") return "자세를 고쳐보세요. 목표 키까지 도달해야죠!";
+  if (status === "warning") return "조금 더 편안하고 바른 자세를 만들어 보세요.";
   if (status === "danger") {
     return "혹시 자세를 포기하셨나요? ㅠ 다음 분석에서는 몸을 바로 펴봐요!";
   }

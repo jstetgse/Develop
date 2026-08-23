@@ -819,7 +819,7 @@ export function HistoryView(props: HistoryViewProps) {
                 )}
               </div>
               <div className="mt-4 border-l-4 border-l-[#18755B] bg-[#F2FBF8] px-4 py-3">
-                <p className="text-sm font-bold uppercase tracking-[0.12em] text-[#18755B]">성장 자세 한마디</p>
+                <p className="text-sm font-bold uppercase tracking-[0.12em] text-[#18755B]">자세 습관 한마디</p>
                 <p className="mt-1 text-sm font-medium leading-6 text-gray-700">
                   {getGrowthPostureHistoryMessage(selectedHistoryGroup.averageScore)}
                 </p>

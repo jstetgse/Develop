@@ -46,7 +46,8 @@ import type {
 } from "@/lib/types";
 import {
   CURRENT_HEIGHT_RANGE,
-  TARGET_HEIGHT_RANGE,
+  normalizeGrowthAge,
+  normalizeGrowthSex,
   normalizeOptionalHeight,
 } from "@/lib/growth-posture";
 import { getSessionTitleKey, normalizeSessionTitle } from "@/lib/session-title";
@@ -194,8 +195,9 @@ const SETTINGS_DOC_ID = "app";
 
 type FirestoreSettings = Pick<
   Settings,
+  | "growthSex"
+  | "currentAgeYears"
   | "currentHeightCm"
-  | "targetHeightCm"
   | "warningAlertEnabled"
   | "warningScoreThreshold"
   | "badPostureDurationMinutes"
@@ -225,8 +227,9 @@ function normalizeSideMode(value: unknown, fallback: SideMode = "left"): SideMod
 function normalizeSettings(raw: Partial<Settings>, defaults: Settings): Settings {
   return {
     ...defaults,
+    growthSex: normalizeGrowthSex(raw.growthSex),
+    currentAgeYears: normalizeGrowthAge(raw.currentAgeYears),
     currentHeightCm: normalizeOptionalHeight(raw.currentHeightCm, CURRENT_HEIGHT_RANGE),
-    targetHeightCm: normalizeOptionalHeight(raw.targetHeightCm, TARGET_HEIGHT_RANGE),
     warningAlertEnabled:
       typeof raw.warningAlertEnabled === "boolean" ? raw.warningAlertEnabled : defaults.warningAlertEnabled,
     warningScoreThreshold:
@@ -270,8 +273,9 @@ function normalizeSettings(raw: Partial<Settings>, defaults: Settings): Settings
 
 function toFirestoreSettings(settings: Settings): FirestoreSettings {
   return {
+    growthSex: normalizeGrowthSex(settings.growthSex),
+    currentAgeYears: normalizeGrowthAge(settings.currentAgeYears),
     currentHeightCm: normalizeOptionalHeight(settings.currentHeightCm, CURRENT_HEIGHT_RANGE),
-    targetHeightCm: normalizeOptionalHeight(settings.targetHeightCm, TARGET_HEIGHT_RANGE),
     warningAlertEnabled: settings.warningAlertEnabled,
     warningScoreThreshold: settings.warningScoreThreshold,
     badPostureDurationMinutes: settings.badPostureDurationMinutes,

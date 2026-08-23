@@ -2,130 +2,79 @@ import { describe, expect, it } from "vitest";
 
 import {
   CURRENT_HEIGHT_RANGE,
-  TARGET_HEIGHT_RANGE,
-  calculateArticleHeightScenario,
-  calculateHeightGoal,
-  getGrowthPostureState,
+  calculateFinalHeightPrediction,
+  formatGrowthPercentile,
+  normalizeGrowthAge,
+  normalizeGrowthSex,
   normalizeOptionalHeight,
 } from "@/lib/growth-posture";
 
-describe("growth posture height goal", () => {
-  it("calculates 7cm remaining from 165cm to 172cm", () => {
-    expect(calculateHeightGoal(165, 172)).toEqual({
-      status: "remaining",
-      remainingCm: 7,
+describe("growth chart final-height prediction", () => {
+  it("projects a median 10-year-old boy to the final male median", () => {
+    expect(calculateFinalHeightPrediction("male", 10, 138.8)).toEqual({
+      currentAgeYears: 10,
+      currentHeightCm: 138.8,
+      predictedFinalHeightCm: 174.5,
+      percentile: 50,
+      zScore: 0,
+      isOutsideChartRange: false,
     });
   });
 
-  it("calculates decimal differences to one decimal place", () => {
-    expect(calculateHeightGoal(165.5, 172)).toEqual({
-      status: "remaining",
-      remainingCm: 6.5,
+  it("projects a median 18-year-old girl to the final female median", () => {
+    expect(calculateFinalHeightPrediction("female", 18, 160.6)).toEqual({
+      currentAgeYears: 18,
+      currentHeightCm: 160.6,
+      predictedFinalHeightCm: 161.1,
+      percentile: 50,
+      zScore: 0,
+      isOutsideChartRange: false,
     });
   });
 
-  it("reports the configured goal as reached", () => {
-    expect(calculateHeightGoal(172, 170)).toEqual({
-      status: "reached",
-      remainingCm: 0,
+  it("interpolates between standard-score rows", () => {
+    const prediction = calculateFinalHeightPrediction("male", 14, 175);
+    expect(prediction?.zScore).toBe(1.57);
+    expect(prediction?.percentile).toBeCloseTo(94.2, 1);
+    expect(prediction?.predictedFinalHeightCm).toBe(183.5);
+  });
+
+  it("clamps values outside the published -3SD to +3SD range", () => {
+    expect(calculateFinalHeightPrediction("female", 14, 180)).toMatchObject({
+      predictedFinalHeightCm: 177,
+      percentile: 99.9,
+      zScore: 3,
+      isOutsideChartRange: true,
     });
   });
 
   it.each([
-    [null, 172],
-    [165, null],
-    [Number.NaN, 172],
-    [99.9, 172],
-    [220.1, 172],
-    [165, 99.9],
-    [165, 230.1],
-  ])("rejects missing or out-of-range values (%s, %s)", (current, target) => {
-    expect(calculateHeightGoal(current, target)).toBeNull();
+    [null, 14, 165],
+    ["unknown", 14, 165],
+    ["male", 9, 165],
+    ["male", 19, 165],
+    ["male", 14.5, 165],
+    ["male", 14, null],
+    ["male", 14, 99],
+  ])("rejects incomplete or invalid input (%s, %s, %s)", (sex, age, height) => {
+    expect(calculateFinalHeightPrediction(sex as "male", age as number, height as number)).toBeNull();
   });
+});
 
+describe("growth profile normalization and display", () => {
   it("normalizes stored values while preserving backward compatibility", () => {
     expect(normalizeOptionalHeight(undefined, CURRENT_HEIGHT_RANGE)).toBeNull();
     expect(normalizeOptionalHeight(165.56, CURRENT_HEIGHT_RANGE)).toBe(165.6);
-    expect(normalizeOptionalHeight(240, TARGET_HEIGHT_RANGE)).toBeNull();
-  });
-});
-
-describe("article height scenario", () => {
-  it("does not subtract from a good posture scenario", () => {
-    expect(calculateArticleHeightScenario(175, 4, 80)).toEqual({
-      years: 4,
-      targetHeightCm: 175,
-      averageScore: 80,
-      postureStatus: "good",
-      applicationRate: 0,
-      maximumReductionCm: 2,
-      appliedReductionCm: 0,
-      estimatedHeightCm: 175,
-    });
+    expect(normalizeGrowthSex("male")).toBe("male");
+    expect(normalizeGrowthSex("other")).toBeNull();
+    expect(normalizeGrowthAge(14)).toBe(14);
+    expect(normalizeGrowthAge(14.5)).toBeNull();
   });
 
-  it("applies half of the article assumption to a warning posture scenario", () => {
-    expect(calculateArticleHeightScenario(175, 1, 60)).toEqual({
-      years: 1,
-      targetHeightCm: 175,
-      averageScore: 60,
-      postureStatus: "warning",
-      applicationRate: 0.5,
-      maximumReductionCm: 0.5,
-      appliedReductionCm: 0.3,
-      estimatedHeightCm: 174.7,
-    });
-  });
-
-  it("applies all of the article assumption to a danger posture scenario", () => {
-    expect(calculateArticleHeightScenario(175, 4, 59)).toEqual({
-      years: 4,
-      targetHeightCm: 175,
-      averageScore: 59,
-      postureStatus: "danger",
-      applicationRate: 1,
-      maximumReductionCm: 2,
-      appliedReductionCm: 2,
-      estimatedHeightCm: 173,
-    });
-  });
-
-  it.each([
-    [80, "good"],
-    [79, "warning"],
-    [60, "warning"],
-    [59, "danger"],
-  ] as const)("classifies the %s-point boundary as %s", (score, postureStatus) => {
-    expect(calculateArticleHeightScenario(175, 4, score)?.postureStatus).toBe(postureStatus);
-  });
-
-  it.each([
-    [1, 90, 175],
-    [1, 70, 174.7],
-    [1, 50, 174.5],
-    [4, 90, 175],
-    [4, 70, 174],
-    [4, 50, 173],
-  ] as const)("calculates the %s-year scenario for score %s", (years, score, expectedHeight) => {
-    expect(calculateArticleHeightScenario(175, years, score)?.estimatedHeightCm).toBe(expectedHeight);
-  });
-
-  it("rejects invalid target heights and scores", () => {
-    expect(calculateArticleHeightScenario(null, 4, 70)).toBeNull();
-    expect(calculateArticleHeightScenario(230.1, 4, 70)).toBeNull();
-    expect(calculateArticleHeightScenario(175, 4, null)).toBeNull();
-    expect(calculateArticleHeightScenario(175, 4, 101)).toBeNull();
-  });
-});
-
-describe("growth posture display state", () => {
-  it("prioritizes idle and tracking failure before score status", () => {
-    expect(getGrowthPostureState({ isRunning: false, isTracking: false, postureStatus: "danger" })).toBe("idle");
-    expect(getGrowthPostureState({ isRunning: true, isTracking: false, postureStatus: "danger" })).toBe("tracking-lost");
-    expect(getGrowthPostureState({ isRunning: true, isTracking: true, postureStatus: "waiting" })).toBe("tracking-lost");
-  });
-
-  it.each(["good", "warning", "danger"] as const)("preserves the %s score status while tracking", (postureStatus) => {
-    expect(getGrowthPostureState({ isRunning: true, isTracking: true, postureStatus })).toBe(postureStatus);
+  it("formats percentile position as an easy-to-read top percentage", () => {
+    expect(formatGrowthPercentile(0.1)).toBe("하위 1% 이내");
+    expect(formatGrowthPercentile(50)).toBe("상위 약 50%");
+    expect(formatGrowthPercentile(83.7)).toBe("상위 약 16%");
+    expect(formatGrowthPercentile(99.9)).toBe("상위 1% 이내");
   });
 });

@@ -67,7 +67,7 @@ describe("growth posture history copy", () => {
 
   it("returns a daily message for measured and insufficient days", () => {
     expect(getGrowthPostureHistoryMessage(85)).toContain("좋은 자세");
-    expect(getGrowthPostureHistoryMessage(70)).toContain("목표 키");
+    expect(getGrowthPostureHistoryMessage(70)).toContain("바른 자세");
     expect(getGrowthPostureHistoryMessage(50)).toContain("다음 분석");
     expect(getGrowthPostureHistoryMessage(null)).toContain("측정 시간이 부족");
   });
