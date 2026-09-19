@@ -1,5 +1,5 @@
 import type { RefObject } from "react";
-import { CheckCircle, ChevronRight, Clock, SlidersHorizontal, VideoOff } from "lucide-react";
+import { ChevronRight, Clock, SlidersHorizontal, VideoOff } from "lucide-react";
 import type { StretchCoachingResult, StretchDefinition, StretchStep } from "@/lib/types";
 import { calculateStretchRecommendations } from "@/lib/stretch-recommendation";
 import { getStretchById, isDynamicStretchStep } from "@/lib/stretch-analysis";
@@ -88,7 +88,7 @@ export function StretchingView(props: StretchingViewProps) {
     onToggleShowAll,
   } = props;
 
-  const statusLabel = isStretchingMode ? "스트레칭 분석 중" : selectedStretch ? "스트레칭 준비" : "대기 중";
+  const statusLabel = isStretchingMode ? "스트레칭 분석 중" : selectedStretch ? "스트레칭 시작 전" : "대기 중";
   const statusClassName = isStretchingMode
     ? "border-[#70E5C4] bg-[#C4F6E8] text-[#18755B]"
     : selectedStretch
@@ -117,7 +117,7 @@ export function StretchingView(props: StretchingViewProps) {
         }`}
       >
         <div className="grid grid-cols-[48px_minmax(0,1fr)] gap-x-3 gap-y-2">
-          <StretchStepIconTile checkType={step.checkType} stepNumber={index + 1} state={iconState} />
+          <StretchStepIconTile checkType={step.checkType} state={iconState} />
           <div className="min-w-0 self-center">
             <div className="flex flex-wrap items-center gap-2">
               <p className="break-keep text-base font-bold leading-snug text-gray-900">{step.title}</p>
@@ -176,7 +176,6 @@ export function StretchingView(props: StretchingViewProps) {
                     >
                       <div className="mb-3 flex items-start justify-between gap-3">
                         <div>
-                          <p className="mb-1 text-xs font-bold text-blue-600">{stretch.targetBodyPart}</p>
                           <h3 className="font-bold text-gray-900">{stretch.name}</h3>
                         </div>
                         <span
@@ -228,7 +227,6 @@ export function StretchingView(props: StretchingViewProps) {
                     >
                       <div className="mb-2 flex items-start justify-between gap-3">
                         <div>
-                          <p className="mb-1 text-xs font-bold text-blue-600">{stretch.targetBodyPart}</p>
                           <h3 className="font-bold text-gray-900">{stretch.name}</h3>
                         </div>
                         <ChevronRight className="h-5 w-5 shrink-0 text-gray-400" />
@@ -293,6 +291,39 @@ export function StretchingView(props: StretchingViewProps) {
                 </div>
               )}
             </div>
+            <div className="mt-5">
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <h3 className="text-base font-bold text-gray-900">전체 스트레칭</h3>
+                <span className="text-xs font-bold text-gray-500">{allStretchOptions.length}개</span>
+              </div>
+              <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+                {allStretchOptions.map((stretch) => (
+                  <button
+                    key={stretch.id}
+                    type="button"
+                    onClick={() => handleStretchSelection(stretch.id)}
+                    className="group flex h-full flex-col border border-gray-200 bg-gray-50 p-4 text-left"
+                  >
+                    <div className="mb-2 flex items-start justify-between gap-3">
+                      <div>
+                        <h3 className="font-bold text-gray-900">{stretch.name}</h3>
+                      </div>
+                      <ChevronRight className="h-5 w-5 shrink-0 text-gray-400" />
+                    </div>
+                    <p className="flex-1 text-sm leading-6 text-gray-600">{stretch.shortDescription}</p>
+                    <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-gray-500">
+                      <Clock className="h-3 w-3" />
+                      <span>{stretch.durationSec}초</span>
+                      <span>{stretch.steps.length}단계</span>
+                    </div>
+                    <div className="mt-4 flex items-center justify-between border border-[#18755B]/25 bg-white px-3 py-2 text-sm font-bold text-[#18755B]">
+                      <span>선택하기</span>
+                      <ChevronRight className="h-4 w-4 shrink-0" />
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
           </section>
         )}
       </div>
@@ -301,136 +332,10 @@ export function StretchingView(props: StretchingViewProps) {
 
   return (
     <div className="-mt-4 space-y-4">
-      {hasCurrentSessionPostureData && !activeStretchId && (
-        <section className="app-surface p-5">
-          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <h2 className="text-xl font-bold text-gray-900">맞춤 스트레칭 추천</h2>
-              {personalizedStretchRecommendations.message && (
-                <p className="mt-1 text-sm text-gray-600">{personalizedStretchRecommendations.message}</p>
-              )}
-            </div>
-            {isLoadingHistory && (
-              <span className="border border-blue-100 bg-blue-50 px-3 py-1 text-xs font-bold text-blue-700">
-                추천 계산 중...
-              </span>
-            )}
-          </div>
-          {isLoadingHistory ? (
-            <div className="border border-blue-100 bg-blue-50 px-4 py-3 text-sm font-bold text-blue-900">
-              추천 계산 중...
-            </div>
-          ) : personalizedStretchRecommendations.recommendations.length > 0 ? (
-            <div className="grid gap-3 lg:grid-cols-3">
-              {personalizedStretchRecommendations.recommendations.slice(0, 3).map((recommendation) => {
-                const stretch = getStretchById(recommendation.stretchId);
-                if (!stretch) return null;
-
-                return (
-                  <button
-                    key={recommendation.stretchId}
-                    type="button"
-                    onClick={() => handleStretchSelection(recommendation.stretchId)}
-                    className={`group flex h-full flex-col border p-4 text-left ${
-                      activeStretchId === recommendation.stretchId
-                        ? "border-[#18755B] bg-[#E7FFF7]"
-                        : "border-gray-200 bg-white"
-                    }`}
-                  >
-                    <div className="mb-3 flex items-start justify-between gap-3">
-                      <div>
-                        <p className="mb-1 text-xs font-bold text-blue-600">{stretch.targetBodyPart}</p>
-                        <h3 className="font-bold text-gray-900">{stretch.name}</h3>
-                      </div>
-                      <span
-                        className={`shrink-0 border px-2.5 py-1 text-xs font-bold ${getRecommendationPriorityClass(
-                          recommendation.priorityLabel,
-                        )}`}
-                      >
-                        우선순위: {recommendation.priorityLabel}
-                      </span>
-                    </div>
-                    <div className="flex-1">
-                      <p className="text-sm font-bold text-gray-800">추천 이유:</p>
-                      <ul className="mt-1 space-y-1 text-sm leading-6 text-gray-600">
-                        {recommendation.reasons.slice(0, 2).map((reason) => (
-                          <li key={reason}>- {reason}</li>
-                        ))}
-                      </ul>
-                    </div>
-                    <div
-                      className={`mt-4 flex items-center justify-between border px-3 py-2 text-sm font-bold ${
-                        activeStretchId === recommendation.stretchId
-                          ? "border-[#18755B] bg-[#18755B] text-white"
-                          : "border-[#18755B]/25 bg-white text-[#18755B]"
-                      }`}
-                    >
-                      <span>{activeStretchId === recommendation.stretchId ? "선택됨" : "이 스트레칭 선택하기"}</span>
-                      {activeStretchId === recommendation.stretchId ? (
-                        <CheckCircle className="h-4 w-4 shrink-0" />
-                      ) : (
-                        <ChevronRight className="h-4 w-4 shrink-0" />
-                      )}
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          ) : (
-            <div className="border border-gray-100 bg-[rgba(196,246,232,0.28)] px-4 py-3 text-sm font-bold text-gray-700">
-              자세 분석을 먼저 진행하면 맞춤 스트레칭을 추천받을 수 있습니다.
-            </div>
-          )}
-          <div className="mt-4 border-t border-gray-100 pt-4">
-            <button
-              type="button"
-              onClick={onToggleShowAll}
-              className="inline-flex min-h-10 items-center justify-center gap-2 border border-blue-200 bg-white px-4 py-2 text-sm font-bold text-blue-700"
-            >
-              {showAllStretchOptions ? "다른 스트레칭 목록 닫기" : "다른 스트레칭 선택하기"}
-              <ChevronRight className="h-4 w-4" />
-            </button>
-            {showAllStretchOptions && (
-              <div className="mt-3 grid gap-3 md:grid-cols-2 lg:grid-cols-3">
-                {allStretchOptions.map((stretch) => (
-                  <button
-                    key={stretch.id}
-                    type="button"
-                    onClick={() => handleStretchSelection(stretch.id)}
-                    className={`group flex h-full flex-col border p-4 text-left ${
-                      activeStretchId === stretch.id ? "border-[#18755B] bg-[#E7FFF7]" : "border-gray-200 bg-gray-50"
-                    }`}
-                  >
-                    <div className="mb-2 flex items-start justify-between gap-3">
-                      <div>
-                        <p className="mb-1 text-xs font-bold text-blue-600">{stretch.targetBodyPart}</p>
-                        <h3 className="font-bold text-gray-900">{stretch.name}</h3>
-                      </div>
-                      {activeStretchId === stretch.id ? (
-                        <CheckCircle className="h-5 w-5 shrink-0 text-[#18755B]" />
-                      ) : (
-                        <ChevronRight className="h-5 w-5 shrink-0 text-gray-400" />
-                      )}
-                    </div>
-                    <p className="text-sm leading-6 text-gray-600">{stretch.shortDescription}</p>
-                    <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-gray-500">
-                      <Clock className="h-3 w-3" />
-                      <span>{stretch.durationSec}초</span>
-                      <span>{stretch.steps.length}단계</span>
-                    </div>
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-        </section>
-      )}
-
       <div className="grid grid-cols-1 items-stretch gap-4 lg:grid-cols-[minmax(0,1.6fr)_minmax(380px,0.9fr)]">
         <section className="app-surface flex h-full flex-col p-4">
           <div className="mb-2 flex flex-col justify-between gap-2 sm:flex-row sm:items-start">
             <div>
-              <p className="mb-1 text-xs font-bold uppercase tracking-[0.18em] text-blue-600">카메라 분석</p>
               <div className="flex flex-wrap items-center gap-2">
                 <h2 className="text-2xl font-bold text-gray-900">스트레칭 분석</h2>
                 <button
@@ -513,7 +418,6 @@ export function StretchingView(props: StretchingViewProps) {
               <>
                 <div className="mb-3 flex items-start justify-between gap-3">
                   <div>
-                    <p className="mb-1 text-xs font-bold uppercase tracking-[0.18em] text-blue-600">{selectedStretch.targetBodyPart}</p>
                     <h3 className="text-xl font-bold text-gray-900">{selectedStretch.name}</h3>
                     <p className="mt-1 text-sm text-gray-600">{stepCountText}</p>
                   </div>
@@ -527,7 +431,6 @@ export function StretchingView(props: StretchingViewProps) {
                     <div className="flex items-start gap-3">
                       <StretchStepIconTile
                         checkType={activeStretchStep.checkType}
-                        stepNumber={activeStretchStepIndex + 1}
                         state="active"
                         size="large"
                       />
@@ -632,7 +535,6 @@ export function StretchingView(props: StretchingViewProps) {
                   <div className="flex items-start gap-3">
                     <StretchStepIconTile
                       checkType={nextStretchStep.checkType}
-                      stepNumber={activeStretchStepIndex + 2}
                       state="inactive"
                     />
                     <div className="min-w-0 flex-1">

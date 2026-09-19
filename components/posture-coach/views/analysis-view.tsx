@@ -164,7 +164,7 @@ export function AnalysisView(props: AnalysisViewProps) {
                 <span>카메라 대기 중</span>
               </div>
               <p className="absolute bottom-5 left-1/2 w-[calc(100%-2.5rem)] max-w-sm -translate-x-1/2 text-center text-sm font-medium leading-6 text-[#D6F3EB]/82">
-                분석을 시작하면 실시간 자세 오버레이와 1초 평균 점수가 표시됩니다.
+                분석을 시작해주세요.
               </p>
             </div>
           )}
@@ -328,8 +328,7 @@ export function AnalysisView(props: AnalysisViewProps) {
             <>
               <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                 <div>
-                  <p className="mb-1 text-xs font-bold uppercase tracking-[0.18em] text-blue-600">성장도표 분석</p>
-                  <h3 className="text-lg font-bold text-gray-900">내 키 예측</h3>
+                  <h3 className="text-xl font-bold text-gray-900">내 키 예측</h3>
                 </div>
                 {heightPrediction && (
                   <span className="border border-[#70E5C4] bg-[#C4F6E8] px-2.5 py-1 text-xs font-bold text-[#12644C]">

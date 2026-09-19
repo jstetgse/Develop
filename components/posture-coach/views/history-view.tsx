@@ -309,6 +309,7 @@ export function HistoryView(props: HistoryViewProps) {
   const { historyGroups, growthPostureWeek, isLoadingHistory, selectedHistoryGroup, selectedHistorySessionKey, historySessionPage, visibleHistoryMonthKey, editingSessionTitleKey, sessionTitleDraft, savingSessionTitleKey, sessionTitleErrors, expandedHistoryImageSessions, onSelectSession, onOpenDeleteSession, onShiftMonth, onSelectDate, onCloseSession, onChangePage, onTitleDraftChange, onCancelTitleEdit, onBeginTitleEdit, onToggleImages, onSaveTitle } = props;
   const [isCalendarHelpOpen, setIsCalendarHelpOpen] = useState(false);
   const [visibleGuidelineImages, setVisibleGuidelineImages] = useState<Set<string>>(new Set());
+  const [visibleExplanationDetails, setVisibleExplanationDetails] = useState<Set<string>>(new Set());
   const [calendarHelpPosition, setCalendarHelpPosition] = useState<{ left: number; top: number } | null>(null);
   const calendarHelpRef = useRef<HTMLDivElement>(null);
   const calendarHelpPopoverRef = useRef<HTMLDivElement>(null);
@@ -416,6 +417,18 @@ export function HistoryView(props: HistoryViewProps) {
     });
   };
 
+  const toggleExplanationDetail = (key: string) => {
+    setVisibleExplanationDetails((current) => {
+      const next = new Set(current);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+      return next;
+    });
+  };
+
   const getPipelinePoint = (landmarks: SerializedPoseLandmark[], index: number) => {
     const landmark = landmarks[index];
     if (!landmark || !Number.isFinite(landmark.x) || !Number.isFinite(landmark.y) || (landmark.visibility ?? 1) < 0.35) {
@@ -485,8 +498,12 @@ export function HistoryView(props: HistoryViewProps) {
     const hasPosePipeline = Boolean(landmarks?.length);
     const guidelineKey = `${session.sessionId}:${kind}`;
     const isGuidelineVisible = visibleGuidelineImages.has(guidelineKey);
+    const explanationKey = `${session.sessionId}:${kind}:explanation`;
+    const isExplanationDetailVisible = visibleExplanationDetails.has(explanationKey);
     const canShowExplanation = Boolean(imageUrl);
     const explanation = canShowExplanation ? createPhotoScoreExplanation(session, kind) : [];
+    const summaryStep = explanation.find((step) => step.label === "요약");
+    const detailSteps = explanation.filter((step) => step.label !== "요약");
 
     return (
       <div className="overflow-hidden border border-gray-200 bg-white">
@@ -517,34 +534,52 @@ export function HistoryView(props: HistoryViewProps) {
           <div className="mb-3 flex items-center justify-between gap-3 text-sm font-medium text-gray-900">
             <span>{title}</span>
             <span className="text-right">
-              <span className="block text-xs font-bold text-gray-500">사진 점수</span>
               <strong className="tabular-nums">{score !== null ? `${score}점` : "--"}</strong>
             </span>
           </div>
           {canShowExplanation && (
             <div className="space-y-2">
               <p className="text-xs font-bold uppercase tracking-[0.16em] text-blue-600">왜 이 점수가 나왔나요?</p>
-              {explanation.map((step) => {
-                const status = step.overrideStatus ?? getExplanationStatus(step.score);
-                const showStatus = step.showStatus !== false;
-                const showScore = step.showScore !== false;
-                return (
-                  <div key={step.label} className="border-t border-gray-100 pt-2 text-sm">
-                    <div className="mb-1 flex flex-wrap items-center gap-2">
-                      <span className="font-bold text-gray-900">{step.label}</span>
-                      {showStatus && (
-                        <span className={`border px-2 py-0.5 text-xs font-bold ${status.className}`}>
-                          {status.label}
-                        </span>
-                      )}
-                      {showScore && typeof step.score === "number" && (
-                        <span className="text-xs font-bold tabular-nums text-gray-500">{Math.round(step.score)}점</span>
-                      )}
-                    </div>
-                    <p className="leading-5 text-gray-600">{step.message}</p>
-                  </div>
-                );
-              })}
+              {summaryStep && (
+                <div className="border-t border-gray-100 pt-2 text-sm">
+                  <div className="mb-1 font-bold text-gray-900">{summaryStep.label}</div>
+                  <p className="leading-5 text-gray-600">{summaryStep.message}</p>
+                </div>
+              )}
+              <button
+                type="button"
+                onClick={() => toggleExplanationDetail(explanationKey)}
+                className="inline-flex items-center gap-1 text-xs font-bold text-[#18755B] transition hover:text-[#0f5c46]"
+                aria-expanded={isExplanationDetailVisible}
+              >
+                <ChevronRight className={`h-3.5 w-3.5 transition-transform ${isExplanationDetailVisible ? "rotate-90" : ""}`} />
+                {isExplanationDetailVisible ? "접기" : "자세히 보기"}
+              </button>
+              {isExplanationDetailVisible && (
+                <div className="space-y-2 border-t border-gray-100 pt-2">
+                  {detailSteps.map((step) => {
+                    const status = step.overrideStatus ?? getExplanationStatus(step.score);
+                    const showStatus = step.showStatus !== false;
+                    const showScore = step.showScore !== false;
+                    return (
+                      <div key={step.label} className="border-t border-gray-100 pt-2 text-sm first:border-t-0 first:pt-0">
+                        <div className="mb-1 flex flex-wrap items-center gap-2">
+                          <span className="font-bold text-gray-900">{step.label}</span>
+                          {showStatus && (
+                            <span className={`border px-2 py-0.5 text-xs font-bold ${status.className}`}>
+                              {status.label}
+                            </span>
+                          )}
+                          {showScore && typeof step.score === "number" && (
+                            <span className="text-xs font-bold tabular-nums text-gray-500">{Math.round(step.score)}점</span>
+                          )}
+                        </div>
+                        <p className="leading-5 text-gray-600">{step.message}</p>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -686,7 +721,6 @@ export function HistoryView(props: HistoryViewProps) {
             <div className="mb-4 flex items-center justify-between gap-3">
               <div>
                 <h2 className="text-base font-bold text-gray-900">기록 달력</h2>
-                <p className="mt-1 text-xs font-medium text-gray-500">{historyGroups.length}일 기록</p>
               </div>
               <div className="flex items-center gap-1">
                 <div ref={calendarHelpRef} className="relative">
@@ -800,7 +834,6 @@ export function HistoryView(props: HistoryViewProps) {
             <section className="app-surface p-6">
               <div className="mb-4">
                 <h3 className="text-lg font-bold text-gray-900">{formatDateKey(selectedHistoryGroup.dateKey)}</h3>
-                <p className="text-sm text-gray-500">선택한 날짜의 자세 기록</p>
               </div>
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                 {renderStatCard("총 측정", `${selectedHistoryGroup.sessionCount}회`, <Activity className="h-4 w-4" />)}
@@ -833,7 +866,7 @@ export function HistoryView(props: HistoryViewProps) {
                   <p className="mt-1 text-sm font-medium text-gray-500">
                     {focusedHistorySession
                       ? "선택한 세션 보기"
-                      : "왼쪽에서 세션을 선택하면 상세가 표시됩니다"}
+                      : ""}
                   </p>
                 </div>
                 {focusedHistorySession && (
@@ -1016,7 +1049,7 @@ export function HistoryView(props: HistoryViewProps) {
                         <span className="text-sm font-bold text-gray-900">주의 부위</span>
                         {weakestArea ? (
                           <strong className="inline-flex items-center gap-1.5 text-sm tabular-nums text-[#18755B]">
-                            {getPostureAreaIcon(weakestArea.area, "h-3.5 w-3.5")}
+                            {getPostureAreaIcon(weakestArea.area, "h-4 w-4")}
                             <span>{weakestArea.label} {weakestArea.score}</span>
                           </strong>
                         ) : (
@@ -1030,7 +1063,7 @@ export function HistoryView(props: HistoryViewProps) {
                             <div key={area.area} className="min-w-0">
                               <span className="mb-2 inline-flex min-w-0 items-center gap-1.5 text-sm font-bold text-gray-700">
                                 <span className="inline-flex shrink-0 text-[#18755B]">
-                                  {getPostureAreaIcon(area.area, "h-3.5 w-3.5")}
+                                  {getPostureAreaIcon(area.area, "h-4 w-4")}
                                 </span>
                                 <span>{area.label}</span>
                               </span>

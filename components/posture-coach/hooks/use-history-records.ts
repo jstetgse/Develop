@@ -3,9 +3,9 @@ import { deleteUserMeasurementSessions, getHistoryByDate, getRecent24hSummary, s
 import { deleteScorePointsForNonTodaySessions as cleanupScorePoints, getScorePointsForSessions as loadScorePoints } from "@/lib/repositories/posture-session-repository";
 import type { HistoryGroup, RecentSummary, SessionSummary } from "@/lib/types";
 import { getSessionTitleKey, normalizeSessionTitle } from "@/lib/session-title";
-import { createTodaySavedScorePoints, getKoreaDateKey, getMonthKey, shiftMonthKey, type ScorePoint } from "@/components/posture-coach/history-utils";
+import { createTodaySavedScorePoints, formatTime, getKoreaDateKey, getMonthKey, shiftMonthKey, type ScorePoint } from "@/components/posture-coach/history-utils";
 
-export type PendingTitleSession = { sessionId: string; sessionTitleKey: string; dateKey: string; startedAt: string };
+export type PendingTitleSession = { sessionId: string; sessionTitleKey: string; dateKey: string; startedAt: string; endedAt: string | null };
 type DeleteScope = "sessions" | "date";
 type DeleteStep = "scope" | "session-select" | "confirm";
 
@@ -28,6 +28,7 @@ export function useHistoryRecords(uid: string | null, onClearLiveScores: () => v
   const [pendingTitleSession, setPendingTitleSession] = useState<PendingTitleSession | null>(null);
   const [pendingTitleDraft, setPendingTitleDraft] = useState("");
   const [pendingTitleSaving, setPendingTitleSaving] = useState(false);
+  const [pendingTitleDiscarding, setPendingTitleDiscarding] = useState(false);
   const [pendingTitleError, setPendingTitleError] = useState<string | null>(null);
   const [isHistoryDeleteModalOpen, setIsHistoryDeleteModalOpen] = useState(false);
   const [historyDeleteScope, setHistoryDeleteScope] = useState<DeleteScope | null>(null);
@@ -72,7 +73,7 @@ export function useHistoryRecords(uid: string | null, onClearLiveScores: () => v
 
   const savePendingTitle = useCallback(async () => {
     const currentUid = uidRef.current;
-    if (!currentUid || !pendingTitleSession || pendingTitleSaving) return;
+    if (!currentUid || !pendingTitleSession || pendingTitleSaving || pendingTitleDiscarding) return;
     const title = normalizeSessionTitle(pendingTitleDraft);
     if (!title) { setPendingTitleError("제목을 입력해주세요."); return; }
     setPendingTitleSaving(true); setPendingTitleError(null);
@@ -80,9 +81,48 @@ export function useHistoryRecords(uid: string | null, onClearLiveScores: () => v
     setPendingTitleSaving(false);
     if (!saved) { setPendingTitleError("제목을 저장하지 못했습니다."); return; }
     updateLocalTitle(pendingTitleSession.sessionTitleKey, title); setPendingTitleSession(null); setPendingTitleDraft(""); setPendingTitleError(null);
-  }, [pendingTitleDraft, pendingTitleSaving, pendingTitleSession, updateLocalTitle]);
+  }, [pendingTitleDiscarding, pendingTitleDraft, pendingTitleSaving, pendingTitleSession, updateLocalTitle]);
 
-  const openPendingTitle = useCallback((session: PendingTitleSession) => { setPendingTitleSession(session); setPendingTitleDraft(""); setPendingTitleError(null); }, []);
+  const skipPendingTitle = useCallback(async () => {
+    const currentUid = uidRef.current;
+    if (!currentUid || !pendingTitleSession || pendingTitleSaving || pendingTitleDiscarding) return;
+    const title = pendingTitleSession.endedAt
+      ? `${formatTime(pendingTitleSession.startedAt)} - ${formatTime(pendingTitleSession.endedAt)}`
+      : formatTime(pendingTitleSession.startedAt);
+    setPendingTitleSaving(true);
+    setPendingTitleError(null);
+    const saved = await saveSessionTitle(currentUid, pendingTitleSession.sessionTitleKey, title, pendingTitleSession.dateKey, pendingTitleSession.sessionId);
+    setPendingTitleSaving(false);
+    if (!saved) { setPendingTitleError("제목을 저장하지 못했습니다."); return; }
+    updateLocalTitle(pendingTitleSession.sessionTitleKey, title);
+    setPendingTitleSession(null);
+    setPendingTitleDraft("");
+    setPendingTitleError(null);
+  }, [pendingTitleDiscarding, pendingTitleSaving, pendingTitleSession, updateLocalTitle]);
+
+  const discardPendingSession = useCallback(async () => {
+    const currentUid = uidRef.current;
+    if (!currentUid || !pendingTitleSession || pendingTitleSaving || pendingTitleDiscarding) return;
+    setPendingTitleDiscarding(true);
+    setPendingTitleError(null);
+    try {
+      const deleted = await deleteUserMeasurementSessions(currentUid, [{
+        sessionId: pendingTitleSession.sessionId,
+        sessionTitleKey: pendingTitleSession.sessionTitleKey,
+        startedAt: pendingTitleSession.startedAt,
+        dateKey: pendingTitleSession.dateKey,
+      }]);
+      if (!deleted) { setPendingTitleError("기록을 삭제하지 못했습니다."); return; }
+      setPendingTitleSession(null);
+      setPendingTitleDraft("");
+      setPendingTitleError(null);
+      await refreshHistory(currentUid);
+    } finally {
+      setPendingTitleDiscarding(false);
+    }
+  }, [pendingTitleDiscarding, pendingTitleSaving, pendingTitleSession, refreshHistory]);
+
+  const openPendingTitle = useCallback((session: PendingTitleSession) => { setPendingTitleSession(session); setPendingTitleDraft(""); setPendingTitleError(null); setPendingTitleDiscarding(false); }, []);
   const openDelete = useCallback(() => { setHistoryDeleteScope(null); setHistoryDeleteStep("scope"); setHistoryDeleteSessionKeys([]); setHistoryDeleteError(null); setIsHistoryDeleteModalOpen(true); }, []);
   const openDeleteForSession = useCallback((sessionTitleKey: string) => {
     if (isDeletingHistory) return;
@@ -117,10 +157,10 @@ export function useHistoryRecords(uid: string | null, onClearLiveScores: () => v
     recentSummary, historyGroups, isLoadingHistory, todaySavedScorePoints, selectedHistoryGroup,
     selectedHistoryDateKey, visibleHistoryMonthKey, historySessionPage, selectedHistorySessionKey,
     expandedHistoryImageSessions, editingSessionTitleKey, sessionTitleDraft, savingSessionTitleKey,
-    sessionTitleErrors, pendingTitleSession, pendingTitleDraft, pendingTitleSaving, pendingTitleError,
+    sessionTitleErrors, pendingTitleSession, pendingTitleDraft, pendingTitleSaving, pendingTitleDiscarding, pendingTitleError,
     isHistoryDeleteModalOpen, historyDeleteScope, historyDeleteStep, historyDeleteSessionKeys,
     isDeletingHistory, historyDeleteError, refreshHistory, openPendingTitle, saveHistoryTitle,
-    savePendingTitle, openDelete, openDeleteForSession, closeDelete, deleteRecords, setSelectedHistoryDateKey,
+    savePendingTitle, skipPendingTitle, discardPendingSession, openDelete, openDeleteForSession, closeDelete, deleteRecords, setSelectedHistoryDateKey,
     setVisibleHistoryMonthKey, setHistorySessionPage, setSelectedHistorySessionKey,
     setExpandedHistoryImageSessions, setEditingSessionTitleKey, setSessionTitleDraft,
     setSessionTitleErrors, setPendingTitleDraft, setHistoryDeleteScope, setHistoryDeleteStep,

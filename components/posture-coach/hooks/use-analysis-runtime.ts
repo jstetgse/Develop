@@ -156,7 +156,7 @@ export function useAnalysisRuntime(props: Props) {
       });
       if (finalized) {
         const dateKey = getKoreaDateKey(new Date(startedAt));
-        finalizedSessionForTitle = { sessionId, sessionTitleKey: getSessionTitleKey({ sessionId, startedAt }, dateKey), dateKey, startedAt };
+        finalizedSessionForTitle = { sessionId, sessionTitleKey: getSessionTitleKey({ sessionId, startedAt }, dateKey), dateKey, startedAt, endedAt };
       }
     }
     posture.sessionIdRef.current = null;

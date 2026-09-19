@@ -67,7 +67,7 @@ export function GrowthPostureWeekStrip({
             )}
           </>
         );
-        const className = `flex min-h-[82px] min-w-0 flex-col items-center justify-center border px-1 py-2 text-center ${presentation.className} ${
+        const className = `flex min-h-[120px] min-w-0 flex-col items-center justify-center border px-1.5 py-3 text-center sm:min-h-[140px] ${presentation.className} ${
           isSelected ? "ring-2 ring-[#18755B] ring-offset-1" : ""
         }`;
 

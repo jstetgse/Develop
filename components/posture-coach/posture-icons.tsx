@@ -1,13 +1,13 @@
-import { Bone, PersonStanding, ShieldCheck } from "lucide-react";
+import { ShieldCheck } from "lucide-react";
 import type { JSX, ReactNode } from "react";
 import type { PostureRecommendationArea, StretchStep } from "@/lib/types";
 
 export function getPostureAreaIcon(area: PostureRecommendationArea, className = "h-4 w-4") {
   if (area === "neck") {
-    return <Bone className={className} />;
+    return <img src="/icons/posture-neck.png" alt="" aria-hidden="true" className={`${className} object-contain`} draggable={false} />;
   }
   if (area === "torso") {
-    return <PersonStanding className={className} />;
+    return <img src="/icons/posture-spine.png" alt="" aria-hidden="true" className={`${className} object-contain`} draggable={false} />;
   }
   return <ShieldCheck className={className} />;
 }
@@ -394,5 +394,3 @@ export function GoogleIcon() {
     </svg>
   );
 }
-
-

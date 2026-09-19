@@ -98,6 +98,7 @@ export function PostureCoachApp() {
     pendingTitleSession,
     pendingTitleDraft,
     pendingTitleSaving,
+    pendingTitleDiscarding,
     pendingTitleError,
     isHistoryDeleteModalOpen,
     historyDeleteScope,
@@ -109,6 +110,8 @@ export function PostureCoachApp() {
     openPendingTitle,
     saveHistoryTitle: handleSaveHistorySessionTitle,
     savePendingTitle: handleSavePendingSessionTitle,
+    skipPendingTitle: handleSkipPendingSessionTitle,
+    discardPendingSession: handleDiscardPendingSession,
     openDeleteForSession: openHistoryDeleteForSession,
     closeDelete: closeHistoryDeleteModal,
     deleteRecords: handleDeleteHistoryRecords,
@@ -281,6 +284,7 @@ export function PostureCoachApp() {
         isStretchTtsSupported={isStretchTtsSupported}
         pendingTitleDraft={pendingTitleDraft}
         pendingTitleError={pendingTitleError}
+        pendingTitleDiscarding={pendingTitleDiscarding}
         pendingTitleSaving={pendingTitleSaving}
         pendingTitleSession={pendingTitleSession}
         selectedHistoryGroup={selectedHistoryGroup}
@@ -312,7 +316,9 @@ export function PostureCoachApp() {
         onResetSettings={handleResetSettings}
         onResetStretchSettings={handleResetStretchSettings}
         onReturnToAnalysis={handleReturnToAnalysisAfterStretch}
+        onDiscardPendingSession={handleDiscardPendingSession}
         onSavePendingTitle={handleSavePendingSessionTitle}
+        onSkipPendingTitle={handleSkipPendingSessionTitle}
       />
 
       <AppChrome
@@ -332,7 +338,6 @@ export function PostureCoachApp() {
             homePostureSummary={homePostureSummary}
             homeAttentionTone={homeAttentionTone}
             homeScoreInsight={homeScoreInsight}
-            recentSummary={recentSummary}
             combinedScorePoints={combinedScorePoints}
             growthPostureWeek={growthPostureWeek}
             isLoadingHistory={isLoadingHistory}

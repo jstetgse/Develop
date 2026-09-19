@@ -18,7 +18,7 @@ type SettingsSaveStatus = "idle" | "saving" | "saved" | "error";
 type HistoryDeleteScope = "sessions" | "date";
 type HistoryDeleteStep = "scope" | "session-select" | "confirm";
 type StretchSettingsDraft = { beepEnabled: boolean; ttsEnabled: boolean; ttsVoiceUri: string };
-type PendingTitleSession = { sessionId: string; sessionTitleKey: string; dateKey: string; startedAt: string };
+type PendingTitleSession = { sessionId: string; sessionTitleKey: string; dateKey: string; startedAt: string; endedAt: string | null };
 
 type PostureCoachDialogsProps = {
   activeAnalysisSettingsPanel: AnalysisSettingsPanel;
@@ -36,6 +36,7 @@ type PostureCoachDialogsProps = {
   isStretchTtsSupported: boolean;
   pendingTitleDraft: string;
   pendingTitleError: string | null;
+  pendingTitleDiscarding: boolean;
   pendingTitleSaving: boolean;
   pendingTitleSession: PendingTitleSession | null;
   selectedHistoryGroup: HistoryGroup | null;
@@ -67,7 +68,9 @@ type PostureCoachDialogsProps = {
   onResetSettings: () => void;
   onResetStretchSettings: () => void;
   onReturnToAnalysis: () => void;
+  onDiscardPendingSession: () => Promise<void>;
   onSavePendingTitle: () => Promise<void>;
+  onSkipPendingTitle: () => Promise<void>;
 };
 
 export function PostureCoachDialogs(props: PostureCoachDialogsProps) {
@@ -76,7 +79,7 @@ export function PostureCoachDialogs(props: PostureCoachDialogsProps) {
     historyDeleteScope, historyDeleteSessionKeys, historyDeleteStep, isAnalysisSettingsOpen,
     isDeletingHistory, isHistoryDeleteModalOpen, isStretchBeepSupported,
     isStretchCompleteModalOpen, isStretchSettingsOpen, isStretchTtsSupported,
-    pendingTitleDraft, pendingTitleError, pendingTitleSaving, pendingTitleSession,
+    pendingTitleDraft, pendingTitleError, pendingTitleDiscarding, pendingTitleSaving, pendingTitleSession,
     selectedHistoryGroup, selectedHistorySessionKey, settingsDraft, settingsSaveStatus,
     stretchSettingsDraft, stretchSettingsSaveStatus, stretchTtsVoiceOptions,
     onAnalysisPanelChange, onBadPostureDurationChange, onHistoryDeleteErrorChange,
@@ -86,7 +89,7 @@ export function PostureCoachDialogs(props: PostureCoachDialogsProps) {
     onUpdateStretchSettingsDraft, onApplySettings, onApplyStretchSettings,
     onCloseStretchComplete, onDeleteHistoryRecords, onDoAnotherStretch,
     onRequestNotificationPermission, onResetSettings, onResetStretchSettings,
-    onReturnToAnalysis, onSavePendingTitle,
+    onReturnToAnalysis, onDiscardPendingSession, onSavePendingTitle, onSkipPendingTitle,
   } = props;
   const analysisSettingsPanels: Array<{ id: AnalysisSettingsPanel; title: string; icon: ReactNode }> = [
     { id: "analysis-options", title: "분석 옵션", icon: <SlidersHorizontal className="h-5 w-5 text-blue-600" /> },
@@ -620,14 +623,32 @@ export function PostureCoachDialogs(props: PostureCoachDialogsProps) {
               <span className="text-xs text-gray-500">최대 {SESSION_TITLE_MAX_LENGTH}자</span>
             </label>
             {pendingTitleError && <p className="text-sm font-bold text-red-600">{pendingTitleError}</p>}
-            <div className="flex justify-end">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <button
-                type="submit"
-                disabled={pendingTitleSaving}
-                className="min-h-11 border border-[#18755B] bg-[#18755B] px-4 py-2 text-sm font-bold text-white disabled:opacity-60"
+                type="button"
+                disabled={pendingTitleSaving || pendingTitleDiscarding}
+                onClick={() => void onDiscardPendingSession()}
+                className="min-h-11 border border-red-200 px-4 py-2 text-sm font-bold text-red-600 disabled:opacity-60"
               >
-                {pendingTitleSaving ? "저장 중..." : "저장"}
+                {pendingTitleDiscarding ? "삭제 중..." : "기록 저장하지 않기"}
               </button>
+              <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
+                <button
+                  type="button"
+                  disabled={pendingTitleSaving || pendingTitleDiscarding}
+                  onClick={() => void onSkipPendingTitle()}
+                  className="min-h-11 border border-[rgba(18,100,76,0.28)] px-4 py-2 text-sm font-bold text-gray-700 disabled:opacity-60"
+                >
+                  취소
+                </button>
+                <button
+                  type="submit"
+                  disabled={pendingTitleSaving || pendingTitleDiscarding}
+                  className="min-h-11 border border-[#18755B] bg-[#18755B] px-4 py-2 text-sm font-bold text-white disabled:opacity-60"
+                >
+                  {pendingTitleSaving ? "저장 중..." : "제목 저장"}
+                </button>
+              </div>
             </div>
           </form>
         </section>
