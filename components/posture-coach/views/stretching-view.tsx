@@ -1,5 +1,5 @@
 import type { RefObject } from "react";
-import { ChevronRight, Clock, SlidersHorizontal, VideoOff } from "lucide-react";
+import { ChevronRight, Clock, ListOrdered, SlidersHorizontal, VideoOff } from "lucide-react";
 import type { StretchCoachingResult, StretchDefinition, StretchStep } from "@/lib/types";
 import { calculateStretchRecommendations } from "@/lib/stretch-recommendation";
 import { getStretchById, isDynamicStretchStep } from "@/lib/stretch-analysis";
@@ -227,15 +227,22 @@ export function StretchingView(props: StretchingViewProps) {
                     >
                       <div className="mb-2 flex items-start justify-between gap-3">
                         <div>
-                          <h3 className="font-bold text-gray-900">{stretch.name}</h3>
+                          <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                            <h3 className="font-bold text-gray-900">{stretch.name}</h3>
+                            <span className="flex flex-wrap items-center gap-2 text-xs text-gray-500">
+                              <span className="inline-flex items-center gap-1 whitespace-nowrap">
+                                <Clock className="h-4 w-4 shrink-0" aria-hidden="true" />
+                                {stretch.durationSec}초
+                              </span>
+                              <span aria-hidden="true">·</span>
+                              <span className="inline-flex items-center gap-1 whitespace-nowrap">
+                                <ListOrdered className="h-4 w-4 shrink-0" aria-hidden="true" />
+                                {stretch.steps.length}단계
+                              </span>
+                            </span>
+                          </div>
                         </div>
                         <ChevronRight className="h-5 w-5 shrink-0 text-gray-400" />
-                      </div>
-                      <p className="text-sm leading-6 text-gray-600">{stretch.shortDescription}</p>
-                      <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-gray-500">
-                        <Clock className="h-3 w-3" />
-                        <span>{stretch.durationSec}초</span>
-                        <span>{stretch.steps.length}단계</span>
                       </div>
                     </button>
                   ))}
@@ -249,9 +256,6 @@ export function StretchingView(props: StretchingViewProps) {
           <section className="app-surface p-5">
             <div className="mb-4">
               <h2 className="text-xl font-bold text-gray-900">스트레칭 선택</h2>
-              <p className="mt-1 text-sm leading-6 text-gray-600">
-                목록에서 스트레칭을 선택하면 카메라 분석 화면으로 이동합니다.
-              </p>
             </div>
             <div className="relative">
               <button
@@ -306,15 +310,22 @@ export function StretchingView(props: StretchingViewProps) {
                   >
                     <div className="mb-2 flex items-start justify-between gap-3">
                       <div>
-                        <h3 className="font-bold text-gray-900">{stretch.name}</h3>
+                        <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                          <h3 className="font-bold text-gray-900">{stretch.name}</h3>
+                          <span className="flex flex-wrap items-center gap-2 text-xs text-gray-500">
+                            <span className="inline-flex items-center gap-1 whitespace-nowrap">
+                              <Clock className="h-4 w-4 shrink-0" aria-hidden="true" />
+                              {stretch.durationSec}초
+                            </span>
+                            <span aria-hidden="true">·</span>
+                            <span className="inline-flex items-center gap-1 whitespace-nowrap">
+                              <ListOrdered className="h-4 w-4 shrink-0" aria-hidden="true" />
+                              {stretch.steps.length}단계
+                            </span>
+                          </span>
+                        </div>
                       </div>
                       <ChevronRight className="h-5 w-5 shrink-0 text-gray-400" />
-                    </div>
-                    <p className="flex-1 text-sm leading-6 text-gray-600">{stretch.shortDescription}</p>
-                    <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-gray-500">
-                      <Clock className="h-3 w-3" />
-                      <span>{stretch.durationSec}초</span>
-                      <span>{stretch.steps.length}단계</span>
                     </div>
                     <div className="mt-4 flex items-center justify-between border border-[#18755B]/25 bg-white px-3 py-2 text-sm font-bold text-[#18755B]">
                       <span>선택하기</span>

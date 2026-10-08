@@ -59,7 +59,7 @@ export function HomeView({ homePostureSummary, homeAttentionTone, homeScoreInsig
   };
 
   return (
-    <div className="space-y-3">
+    <div className="w-full space-y-5">
       <section className="app-surface border-l-4 border-l-[#18755B] p-5">
         <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(280px,360px)] lg:items-center">
           <div>

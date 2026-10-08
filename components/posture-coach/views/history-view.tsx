@@ -865,7 +865,7 @@ export function HistoryView(props: HistoryViewProps) {
                   <h2 className="text-base font-bold text-gray-900">세션 기록</h2>
                   <p className="mt-1 text-sm font-medium text-gray-500">
                     {focusedHistorySession
-                      ? "선택한 세션 보기"
+                      ? ""
                       : ""}
                   </p>
                 </div>
@@ -877,24 +877,6 @@ export function HistoryView(props: HistoryViewProps) {
                       className="min-h-9 border border-[rgba(18,100,76,0.24)] bg-white px-3 py-1.5 text-sm font-bold text-[#18755B]"
                     >
                       닫기
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => onChangePage(-1)}
-                      disabled={!canGoPreviousHistoryPage}
-                      className="flex h-9 w-9 items-center justify-center border border-gray-300 bg-white text-gray-700 disabled:cursor-not-allowed disabled:opacity-40"
-                      aria-label="이전 세션 페이지"
-                    >
-                      <ChevronLeft className="h-4 w-4" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => onChangePage(1)}
-                      disabled={!canGoNextHistoryPage}
-                      className="flex h-9 w-9 items-center justify-center border border-gray-300 bg-white text-gray-700 disabled:cursor-not-allowed disabled:opacity-40"
-                      aria-label="다음 세션 페이지"
-                    >
-                      <ChevronRight className="h-4 w-4" />
                     </button>
                   </div>
                 )}
@@ -1116,7 +1098,6 @@ export function HistoryView(props: HistoryViewProps) {
                                       y={sessionTrendSummary.selectedAverageScore}
                                       stroke={selectedAverageReferenceTone?.stroke}
                                       strokeWidth={3}
-                                      strokeDasharray="5 4"
                                       ifOverflow="extendDomain"
                                       label={{
                                         value: `해당 세션 ${sessionTrendSummary.selectedAverageScore}점`,

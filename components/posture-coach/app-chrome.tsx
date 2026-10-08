@@ -19,8 +19,8 @@ type AppChromeProps = {
 export function AppChrome(props: AppChromeProps) {
   const { activeTab, alertMessage, authUser, cameraText, cameraTone, storageText, storageTone, children, onLogout, onTabChange } = props;
   return (
-    <div className="app-shell min-h-screen">
-      <nav className="sticky top-0 z-50 border-b border-[#12644C]/20 bg-[#C4F6E8]">
+    <div className={`app-shell ${activeTab === "home" ? "flex min-h-dvh flex-col" : "min-h-screen"}`}>
+      <nav className="sticky top-0 z-50 shrink-0 border-b border-[#12644C]/20 bg-[#C4F6E8]">
         <div className="mx-auto max-w-[1100px] px-6">
           <div className="flex flex-col gap-1.5 py-2">
             <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
@@ -47,7 +47,7 @@ export function AppChrome(props: AppChromeProps) {
           </div>
         </div>
       </nav>
-      <main className="mx-auto max-w-[1100px] px-6 pb-[calc(5rem+env(safe-area-inset-bottom))] pt-4">
+      <main className={`mx-auto max-w-[1100px] px-6 pb-[calc(5rem+env(safe-area-inset-bottom))] pt-4 ${activeTab === "home" ? "flex w-full flex-1 flex-col justify-center lg:pb-[calc(5rem+80px+env(safe-area-inset-bottom))]" : ""}`}>
         {alertMessage && <section className="mb-6 border border-yellow-200 bg-yellow-50 p-5"><div className="mb-2 flex items-center justify-between gap-3"><h3 className="font-bold text-yellow-950">자세 주의</h3><AlertTriangle className="h-5 w-5 text-yellow-600" /></div><p className="text-sm leading-6 text-yellow-800">{alertMessage}</p></section>}
         {children}
       </main>
