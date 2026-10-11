@@ -1,11 +1,11 @@
-import type { RefObject } from "react";
-import { ChevronRight, Clock, ListOrdered, SlidersHorizontal, VideoOff } from "lucide-react";
+import { useEffect, useState, type RefObject } from "react";
+import { ArrowRight, ChevronRight, Clock, ListOrdered, SlidersHorizontal, VideoOff } from "lucide-react";
 import type { StretchCoachingResult, StretchDefinition, StretchStep } from "@/lib/types";
 import { calculateStretchRecommendations } from "@/lib/stretch-recommendation";
 import { getStretchById, isDynamicStretchStep } from "@/lib/stretch-analysis";
 import type { Tab } from "@/components/posture-coach/types";
 import { getRecommendationPriorityClass } from "@/components/posture-coach/history-utils";
-import { StretchStepIconTile } from "@/components/posture-coach/stretch-step-icon";
+import { StretchStepIcon, StretchStepIconTile } from "@/components/posture-coach/stretch-step-icon";
 
 type StretchingViewProps = {
   activeStretchId: string | null;
@@ -51,6 +51,105 @@ type StretchingViewProps = {
   onToggleTts: (enabled: boolean) => void;
   onVoiceChange: (voiceUri: string) => void;
 };
+
+function StretchPreviewCard({ stretch, index, onSelect }: {
+  stretch: StretchDefinition;
+  index: number;
+  onSelect: (stretchId: string) => void;
+}) {
+  const [previewIndex, setPreviewIndex] = useState(0);
+  const [isHovered, setIsHovered] = useState(false);
+  const [isFocused, setIsFocused] = useState(false);
+  const stepCount = stretch.steps.length;
+
+  useEffect(() => {
+    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+    let timer: number | undefined;
+
+    const restartTimer = () => {
+      window.clearInterval(timer);
+      timer = undefined;
+      if (reducedMotion.matches) setPreviewIndex(0);
+      if (document.hidden || reducedMotion.matches || isHovered || isFocused || stepCount < 2) return;
+      timer = window.setInterval(() => {
+        setPreviewIndex((current) => (current + 1) % stepCount);
+      }, 3000);
+    };
+
+    restartTimer();
+    document.addEventListener("visibilitychange", restartTimer);
+    reducedMotion.addEventListener("change", restartTimer);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", restartTimer);
+      reducedMotion.removeEventListener("change", restartTimer);
+    };
+  }, [isHovered, isFocused, stepCount]);
+
+  return (
+    <button
+      type="button"
+      onClick={() => onSelect(stretch.id)}
+      onPointerEnter={(event) => {
+        if (event.pointerType === "mouse") setIsHovered(true);
+      }}
+      onPointerLeave={(event) => {
+        if (event.pointerType === "mouse") setIsHovered(false);
+      }}
+      onFocus={() => setIsFocused(true)}
+      onBlur={() => setIsFocused(false)}
+      aria-label={`${stretch.name} 선택하기`}
+      className={`flex min-w-0 flex-col border border-gray-200 bg-white p-4 text-left hover:border-[#18755B] focus-visible:border-[#18755B] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#18755B] sm:col-span-2 ${
+        index === 3 ? "lg:col-start-2" : index === 4 ? "sm:col-start-2 lg:col-start-4" : ""
+      }`}
+    >
+      <h3 className="min-w-0 break-words text-lg font-bold text-gray-900">{stretch.name}</h3>
+      <div className="relative h-24 shrink-0 text-[#18755B]" aria-hidden="true">
+        {stretch.steps.map((step, stepIndex) => (
+          <div
+            key={step.id}
+            className={`pointer-events-none absolute inset-0 flex items-center justify-center transition-opacity duration-[350ms] ease-in-out motion-reduce:transition-none ${stepIndex === previewIndex ? "opacity-100" : "opacity-0"}`}
+          >
+            <StretchStepIcon checkType={step.checkType} className="h-20 w-20" />
+          </div>
+        ))}
+      </div>
+      <div className="mb-2 flex h-14 flex-col items-center justify-center gap-1" aria-hidden="true">
+        <div className="relative h-10 w-full">
+          {stretch.steps.map((step, stepIndex) => (
+            <p
+              key={step.id}
+              className={`pointer-events-none absolute inset-0 flex items-center justify-center text-center text-sm font-medium leading-5 text-[#18755B] transition-opacity duration-[350ms] ease-in-out motion-reduce:transition-none ${stepIndex === previewIndex ? "opacity-100" : "opacity-0"}`}
+            >
+              <span className="line-clamp-2">{step.title}</span>
+            </p>
+          ))}
+        </div>
+        <span className="flex shrink-0 items-center gap-1.5">
+          {stretch.steps.map((step, stepIndex) => (
+            <span
+              key={step.id}
+              className={`h-1.5 w-1.5 rounded-full transition-colors duration-[350ms] ease-in-out motion-reduce:transition-none ${stepIndex === previewIndex ? "bg-[#18755B]" : "bg-gray-200"}`}
+            />
+          ))}
+        </span>
+      </div>
+      <div className="mt-auto flex items-center justify-between gap-3">
+        <span className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-sm text-gray-500">
+          <span className="inline-flex items-center gap-1 whitespace-nowrap">
+            <Clock className="h-4 w-4 shrink-0" aria-hidden="true" />
+            {stretch.durationSec}초
+          </span>
+          <span className="inline-flex items-center gap-1 whitespace-nowrap">
+            <ListOrdered className="h-4 w-4 shrink-0" aria-hidden="true" />
+            {stepCount}단계
+          </span>
+        </span>
+        <ArrowRight className="h-5 w-5 shrink-0 text-[#18755B]" aria-hidden="true" />
+      </div>
+    </button>
+  );
+}
 
 export function StretchingView(props: StretchingViewProps) {
   const {
@@ -254,33 +353,13 @@ export function StretchingView(props: StretchingViewProps) {
 
         {!hasCurrentSessionPostureData && (
           <section className="app-surface p-5">
-            <div className="mb-4">
+            <div className="mb-4 flex items-center justify-between gap-3">
               <h2 className="text-xl font-bold text-gray-900">스트레칭 선택</h2>
             </div>
             <div>
-              <div className="grid grid-cols-1 gap-2">
-                {allStretchOptions.map((stretch) => (
-                  <button
-                    key={stretch.id}
-                    type="button"
-                    onClick={() => handleStretchSelection(stretch.id)}
-                    className="grid min-h-[60px] grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-2 border border-gray-200 bg-gray-50 px-4 py-3 text-left sm:grid-cols-[minmax(0,1fr)_6rem_6rem_5rem]"
-                  >
-                    <h3 className="min-w-0 break-words font-bold text-gray-900">{stretch.name}</h3>
-                    <span className="col-start-2 row-start-1 whitespace-nowrap text-right text-sm font-bold text-[#18755B] sm:col-start-4">
-                      선택하기
-                    </span>
-                    <span className="col-span-2 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-gray-500 sm:contents">
-                      <span className="inline-flex items-center gap-1 whitespace-nowrap sm:col-start-2 sm:row-start-1">
-                        <Clock className="h-4 w-4 shrink-0" aria-hidden="true" />
-                        {stretch.durationSec}초
-                      </span>
-                      <span className="inline-flex items-center gap-1 whitespace-nowrap sm:col-start-3 sm:row-start-1">
-                        <ListOrdered className="h-4 w-4 shrink-0" aria-hidden="true" />
-                        {stretch.steps.length}단계
-                      </span>
-                    </span>
-                  </button>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-4 lg:grid-cols-6">
+                {allStretchOptions.map((stretch, index) => (
+                  <StretchPreviewCard key={stretch.id} stretch={stretch} index={index} onSelect={handleStretchSelection} />
                 ))}
               </div>
             </div>
