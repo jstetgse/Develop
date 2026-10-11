@@ -257,80 +257,29 @@ export function StretchingView(props: StretchingViewProps) {
             <div className="mb-4">
               <h2 className="text-xl font-bold text-gray-900">스트레칭 선택</h2>
             </div>
-            <div className="relative">
-              <button
-                id="stretch-select"
-                type="button"
-                onClick={onToggleDropdown}
-                className="flex min-h-11 w-full items-center justify-between gap-3 border border-[#18755B]/30 bg-white px-3 py-2 text-left text-sm font-bold text-gray-900 focus:border-[#18755B] focus:outline-none"
-                aria-haspopup="listbox"
-                aria-expanded={isStretchDropdownOpen}
-              >
-                <span>스트레칭을 선택하세요</span>
-                <ChevronRight className={`h-5 w-5 shrink-0 text-[#18755B] ${isStretchDropdownOpen ? "rotate-90" : ""}`} />
-              </button>
-              {isStretchDropdownOpen && (
-                <div className="absolute z-20 mt-2 max-h-72 w-full overflow-auto border border-[#18755B]/25 bg-white" role="listbox">
-                  {displayedRecommendedStretches.map((stretch) => (
-                    <button
-                      key={stretch.id}
-                      type="button"
-                      onClick={() => {
-                        handleStretchSelection(stretch.id);
-                        onCloseDropdown();
-                      }}
-                      className="flex w-full items-start justify-between gap-3 border-b border-gray-100 px-3 py-3 text-left last:border-b-0"
-                      role="option"
-                      aria-selected={activeStretchId === stretch.id}
-                    >
-                      <span className="min-w-0">
-                        <span className="block text-sm font-bold text-gray-900">{stretch.name}</span>
-                        <span className="mt-1 block text-xs text-gray-500">
-                          {stretch.targetBodyPart} · {stretch.durationSec}초 · {stretch.steps.length}단계
-                        </span>
-                      </span>
-                      <ChevronRight className="mt-0.5 h-4 w-4 shrink-0 text-[#18755B]" />
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-            <div className="mt-5">
-              <div className="mb-3 flex items-center justify-between gap-3">
-                <h3 className="text-base font-bold text-gray-900">전체 스트레칭</h3>
-                <span className="text-xs font-bold text-gray-500">{allStretchOptions.length}개</span>
-              </div>
-              <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+            <div>
+              <div className="grid grid-cols-1 gap-2">
                 {allStretchOptions.map((stretch) => (
                   <button
                     key={stretch.id}
                     type="button"
                     onClick={() => handleStretchSelection(stretch.id)}
-                    className="group flex h-full flex-col border border-gray-200 bg-gray-50 p-4 text-left"
+                    className="grid min-h-[60px] grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-2 border border-gray-200 bg-gray-50 px-4 py-3 text-left sm:grid-cols-[minmax(0,1fr)_6rem_6rem_5rem]"
                   >
-                    <div className="mb-2 flex items-start justify-between gap-3">
-                      <div>
-                        <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-                          <h3 className="font-bold text-gray-900">{stretch.name}</h3>
-                          <span className="flex flex-wrap items-center gap-2 text-xs text-gray-500">
-                            <span className="inline-flex items-center gap-1 whitespace-nowrap">
-                              <Clock className="h-4 w-4 shrink-0" aria-hidden="true" />
-                              {stretch.durationSec}초
-                            </span>
-                            <span aria-hidden="true">·</span>
-                            <span className="inline-flex items-center gap-1 whitespace-nowrap">
-                              <ListOrdered className="h-4 w-4 shrink-0" aria-hidden="true" />
-                              {stretch.steps.length}단계
-                            </span>
-                          </span>
-                        </div>
-                      </div>
-                      <ChevronRight className="h-5 w-5 shrink-0 text-gray-400" />
-                    </div>
-                    <div className="mt-4 flex items-center justify-between border border-[#18755B]/25 bg-white px-3 py-2 text-sm font-bold text-[#18755B]">
-                      <span>선택하기</span>
-                      <ChevronRight className="h-4 w-4 shrink-0" />
-                    </div>
+                    <h3 className="min-w-0 break-words font-bold text-gray-900">{stretch.name}</h3>
+                    <span className="col-start-2 row-start-1 whitespace-nowrap text-right text-sm font-bold text-[#18755B] sm:col-start-4">
+                      선택하기
+                    </span>
+                    <span className="col-span-2 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-gray-500 sm:contents">
+                      <span className="inline-flex items-center gap-1 whitespace-nowrap sm:col-start-2 sm:row-start-1">
+                        <Clock className="h-4 w-4 shrink-0" aria-hidden="true" />
+                        {stretch.durationSec}초
+                      </span>
+                      <span className="inline-flex items-center gap-1 whitespace-nowrap sm:col-start-3 sm:row-start-1">
+                        <ListOrdered className="h-4 w-4 shrink-0" aria-hidden="true" />
+                        {stretch.steps.length}단계
+                      </span>
+                    </span>
                   </button>
                 ))}
               </div>
