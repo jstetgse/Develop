@@ -4,7 +4,7 @@ import { SCORE_POINT_SAVE_INTERVAL_MS } from "@/components/posture-coach/constan
 import { getIssueText } from "@/components/posture-coach/display-utils";
 import { recordPostureAreaStats } from "@/components/posture-coach/history-utils";
 import type { Tab } from "@/components/posture-coach/types";
-import { getStretchReminderMs } from "@/lib/posture/posture-alert-engine";
+import { getBadPostureAlertMs, getStretchReminderMs } from "@/lib/posture/posture-alert-engine";
 import { averageScores, createLiveScorePoint, withPostureScore } from "@/lib/posture/posture-score-stream";
 import { calculateSessionAverage } from "@/lib/posture/posture-session-summary";
 import { PostureAnalyzer } from "@/lib/posture-analysis";
@@ -53,7 +53,7 @@ function createInitialPosture(): PostureResult {
 function showDesktopNotification(title: string, body: string, options: { tag?: string; onClick?: () => void } = {}) {
   if (typeof window === "undefined" || !("Notification" in window) || Notification.permission !== "granted") return;
   try {
-    const notification = new Notification(title, { body, icon: "/favicon.ico", tag: options.tag });
+    const notification = new Notification(title, { body, icon: "/icon.svg", tag: options.tag });
     notification.onclick = () => {
       window.focus();
       options.onClick?.();
@@ -340,7 +340,7 @@ export function usePostureSession({ uid, settings, captureCurrentFrame, setActiv
     if (!posture.isTracking || posture.score === null) { badPostureStartedAtRef.current = null; return; }
     if (activeSettings.warningAlertEnabled && posture.score <= activeSettings.warningScoreThreshold) {
       badPostureStartedAtRef.current ??= now;
-      const durationMs = activeSettings.badPostureTestAlertEnabled ? 1000 : activeSettings.badPostureDurationMinutes * 60 * 1000;
+      const durationMs = getBadPostureAlertMs(activeSettings);
       if (now - badPostureStartedAtRef.current >= durationMs && now > postureAlertVisibleUntilRef.current) {
         const message = getIssueText(posture);
         setAlertMessage(message);
@@ -359,7 +359,11 @@ export function usePostureSession({ uid, settings, captureCurrentFrame, setActiv
     if (activeSettings.stretchReminderEnabled && reminderMs > 0 && nextStretchReminderAtRef.current > 0 && now >= nextStretchReminderAtRef.current) {
       const message = "잠깐 몸을 풀 시간입니다. 스트레칭 탭에서 추천 동작을 확인해보세요.";
       setAlertMessage(message);
-      showDesktopNotification("스트레칭 알림", "20초 이상 자세를 측정했습니다. 스트레칭 분석으로 이동해 몸을 풀어보세요.", { tag: "stretch-reminder", onClick: () => setActiveTab("stretching") });
+      showDesktopNotification(
+        "스트레칭 알림",
+        `${activeSettings.stretchReminderIntervalMinutes}분 동안 자세를 측정했습니다. 스트레칭 분석으로 이동해 몸을 풀어보세요.`,
+        { tag: "stretch-reminder", onClick: () => setActiveTab("stretching") }
+      );
       stretchAlertVisibleUntilRef.current = now + 30_000;
       alertVisibleUntilRef.current = Math.max(alertVisibleUntilRef.current, stretchAlertVisibleUntilRef.current);
       nextStretchReminderAtRef.current = now + reminderMs;

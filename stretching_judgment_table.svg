@@ -1,0 +1,75 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="930" viewBox="0 0 1600 930">
+  <rect width="1600" height="930" fill="#f4f7fb"/>
+  <style>
+    text { font-family: "Malgun Gothic", "Noto Sans KR", sans-serif; fill: #172033; }
+    .title { font-size: 40px; font-weight: 700; }
+    .head { font-size: 25px; font-weight: 700; fill: #ffffff; }
+    .label { font-size: 23px; font-weight: 700; fill: #244264; }
+    .cell { font-size: 22px; font-weight: 500; }
+    .line { stroke: #bdc9d8; stroke-width: 2; }
+  </style>
+
+  <text x="800" y="72" text-anchor="middle" class="title">표 3. 스트레칭 동작 판정 기준표</text>
+
+  <rect x="60" y="115" width="1480" height="750" rx="18" fill="#ffffff"/>
+  <rect x="60" y="115" width="1480" height="75" rx="18" fill="#315ea8"/>
+  <rect x="60" y="172" width="1480" height="18" fill="#315ea8"/>
+
+  <!-- Alternating row backgrounds -->
+  <rect x="60" y="190" width="1480" height="145" fill="#f8fafc"/>
+  <rect x="60" y="435" width="1480" height="115" fill="#f8fafc"/>
+  <rect x="60" y="715" width="1480" height="150" fill="#f8fafc"/>
+
+  <!-- Grid -->
+  <line x1="250" y1="115" x2="250" y2="865" class="line"/>
+  <line x1="895" y1="115" x2="895" y2="865" class="line"/>
+  <line x1="60" y1="190" x2="1540" y2="190" class="line"/>
+  <line x1="60" y1="335" x2="1540" y2="335" class="line"/>
+  <line x1="60" y1="435" x2="1540" y2="435" class="line"/>
+  <line x1="60" y1="550" x2="1540" y2="550" class="line"/>
+  <line x1="60" y1="715" x2="1540" y2="715" class="line"/>
+
+  <!-- Header -->
+  <text x="155" y="162" text-anchor="middle" class="head">구분</text>
+  <text x="572" y="162" text-anchor="middle" class="head">정적 동작</text>
+  <text x="1217" y="162" text-anchor="middle" class="head">동적 동작</text>
+
+  <!-- Row labels -->
+  <text x="155" y="270" text-anchor="middle" class="label">분석 기준</text>
+  <text x="155" y="395" text-anchor="middle" class="label">점수 기준</text>
+  <text x="155" y="505" text-anchor="middle" class="label">완료 조건</text>
+  <text x="155" y="640" text-anchor="middle" class="label">기준 미달 시</text>
+  <text x="155" y="795" text-anchor="middle" class="label">다음 단계 이동</text>
+
+  <!-- Analysis row -->
+  <text x="572" y="245" text-anchor="middle" class="cell">
+    <tspan x="572" dy="0">관절 위치와 각도가 가이드라인에</tspan>
+    <tspan x="572" dy="36">얼마나 일치하는지 분석</tspan>
+  </text>
+  <text x="1217" y="245" text-anchor="middle" class="cell">
+    <tspan x="1217" dy="0">움직임의 방향, 크기, 속도 등을</tspan>
+    <tspan x="1217" dy="36">종합적으로 분석</tspan>
+  </text>
+
+  <!-- Score row -->
+  <text x="572" y="397" text-anchor="middle" class="cell">일치율 점수 85점 이상</text>
+  <text x="1217" y="397" text-anchor="middle" class="cell">1회 동작의 평균 점수 70점 이상</text>
+
+  <!-- Completion row -->
+  <text x="572" y="507" text-anchor="middle" class="cell">기준 점수를 5초 동안 유지</text>
+  <text x="1217" y="507" text-anchor="middle" class="cell">기준을 충족하는 동작을 3회 반복</text>
+
+  <!-- Failure row -->
+  <text x="572" y="615" text-anchor="middle" class="cell">
+    <tspan x="572" dy="0">85점 미만이 되거나 자세가 감지되지 않으면</tspan>
+    <tspan x="572" dy="36">유지 시간을 0초로 초기화</tspan>
+  </text>
+  <text x="1217" y="615" text-anchor="middle" class="cell">
+    <tspan x="1217" dy="0">평균 점수가 70점 미만이면</tspan>
+    <tspan x="1217" dy="36">반복 횟수로 인정하지 않음</tspan>
+  </text>
+
+  <!-- Next step row -->
+  <text x="572" y="797" text-anchor="middle" class="cell">5초 유지 완료 후 이동</text>
+  <text x="1217" y="797" text-anchor="middle" class="cell">3회 반복 완료 후 이동</text>
+</svg>

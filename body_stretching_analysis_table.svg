@@ -1,0 +1,101 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1800" height="1040" viewBox="0 0 1800 1040">
+  <rect width="1800" height="1040" fill="#f4f7fb"/>
+  <style>
+    text { font-family: "Malgun Gothic", "Noto Sans KR", sans-serif; fill: #172033; }
+    .title { font-size: 42px; font-weight: 700; }
+    .head { font-size: 24px; font-weight: 700; fill: #ffffff; }
+    .part { font-size: 25px; font-weight: 700; fill: #244264; }
+    .cell { font-size: 21px; font-weight: 500; }
+    .none { font-size: 21px; font-weight: 500; fill: #64748b; }
+    .line { stroke: #bdc9d8; stroke-width: 2; }
+  </style>
+
+  <text x="900" y="72" text-anchor="middle" class="title">표 6. 신체 부위별 스트레칭 분석 기준</text>
+
+  <rect x="60" y="115" width="1680" height="820" rx="18" fill="#ffffff"/>
+  <rect x="60" y="115" width="1680" height="75" rx="18" fill="#315ea8"/>
+  <rect x="60" y="172" width="1680" height="18" fill="#315ea8"/>
+
+  <!-- Alternating row backgrounds -->
+  <rect x="60" y="340" width="1680" height="150" fill="#f8fafc"/>
+  <rect x="60" y="640" width="1680" height="150" fill="#f8fafc"/>
+
+  <!-- Grid -->
+  <line x1="210" y1="115" x2="210" y2="935" class="line"/>
+  <line x1="660" y1="115" x2="660" y2="935" class="line"/>
+  <line x1="1040" y1="115" x2="1040" y2="935" class="line"/>
+  <line x1="60" y1="190" x2="1740" y2="190" class="line"/>
+  <line x1="60" y1="340" x2="1740" y2="340" class="line"/>
+  <line x1="60" y1="490" x2="1740" y2="490" class="line"/>
+  <line x1="60" y1="640" x2="1740" y2="640" class="line"/>
+  <line x1="60" y1="790" x2="1740" y2="790" class="line"/>
+
+  <!-- Header -->
+  <text x="135" y="162" text-anchor="middle" class="head">부위</text>
+  <text x="435" y="162" text-anchor="middle" class="head">정적 동작</text>
+  <text x="850" y="162" text-anchor="middle" class="head">동적 동작</text>
+  <text x="1390" y="162" text-anchor="middle" class="head">주요 판정 요소</text>
+
+  <!-- Neck -->
+  <text x="135" y="273" text-anchor="middle" class="part">목</text>
+  <text x="435" y="248" text-anchor="middle" class="cell">
+    <tspan x="435" dy="0">옆으로 당기기,</tspan>
+    <tspan x="435" dy="34">뒤로 젖히기</tspan>
+  </text>
+  <text x="850" y="273" text-anchor="middle" class="cell">목 돌리기</text>
+  <text x="1390" y="232" text-anchor="middle" class="cell">
+    <tspan x="1390" dy="0">가이드라인 일치도, 머리의 좌우 이동 경로,</tspan>
+    <tspan x="1390" dy="34">이동 범위, 좌우 균형 및 속도</tspan>
+  </text>
+
+  <!-- Shoulder -->
+  <text x="135" y="423" text-anchor="middle" class="part">어깨</text>
+  <text x="435" y="398" text-anchor="middle" class="cell">
+    <tspan x="435" dy="0">어깨 돌리기를</tspan>
+    <tspan x="435" dy="34">제외한 동작</tspan>
+  </text>
+  <text x="850" y="423" text-anchor="middle" class="cell">어깨 돌리기</text>
+  <text x="1390" y="407" text-anchor="middle" class="cell">
+    <tspan x="1390" dy="0">가이드라인 일치도, 움직임 및</tspan>
+    <tspan x="1390" dy="34">반복 횟수</tspan>
+  </text>
+
+  <!-- Waist -->
+  <text x="135" y="573" text-anchor="middle" class="part">허리</text>
+  <text x="435" y="548" text-anchor="middle" class="cell">
+    <tspan x="435" dy="0">허리 돌리기를</tspan>
+    <tspan x="435" dy="34">제외한 동작</tspan>
+  </text>
+  <text x="850" y="573" text-anchor="middle" class="cell">허리 돌리기</text>
+  <text x="1390" y="557" text-anchor="middle" class="cell">
+    <tspan x="1390" dy="0">상체 방향, 골반·팔 위치 및</tspan>
+    <tspan x="1390" dy="34">반복 횟수</tspan>
+  </text>
+
+  <!-- Wrist -->
+  <text x="135" y="723" text-anchor="middle" class="part">손목</text>
+  <text x="435" y="698" text-anchor="middle" class="cell">
+    <tspan x="435" dy="0">손등 맞대기,</tspan>
+    <tspan x="435" dy="34">손목 몸쪽으로 당기기</tspan>
+  </text>
+  <text x="850" y="698" text-anchor="middle" class="cell">
+    <tspan x="850" dy="0">손목 돌리기,</tspan>
+    <tspan x="850" dy="34">손 펴고 구부리기</tspan>
+  </text>
+  <text x="1390" y="682" text-anchor="middle" class="cell">
+    <tspan x="1390" dy="0">손목·손가락의 움직임 범위와 속도,</tspan>
+    <tspan x="1390" dy="34">가이드라인 일치도</tspan>
+  </text>
+
+  <!-- Leg -->
+  <text x="135" y="873" text-anchor="middle" class="part">다리</text>
+  <text x="435" y="832" text-anchor="middle" class="cell">
+    <tspan x="435" dy="0">앞으로 숙이기, 무릎 당기기,</tspan>
+    <tspan x="435" dy="34">발등 당기기, 종아리 늘리기</tspan>
+  </text>
+  <text x="850" y="873" text-anchor="middle" class="none">없음</text>
+  <text x="1390" y="857" text-anchor="middle" class="cell">
+    <tspan x="1390" dy="0">골반·무릎·발목 위치와</tspan>
+    <tspan x="1390" dy="34">가이드 자세 비교</tspan>
+  </text>
+</svg>

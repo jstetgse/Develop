@@ -77,7 +77,7 @@ export function useAnalysisSettings(uid: string | null) {
   const requestNotificationPermission = useCallback(async () => {
     if (typeof window === "undefined" || !("Notification" in window)) { updateSettingsDraft({ notificationPermissionStatus: "unsupported" }); return; }
     const permission = await Notification.requestPermission(); updateSettingsDraft({ notificationPermissionStatus: permission });
-    if (permission === "granted") new Notification("알림 설정 완료", { body: "나쁜 자세가 감지되면 Windows 알림으로 알려드릴게요.", icon: "/favicon.ico" });
+    if (permission === "granted") new Notification("알림 설정 완료", { body: "나쁜 자세가 감지되면 Windows 알림으로 알려드릴게요.", icon: "/icon.svg" });
   }, [updateSettingsDraft]);
 
   return { settings, settingsDraft, badPostureDurationMinutesInput, settingsSaveStatus, activeAnalysisSettingsPanel, isAnalysisSettingsOpen, setBadPostureDurationMinutesInput, setSettingsSaveStatus, setActiveAnalysisSettingsPanel, setIsAnalysisSettingsOpen, updateSettingsDraft, applySettings, resetSettings, requestNotificationPermission };

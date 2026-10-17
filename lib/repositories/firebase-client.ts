@@ -201,12 +201,9 @@ type FirestoreSettings = Pick<
   | "warningAlertEnabled"
   | "warningScoreThreshold"
   | "badPostureDurationMinutes"
-  | "badPostureTestAlertEnabled"
   | "stretchReminderEnabled"
   | "stretchReminderIntervalMinutes"
-  | "stretchReminderTestAlertEnabled"
   | "landmarkOverlayEnabled"
-  | "postureEffectSoundEnabled"
   | "smoothingEnabled"
   | "realtimeScoreIntervalSeconds"
   | "preferredSideMode"
@@ -238,10 +235,6 @@ function normalizeSettings(raw: Partial<Settings>, defaults: Settings): Settings
       typeof raw.badPostureDurationMinutes === "number"
         ? Math.min(Math.max(Math.round(raw.badPostureDurationMinutes), 1), 10)
         : defaults.badPostureDurationMinutes,
-    badPostureTestAlertEnabled:
-      typeof raw.badPostureTestAlertEnabled === "boolean"
-        ? raw.badPostureTestAlertEnabled
-        : defaults.badPostureTestAlertEnabled,
     stretchReminderEnabled:
       typeof raw.stretchReminderEnabled === "boolean"
         ? raw.stretchReminderEnabled
@@ -250,18 +243,10 @@ function normalizeSettings(raw: Partial<Settings>, defaults: Settings): Settings
       typeof raw.stretchReminderIntervalMinutes === "number"
         ? raw.stretchReminderIntervalMinutes
         : defaults.stretchReminderIntervalMinutes,
-    stretchReminderTestAlertEnabled:
-      typeof raw.stretchReminderTestAlertEnabled === "boolean"
-        ? raw.stretchReminderTestAlertEnabled
-        : defaults.stretchReminderTestAlertEnabled,
     landmarkOverlayEnabled:
       typeof raw.landmarkOverlayEnabled === "boolean"
         ? raw.landmarkOverlayEnabled
         : defaults.landmarkOverlayEnabled,
-    postureEffectSoundEnabled:
-      typeof raw.postureEffectSoundEnabled === "boolean"
-        ? raw.postureEffectSoundEnabled
-        : defaults.postureEffectSoundEnabled,
     smoothingEnabled: true,
     realtimeScoreIntervalSeconds:
       typeof raw.realtimeScoreIntervalSeconds === "number"
@@ -279,12 +264,9 @@ function toFirestoreSettings(settings: Settings): FirestoreSettings {
     warningAlertEnabled: settings.warningAlertEnabled,
     warningScoreThreshold: settings.warningScoreThreshold,
     badPostureDurationMinutes: settings.badPostureDurationMinutes,
-    badPostureTestAlertEnabled: settings.badPostureTestAlertEnabled,
     stretchReminderEnabled: settings.stretchReminderEnabled,
     stretchReminderIntervalMinutes: settings.stretchReminderIntervalMinutes,
-    stretchReminderTestAlertEnabled: settings.stretchReminderTestAlertEnabled,
     landmarkOverlayEnabled: settings.landmarkOverlayEnabled,
-    postureEffectSoundEnabled: settings.postureEffectSoundEnabled,
     smoothingEnabled: true,
     realtimeScoreIntervalSeconds: settings.realtimeScoreIntervalSeconds,
     preferredSideMode: settings.preferredSideMode,

@@ -2,8 +2,6 @@ import { useEffect, useRef, useState, type RefObject } from "react";
 import { Pause, Play, SlidersHorizontal, VideoOff } from "lucide-react";
 import type { PostureResult, Settings } from "@/lib/types";
 import type { AppMode } from "@/components/posture-coach/types";
-import { PostureScreenEffectOverlay } from "@/components/posture-coach/posture-screen-effect-overlay";
-import type { PostureScreenEffectLevel } from "@/lib/posture/posture-screen-effect";
 import { getAnalysisSideLabel, getFeedbackSeverityClass, getFeedbackSeverityLabel, getStatusLabel, getWeightMessage } from "@/components/posture-coach/display-utils";
 import {
   getNextAnalysisCardView,
@@ -30,7 +28,6 @@ type AnalysisViewProps = {
   isRunning: boolean;
   postureStatus: PostureScoreStatus;
   appMode: AppMode;
-  screenEffectLevel: PostureScreenEffectLevel;
   sessionAverageScore: number | null;
   onOpenSettings: () => void;
   onStart: () => Promise<void>;
@@ -38,7 +35,7 @@ type AnalysisViewProps = {
 };
 
 export function AnalysisView(props: AnalysisViewProps) {
-  const { cameraTone, cameraText, modeLabel, modeMessage, latestPosture, settings, videoRef, canvasRef, isRunning, postureStatus, appMode, screenEffectLevel, sessionAverageScore, onOpenSettings, onStart, onStop } = props;
+  const { cameraTone, cameraText, modeLabel, modeMessage, latestPosture, settings, videoRef, canvasRef, isRunning, postureStatus, appMode, sessionAverageScore, onOpenSettings, onStart, onStop } = props;
   const [showDetailedMetrics, setShowDetailedMetrics] = useState(false);
   const [activeCardView, setActiveCardView] = useState<AnalysisCardView>("score");
   const [isCardRotationEnabled, setIsCardRotationEnabled] = useState(true);
@@ -97,10 +94,7 @@ export function AnalysisView(props: AnalysisViewProps) {
     setCardRotationResetKey((current) => current + 1);
   };
   return (
-    <div
-      className={`posture-effect-stage posture-effect-stage--${screenEffectLevel} grid grid-cols-1 items-stretch gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(320px,1fr)]`}
-      data-posture-effect={screenEffectLevel}
-    >
+    <div className="grid grid-cols-1 items-stretch gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(320px,1fr)]">
       <section className="app-surface flex h-full flex-col p-4">
         <div className="mb-2 flex flex-col justify-between gap-2 sm:flex-row sm:items-start">
           <div>
@@ -410,7 +404,6 @@ export function AnalysisView(props: AnalysisViewProps) {
           </div>
         </section>
       </div>
-      <PostureScreenEffectOverlay level={screenEffectLevel} />
     </div>
   );
 }

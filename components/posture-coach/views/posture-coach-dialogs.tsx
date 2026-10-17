@@ -329,11 +329,6 @@ export function PostureCoachDialogs(props: PostureCoachDialogsProps) {
                   onChange={(checked) => onUpdateSettingsDraft({ landmarkOverlayEnabled: checked })}
                   label="자세 랜드마크 표시 켜기/끄기"
                 />
-                <ToggleControl
-                  checked={settingsDraft.postureEffectSoundEnabled}
-                  onChange={(checked) => onUpdateSettingsDraft({ postureEffectSoundEnabled: checked })}
-                  label="화면 파손 효과음 켜기/끄기"
-                />
                 <label className="block">
                   <span className="text-sm font-medium text-gray-700">측면 분석 기준</span>
                   <select
@@ -443,11 +438,6 @@ export function PostureCoachDialogs(props: PostureCoachDialogsProps) {
                     className="mt-3 w-full"
                   />
                 </label>
-                <ToggleControl
-                  checked={settingsDraft.badPostureTestAlertEnabled}
-                  onChange={(checked) => onUpdateSettingsDraft({ badPostureTestAlertEnabled: checked })}
-                  label="테스트 모드: 나쁜 자세가 1초 이상 지속되면 알림"
-                />
                 {settingsDraft.notificationPermissionStatus !== "granted" && (
                   <div className="border border-gray-100 bg-[rgba(196,246,232,0.24)] p-4">
                     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -529,11 +519,6 @@ export function PostureCoachDialogs(props: PostureCoachDialogsProps) {
                   checked={settingsDraft.stretchReminderEnabled}
                   onChange={(checked) => onUpdateSettingsDraft({ stretchReminderEnabled: checked })}
                   label="스트레칭 알림 켜기/끄기"
-                />
-                <ToggleControl
-                  checked={settingsDraft.stretchReminderTestAlertEnabled}
-                  onChange={(checked) => onUpdateSettingsDraft({ stretchReminderTestAlertEnabled: checked })}
-                  label="테스트 모드: 20초 이상 측정하면 Windows 스트레칭 알림"
                 />
                 <label className="block">
                   <span className="text-sm font-medium text-gray-700">
